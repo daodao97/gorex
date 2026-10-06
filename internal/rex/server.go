@@ -29,20 +29,22 @@ import (
 
 // Server owns the sessions.
 type Server struct {
-	mu       sync.Mutex
-	sessions map[string]*session
-	order    []string
-	layout   json.RawMessage
-	started  time.Time
-	host     HostInfo
-	hostDone chan struct{}
-	ln       net.Listener
-	exe      string
-	exeTime  time.Time
-	controls int
-	idleFrom time.Time
-	quit     chan struct{}
-	quitOnce sync.Once
+	mu         sync.Mutex
+	agentMu    sync.Mutex // serialize shared-daemon session binding and reports
+	agentToken string
+	sessions   map[string]*session
+	order      []string
+	layout     json.RawMessage
+	started    time.Time
+	host       HostInfo
+	hostDone   chan struct{}
+	ln         net.Listener
+	exe        string
+	exeTime    time.Time
+	controls   int
+	idleFrom   time.Time
+	quit       chan struct{}
+	quitOnce   sync.Once
 }
 
 // idleTimeout is how long a server with no sessions and no app waits
@@ -64,6 +66,10 @@ func Serve() error {
 		return errors.New("rex: a server already runs")
 	}
 	defer lock.Close()
+	agentToken, err := loadAgentToken(dir)
+	if err != nil {
+		return err
+	}
 	sock := SocketPath()
 	os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
@@ -72,7 +78,8 @@ func Serve() error {
 	}
 	os.Chmod(sock, 0o600)
 	s := &Server{
-		sessions: map[string]*session{}, started: time.Now(), ln: ln,
+		agentToken: agentToken,
+		sessions:   map[string]*session{}, started: time.Now(), ln: ln,
 		hostDone: make(chan struct{}), idleFrom: time.Now(), quit: make(chan struct{}),
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "layout.json")); err == nil && json.Valid(b) {
@@ -251,7 +258,7 @@ func (s *Server) do(req Request) (any, error) {
 			o = *req.Create
 		}
 		id := newID()
-		ss, err := newSession(id, o)
+		ss, err := newSessionForServer(id, o, s.agentToken)
 		if err != nil {
 			return nil, err
 		}
@@ -281,6 +288,15 @@ func (s *Server) do(req Request) (any, error) {
 		}
 		ss.resize(req.Cols, req.Rows)
 		return nil, nil
+	case "clear":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		ss.clear()
+		return nil, nil
+	case "agentEvent":
+		return nil, s.reportAgent(req)
 	case "getLayout":
 		s.mu.Lock()
 		l := s.layout

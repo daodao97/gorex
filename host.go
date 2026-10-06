@@ -27,7 +27,7 @@ func (a *App) hostChip(c *ui.Context, k *colors) {
 	case model == "Linux":
 		glyph = "server"
 	}
-	chip := ui.Row(c).Gap(9).Padding(3, 8, 3, 6).Radius(9).AlignItems(ui.Center).Cursor(ui.CursorPointer).
+	chip := ui.Row(c).Key("host").Gap(9).Padding(3, 8, 3, 6).Radius(9).AlignItems(ui.Center).Cursor(ui.CursorPointer).
 		Role(ui.RoleButton).Label("Host " + name).MaxWidth(190).Shrink(0)
 	if chip.Hovered() || a.hostOpen {
 		chip.Background(k.hover)

@@ -1,0 +1,112 @@
+package main
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
+
+func TestFindShortcutsAndPaneIsolation(t *testing.T) {
+	a, tt := newTestApp(t)
+	p := a.tab().Focus
+	waitFor(t, tt, "the shell", func() bool { return strings.Contains(p.term.Text(), "$") })
+	p.term.Feed([]byte("\r\nfind-target one\r\nfind-target two\r\nfind-target three\r\n"))
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Frame()
+	if !p.find.open {
+		t.Fatal("Cmd-F did not open search")
+	}
+	if _, ok := tt.Find("Find in Terminal"); !ok {
+		t.Fatal("no search field")
+	}
+	before := p.term.Text()
+	tt.Type("find-target")
+	tt.Frame()
+	if p.find.query != "find-target" {
+		t.Fatalf("query %q", p.find.query)
+	}
+	if s := p.term.SearchState(); s.Total != 3 || s.Current != 1 {
+		t.Fatalf("matches %+v", s)
+	}
+	if p.term.Text() != before {
+		t.Fatal("search text was sent to shell")
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if s := p.term.SearchState(); s.Current != 2 {
+		t.Fatalf("Enter %+v", s)
+	}
+	tt.Key(ui.Shift, ui.KeyEnter)
+	tt.Frame()
+	if s := p.term.SearchState(); s.Current != 1 {
+		t.Fatalf("Shift-Enter %+v", s)
+	}
+	tt.Key(ui.Cmd, ui.KeyG)
+	tt.Frame()
+	if s := p.term.SearchState(); s.Current != 2 {
+		t.Fatalf("Cmd-G %+v", s)
+	}
+	tt.Key(ui.Cmd|ui.Shift, ui.KeyG)
+	tt.Frame()
+	if s := p.term.SearchState(); s.Current != 1 {
+		t.Fatalf("Shift-Cmd-G %+v", s)
+	}
+	if err := tt.Click("Find Next"); err != nil {
+		t.Fatal(err)
+	}
+	if s := p.term.SearchState(); s.Current != 2 {
+		t.Fatalf("next button %+v", s)
+	}
+	// Escape from a navigation button should close search too.
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if p.find.open {
+		t.Fatal("Escape did not close search")
+	}
+	tt.Type("echo back-in-shell")
+	waitFor(t, tt, "focus restored", func() bool { return strings.Contains(p.term.Text(), "echo back-in-shell") })
+	tt.Key(ui.Ctrl, ui.KeyU)
+	a.split(false)
+	other := a.tab().Focus
+	other.term.Feed([]byte("\r\nother-target\r\n"))
+	tt.Frame()
+	tt.Key(ui.Cmd, ui.KeyF)
+	tt.Frame()
+	tt.Type("other-target")
+	tt.Frame()
+	if other.find.query != "other-target" || p.find.query != "find-target" {
+		t.Fatal("search leaked across panes")
+	}
+	a.closeFind(other)
+	a.tab().setFocus(p)
+	a.openFind()
+	tt.Frame()
+	if p.find.query != "find-target" {
+		t.Fatal("reopening search lost the query")
+	}
+	tt.Command("selectAll")
+	tt.Type("unfindable")
+	tt.Frame()
+	if !tt.HasText("No matches") {
+		t.Fatalf("no missing-match feedback: %q", tt.Texts())
+	}
+	tt.Command("selectAll")
+	tt.Key(0, ui.KeyBackspace)
+	tt.Frame()
+	if p.find.query != "" || p.term.SearchState().Total != 0 {
+		t.Fatal("clearing the query kept highlights")
+	}
+	a.closeFind(p)
+	a.openPalette()
+	tt.Frame()
+	tt.Type("find…")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	tt.Type("find-target")
+	tt.Frame()
+	if !p.find.open || p.find.query != "find-target" {
+		t.Fatal("Find from the command palette did not focus its field")
+	}
+}

@@ -16,18 +16,30 @@ import (
 	"time"
 )
 
-// ProtocolVersion changes whenever the wire protocol does.
-const ProtocolVersion = 1
+// ProtocolVersion identifies the server schema. Additive JSON fields can
+// remain compatible with older servers; incompatible changes raise the minimum.
+const ProtocolVersion = 5
+
+// Version 5 adds CompletionRevision to the version 4 protocol. Requests,
+// streaming, layout and agent events are unchanged; clients can fall back
+// to observed state/input changes for version 4 completion notifications.
+const MinProtocolVersion = 4
+
+func CompatibleProtocol(version int) bool {
+	return version >= MinProtocolVersion && version <= ProtocolVersion
+}
 
 // Request is a line of the control connection, from the client.
 type Request struct {
-	ID     int64           `json:"id"`
-	Op     string          `json:"op"`
-	SID    string          `json:"sid,omitempty"`
-	Cols   int             `json:"cols,omitempty"`
-	Rows   int             `json:"rows,omitempty"`
-	Create *CreateOptions  `json:"create,omitempty"`
-	Layout json.RawMessage `json:"layout,omitempty"`
+	ID         int64           `json:"id"`
+	Op         string          `json:"op"`
+	SID        string          `json:"sid,omitempty"`
+	Cols       int             `json:"cols,omitempty"`
+	Rows       int             `json:"rows,omitempty"`
+	Create     *CreateOptions  `json:"create,omitempty"`
+	Layout     json.RawMessage `json:"layout,omitempty"`
+	AgentEvent *AgentEvent     `json:"agentEvent,omitempty"`
+	Token      string          `json:"token,omitempty"`
 }
 
 // Response answers the Request with the same ID.
@@ -61,16 +73,17 @@ type SessionInfo struct {
 	// Dir is the working directory of the program in the foreground.
 	Dir string `json:"dir"`
 	// Title is the last title a program set (OSC 0, OSC 2).
-	Title      string    `json:"title,omitempty"`
-	LastOutput time.Time `json:"lastOutput"`
-	LastInput  time.Time `json:"lastInput"`
-	Output     uint64    `json:"output"`
-	Bells      int       `json:"bells"`
-	Exited     bool      `json:"exited"`
-	ExitCode   int       `json:"exitCode"`
-	Attached   int       `json:"attached"`
-	Cols       int       `json:"cols"`
-	Rows       int       `json:"rows"`
+	Title      string     `json:"title,omitempty"`
+	LastOutput time.Time  `json:"lastOutput"`
+	LastInput  time.Time  `json:"lastInput"`
+	Output     uint64     `json:"output"`
+	Bells      int        `json:"bells"`
+	Exited     bool       `json:"exited"`
+	ExitCode   int        `json:"exitCode"`
+	Attached   int        `json:"attached"`
+	Cols       int        `json:"cols"`
+	Rows       int        `json:"rows"`
+	Agent      AgentState `json:"agent,omitempty"`
 }
 
 // Hello is the server's answer to "hello".

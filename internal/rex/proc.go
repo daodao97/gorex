@@ -3,6 +3,8 @@ package rex
 import (
 	"path/filepath"
 	"strings"
+
+	"gorex/internal/agents"
 )
 
 // procInfo is what inspect finds of a process.
@@ -21,6 +23,9 @@ var interpreters = map[string]bool{
 
 // programName returns the name a process is best known by.
 func (p procInfo) programName() string {
+	if agent, ok := agents.Detect(p.name, p.args); ok {
+		return agent.ID
+	}
 	name := strings.TrimPrefix(p.name, "-")
 	if len(p.args) > 0 {
 		if base := strings.TrimPrefix(filepath.Base(p.args[0]), "-"); base != "" && len(base) > len(name) && strings.HasPrefix(base, name) {

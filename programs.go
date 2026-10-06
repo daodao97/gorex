@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
+	"gorex/internal/agents"
 )
 
-//go:embed assets/icons/*.svg assets/brands/*.svg
+//go:embed assets/icons/*.svg assets/brands/*.svg assets/agents/*
 var assets embed.FS
 
 var svgs = map[string]*ui.SVG{}
@@ -22,6 +23,9 @@ func icon(name string) *ui.SVG {
 	file := "assets/icons/" + name + ".svg"
 	if b, ok := strings.CutPrefix(name, "brand:"); ok {
 		file = "assets/brands/" + b + ".svg"
+	}
+	if b, ok := strings.CutPrefix(name, "agent:"); ok {
+		file = "assets/agents/" + b + ".svg"
 	}
 	data, err := assets.ReadFile(file)
 	if err != nil {
@@ -46,14 +50,13 @@ type program struct {
 	TileBorder bool
 	// Shell is a shell at its prompt.
 	Shell bool
+	Agent bool
 }
 
 var (
 	shellTile = program{Glyph: "square-terminal", TileGlyph: "terminal", TileBg: ui.Hex("#1d2420"), TileFg: ui.Hex("#5fd38d"), Shell: true}
 
 	programs = map[string]program{
-		"codex":     {Name: "Codex", Glyph: "brand:openai", TileBg: ui.Hex("#f7f7f7"), TileFg: ui.Hex("#1a1a1a"), TileBorder: true},
-		"claude":    {Name: "Claude Code", Glyph: "brand:claude", TileBg: ui.Hex("#d97757"), TileFg: ui.Hex("#ffffff")},
 		"node":      {Name: "Node", Glyph: "node-hex", TileBg: ui.Hex("#5fa04e"), TileFg: ui.Hex("#ffffff"), TileGlyph: "brand:nodedotjs"},
 		"bun":       {Name: "Bun", Glyph: "brand:bun", TileBg: ui.Hex("#fbf0df"), TileFg: ui.Hex("#3b2a20"), TileBorder: true},
 		"deno":      {Name: "Deno", Glyph: "brand:deno", TileBg: ui.Hex("#1b1b1b"), TileFg: ui.Hex("#ffffff")},
@@ -94,6 +97,28 @@ var (
 )
 
 func init() {
+	agentColors := map[string]string{
+		"claude": "#d97757", "gemini": "#4d88e5", "copilot": "#748bfa",
+		"aider": "#5faf87", "amp": "#e77343", "goose": "#e6ae51",
+		"pi": "#b68be6", "omp": "#efb06a", "grok": "#aaaaaa",
+		"qwen": "#9b7bee", "kimi": "#699ae7", "crush": "#e779c1",
+		"codebuddy": "#7ca8ef", "qodercli": "#58cfa7", "qoderclicn": "#58cfa7", "traecli": "#62d49b",
+	}
+	for _, agent := range agents.All {
+		glyph := "agent:" + agent.ID
+		if agent.ID == "aider" {
+			glyph = "bot"
+		}
+		color := agentColors[agent.ID]
+		if color == "" {
+			color = "#d5d7db"
+		}
+		p := program{Name: agent.Name, Glyph: glyph, TileBg: ui.Hex("#25282e"), TileFg: ui.Hex(color), Agent: true}
+		programs[agent.ID] = p
+		for _, alias := range agent.Aliases {
+			programs[alias] = p
+		}
+	}
 	programs["python3"] = programs["python"]
 	programs["ipython"] = programs["python"]
 	programs["view"] = programs["vim"]

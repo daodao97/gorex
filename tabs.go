@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
+	"gorex/internal/agents"
 )
 
 const (
@@ -29,13 +30,16 @@ func (a *App) tabStrip(c *ui.Context, k *colors) {
 		widths[i] = tabWidth(c, t)
 		total += widths[i]
 	}
-	track := ui.Row(c).Basis(total).Shrink(1).MinWidth(0).Height(tabH+4).Padding(2).Radius((tabH+4)/2).
+	track := ui.Row(c).Key("tabs").Basis(total).Shrink(1).MinWidth(0).Height(tabH+4).Padding(2).Radius((tabH+4)/2).
 		Background(k.track).Border(0.5, k.trackBorder).AlignItems(ui.Center).ClipX().
 		DragWindow().Role(ui.RoleTabList).Label("Tabs")
+	if prefs.CompactMode {
+		track.Grow(1).Basis(0).Height(compactTitleH).Padding(0).Radius(0).Border(0, ui.Color{}).Background(k.track)
+	}
 	tabs := slices.Clone(a.tabs)
 	track.Children(func() {
 		for i, t := range tabs {
-			if i > 0 {
+			if i > 0 && !prefs.CompactMode {
 				sep := ui.Box(c).Size(1, 16).Shrink(0)
 				if i != a.active && i-1 != a.active {
 					sep.Background(k.tabSep)
@@ -75,10 +79,25 @@ func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab, width float32) {
 		Padding(0, 10, 0, 6).Gap(9).AlignItems(ui.Center).Radius(tabH / 2).Role(ui.RoleTab).Selected(active)
 	name, detail := t.label()
 	e.Label(name + " " + detail)
-	if active {
+	agentPane, agentState := tabAgentState(t)
+	if agentPane != nil {
+		e.Tooltip(programOf(agentState.ID).Name + " · " + agentStateLabel(agentState))
+	}
+	if active && !prefs.CompactMode {
 		e.Background(k.tabActive).Shadow(0, 1, 2, 0, k.shadow).Shadow(0, 2, 8, 0, k.shadow)
-	} else if e.Hovered() {
+	} else if e.Hovered() && !prefs.CompactMode {
 		e.Background(k.hover)
+	}
+	if prefs.CompactMode {
+		bottom := float32(1)
+		bg := k.track
+		if active {
+			bottom, bg = 0, terminalBackground(c)
+		} else if e.Hovered() {
+			bg = k.hover
+		}
+		e.Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).Padding(0, 8).
+			Gap(6).Radius(0).Background(bg).BorderWidth(0, 1, bottom, 0).BorderColor(k.headerBorder)
 	}
 	e.Transition(ui.ElementTransition{Colors: true, Position: true, Duration: 160 * time.Millisecond})
 	e.Drag(t)
@@ -103,6 +122,10 @@ func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab, width float32) {
 	// shows then.
 	hovered := e.Hovered()
 	e.Children(func() {
+		if prefs.CompactMode {
+			a.compactTabLabel(c, k, i, t, name, detail, hovered)
+			return
+		}
 		a.tiles(c, k, t)
 		if a.renaming == t {
 			a.renameField(c, t, name)
@@ -116,11 +139,16 @@ func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab, width float32) {
 		label.Draw(func(p *ui.Painter, r ui.Rect) {
 			fadeText(p, r, tabLabel(name, detail, nameColor, detailColor))
 		})
+		if agentPane != nil {
+			a.agentIndicator(c, k, agentPane, agentState)
+		}
 		if hovered && len(a.tabs) > 1 {
 			x := iconButton(c, k, "x", "Close Tab", 18, 12).Tooltip("Close Tab")
 			if x.Clicked() {
 				a.later(c, func() { a.closeTab(t) })
 			}
+		} else if agentPane != nil {
+			// The hook status above already represents this tab.
 		} else if t.attention() {
 			ui.Box(c).Size(7, 7).Radius(4).Background(k.attention).Margin(0, 5, 0, 0)
 		} else if a.tabBusy(c, t) {
@@ -234,7 +262,13 @@ func (a *App) tiles(c *ui.Context, k *colors, t *Tab) {
 		back = back[:2]
 	}
 	w := float32(tileW + tileStep*len(back) + 2)
-	ui.Box(c).Size(w, tileH+4).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+	tiles := ui.Box(c).Size(w, tileH+4).Shrink(0)
+	if front != nil {
+		if prog := paneProgram(front); prog.Agent {
+			tiles.Role(ui.RoleImage).Label(prog.Name + " icon").Tooltip(prog.Name)
+		}
+	}
+	tiles.Draw(func(p *ui.Painter, r ui.Rect) {
 		y := r.Y + 2
 		for i := len(back) - 1; i >= 0; i-- {
 			x := r.X + 1 + float32(tileStep*(i+1))
@@ -250,6 +284,9 @@ func (a *App) tiles(c *ui.Context, k *colors, t *Tab) {
 func paneProgram(p *Pane) program {
 	if p.info.Idle || p.info.Program == "" {
 		return programOf(p.info.Shell)
+	}
+	if agent, ok := agents.Detect(p.info.Program, p.info.Args); ok {
+		return programOf(agent.ID)
 	}
 	return programOf(p.info.Program)
 }

@@ -9,6 +9,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
@@ -21,6 +22,12 @@ import (
 )
 
 func main() {
+	// Hooks are silent, bounded CLI calls and never initialize AppKit or
+	// spawn a server when run in another terminal.
+	if len(os.Args) == 3 && os.Args[1] == "-agent-hook" {
+		rex.RunAgentHook(os.Args[2], os.Stdin)
+		return
+	}
 	// -server runs the session server; other arguments are AppKit's, as
 	// -NSWindowResizeTime, which it reads itself.
 	if len(os.Args) > 1 && os.Args[1] == "-server" {
@@ -85,8 +92,8 @@ func (a *App) open() {
 			return
 		}
 	}
-	if err == nil && a.hello.Version != rex.ProtocolVersion {
-		a.err = "The session server is of another version of GoRex: quit and end all sessions to restart it."
+	if err == nil {
+		a.err = serverVersionError(a.hello.Version)
 	}
 	a.reset()
 	win := mygo.NewWindow(mygo.WindowOptions{
@@ -97,8 +104,8 @@ func (a *App) open() {
 		MinHeight:            340,
 		StateKey:             "main",
 		TitleBarStyle:        mygo.TitleBarHidden,
-		TrafficLightPosition: &mygo.Point{X: 16, Y: 15},
-		BackgroundColor:      "light-dark(#efe1e6, #231e27)",
+		TrafficLightPosition: &mygo.Point{X: 12, Y: 9},
+		BackgroundColor:      "light-dark(#efe1e6, #1b1d20)",
 		Content:              ui.View(a.view),
 	})
 	a.win = win
@@ -123,6 +130,13 @@ func (a *App) open() {
 		a.client.Close()
 		a.win = nil
 	})
+}
+
+func serverVersionError(version int) string {
+	if rex.CompatibleProtocol(version) {
+		return ""
+	}
+	return fmt.Sprintf("会话服务协议版本为 %d，当前支持 %d–%d。普通退出会保留后台服务；使用 Shell → Quit and End All Sessions 后重新打开可更新服务（会结束现有会话）。", version, rex.MinProtocolVersion, rex.ProtocolVersion)
 }
 
 // saveNow sends the layout to the server and waits for it to be kept.
@@ -150,6 +164,7 @@ func (a *App) saveNow() {
 func (a *App) reset() {
 	a.tabs, a.active, a.focusReq = nil, 0, nil
 	a.paletteOpen, a.hostOpen, a.renaming = false, false, nil
+	a.settingsOpen = false
 	a.saveDue, a.quitting, a.lastSnapshot, a.title = false, false, "", ""
 }
 

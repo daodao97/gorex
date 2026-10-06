@@ -16,6 +16,14 @@ type settings struct {
 	// Appearance is "light", "dark", or "" to follow the system.
 	Appearance string  `json:"appearance,omitempty"`
 	FontSize   float32 `json:"fontSize,omitempty"`
+	LinkEditor string  `json:"linkEditor,omitempty"`
+	// Keep omitted values compatible with older settings: headers show by default.
+	HideSessionHeader                bool `json:"hideSessionHeader,omitempty"`
+	HideHost                         bool `json:"hideHost,omitempty"`
+	CompactMode                      bool `json:"compactMode,omitempty"`
+	CopyRawText                      bool `json:"copyRawText,omitempty"`
+	HideAgentNotifications           bool `json:"hideAgentNotifications,omitempty"`
+	HideAgentCompletionNotifications bool `json:"hideAgentCompletionNotifications,omitempty"`
 }
 
 const defaultFontSize = 11.6
@@ -25,14 +33,63 @@ var prefs settings
 func settingsPath() string { return filepath.Join(rex.Dir(), "settings.json") }
 
 func loadSettings() {
-	if b, err := os.ReadFile(settingsPath()); err == nil {
-		json.Unmarshal(b, &prefs)
-	}
-	if prefs.FontSize < 6 || prefs.FontSize > 40 {
-		prefs.FontSize = defaultFontSize
-	}
+	prefs = readSettings()
 	termFont.Size = prefs.FontSize
 	applyAppearance()
+}
+
+func readSettings() settings {
+	var s settings
+	if b, err := os.ReadFile(settingsPath()); err == nil {
+		json.Unmarshal(b, &s)
+	}
+	if s.FontSize < 6 || s.FontSize > 40 {
+		s.FontSize = defaultFontSize
+	}
+	switch s.LinkEditor {
+	case "", "vscode", "cursor", "system":
+	default:
+		s.LinkEditor = ""
+	}
+	return s
+}
+
+func (a *App) setLinkEditor(editor string) {
+	prefs.LinkEditor = editor
+	saveSettings()
+}
+
+func (a *App) setCopyRawText(raw bool) {
+	prefs.CopyRawText = raw
+	for _, tab := range a.tabs {
+		for _, pane := range tab.panes() {
+			if pane.term != nil {
+				pane.term.SetCopyRawText(raw)
+			}
+		}
+	}
+	saveSettings()
+}
+
+func (a *App) setSessionHeadersVisible(show bool) {
+	prefs.HideSessionHeader = !show
+	saveSettings()
+}
+
+func (a *App) setHostVisible(show bool) {
+	prefs.HideHost = !show
+	if !show {
+		a.hostOpen = false
+	}
+	saveSettings()
+}
+
+func (a *App) setCompactMode(compact bool) {
+	prefs.CompactMode = compact
+	if compact {
+		a.hostOpen = false
+	}
+	saveSettings()
 }
 
 func saveSettings() {
@@ -56,6 +113,9 @@ func (a *App) setAppearance(v string) {
 	prefs.Appearance = v
 	applyAppearance()
 	saveSettings()
+	if it := a.appearanceItems[v]; it != nil {
+		it.SetChecked(true)
+	}
 }
 
 // setFontSize changes the size of the terminals' text, in every pane.

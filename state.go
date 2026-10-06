@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
+	"gorex/internal/terminal"
 
+	"gorex/internal/agents"
 	"gorex/internal/rex"
 )
 
@@ -68,14 +69,17 @@ type Pane struct {
 	// saved layout whose session was gone.
 	restored bool
 	startDir string
+	find     paneFind
 }
 
 // App is the state of GoRex's window.
 type App struct {
-	win    *mygo.Window
-	client *rex.Client
-	hello  rex.Hello
-	err    string
+	openLinkURL     func(string) error // injectable native URL opener
+	win             *mygo.Window
+	appearanceItems map[string]*mygo.MenuItem
+	client          *rex.Client
+	hello           rex.Hello
+	err             string
 
 	tabs   []*Tab
 	active int
@@ -86,19 +90,32 @@ type App struct {
 	focusReq *Pane
 
 	// The command palette, the host's popover and the tab being renamed.
-	paletteOpen  bool
-	paletteQuery string
-	paletteSel   int
-	hostOpen     bool
-	renaming     *Tab
-	renameText   string
-	renameFocus  bool
-	saveDue      bool
-	lastSave     time.Time
-	quitting     bool
-	focusedWin   bool
-	lastSnapshot string
-	title        string
+	paletteOpen           bool
+	paletteQuery          string
+	paletteSel            int
+	hostOpen              bool
+	settingsOpen          bool
+	settingsSection       int
+	settingsQuery         string
+	settingsModifiedOnly  bool
+	settingsInitialFocus  bool
+	renaming              *Tab
+	renameText            string
+	renameFocus           bool
+	saveDue               bool
+	lastSave              time.Time
+	quitting              bool
+	focusedWin            bool
+	lastSnapshot          string
+	title                 string
+	agentHooks            map[string]agents.HookInstallation
+	agentHookBusy         string
+	agentHookError        string
+	agentNotified         map[string]uint64
+	agentFinishedNotified map[string]uint64
+	agentNotices          map[string]func()
+	agentNoticeKinds      map[string]string
+	agentNotify           func(mygo.NotificationOptions, func()) func()
 
 	// posted are changes to make in the next frame, from terminals of a
 	// view without a window, as in tests.
@@ -190,8 +207,11 @@ func (a *App) newPane(dir string, cols, rows int) *Pane {
 
 // attach makes the pane's terminal, attached to its session.
 func (a *App) attach(p *Pane, cols, rows int) {
+	onSplit := func(down bool) {
+		a.later(a.ctx, func() { a.splitPane(p, down) })
+	}
 	if p.SID == "" {
-		term, err := terminal.New(terminal.Options{Conn: nopConn{}, Transparent: true, Font: termFont, Theme: lightTerm, DarkTheme: darkTerm})
+		term, err := terminal.New(terminal.Options{Conn: nopConn{}, Transparent: true, Font: termFont, Theme: lightTerm, DarkTheme: darkTerm, OnSplit: onSplit, CopyRawText: prefs.CopyRawText})
 		if err == nil {
 			term.Feed([]byte("\x1b[31mCould not start a session: " + a.err + "\x1b[0m\r\n"))
 			p.term = term
@@ -216,6 +236,9 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		Theme:       lightTerm,
 		DarkTheme:   darkTerm,
 		Transparent: true,
+		CopyRawText: prefs.CopyRawText,
+		OnOpenLink:  func(link terminal.Link) { a.openTerminalLink(p, link) },
+		OnSplit:     onSplit,
 		OnTitle: func(title string) {
 			update(func() { p.title = title })
 		},
@@ -284,6 +307,22 @@ func (a *App) currentDir() string {
 	}
 	home, _ := os.UserHomeDir()
 	return home
+}
+
+// splitPane targets the context menu's pane, even if another pane has focus.
+// A menu retained after its pane or tab closes must not split another pane.
+func (a *App) splitPane(p *Pane, down bool) {
+	if p == nil || p.closed || p.Node == nil || p.Node.Pane != p {
+		return
+	}
+	for i, t := range a.tabs {
+		if t == p.Tab {
+			a.selectTab(i)
+			t.setFocus(p)
+			a.split(down)
+			return
+		}
+	}
 }
 
 // split splits the focused pane, the new pane right of it or below it.
@@ -544,7 +583,7 @@ func (a *App) toggleZoom() {
 // program set, and the directory it works in.
 func (p *Pane) label() (name, detail string) {
 	in := p.info
-	prog := programOf(in.Program)
+	prog := paneProgram(p)
 	dir := shortDir(in.Dir)
 	if in.Program == "" {
 		return in.Shell, shortDir(p.startDir)
@@ -557,7 +596,14 @@ func (p *Pane) label() (name, detail string) {
 		return name, dir
 	}
 	if t := strings.TrimSpace(p.title); t != "" && !titleOfShell(t, in) {
-		return t, ""
+		// Claude prefixes its OSC title with a status asterisk. The tab
+		// already has Claude's brand icon, so show only the title text.
+		if prog.Glyph == "agent:claude" && strings.HasPrefix(t, "✳") {
+			t = strings.TrimSpace(strings.TrimLeft(strings.TrimPrefix(t, "✳"), "\ufe0e\ufe0f"))
+		}
+		if t != "" {
+			return t, ""
+		}
 	}
 	name = prog.Name
 	if name == "ssh" || in.Program == "ssh" {
@@ -823,6 +869,9 @@ func (a *App) poll(win *mygo.Window, client *rex.Client) {
 
 // apply takes what the server said of the sessions.
 func (a *App) apply(byID map[string]rex.SessionInfo) {
+	if a.win != nil {
+		a.focusedWin = a.win.IsFocused()
+	}
 	for ti, t := range a.tabs {
 		for _, p := range t.panes() {
 			in, ok := byID[p.SID]
@@ -830,7 +879,15 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 				continue
 			}
 			was := p.info
+			if a.hello.Version == 4 {
+				previous := was
+				// Reopening a window on the same App resets pane snapshots,
+				// but retained notices must not swallow the next legacy turn.
+				previous.Agent.CompletionRevision = max(previous.Agent.CompletionRevision, a.agentFinishedNotified[p.SID])
+				in.Agent = legacyCompletionState(previous, in)
+			}
 			p.info = in
+			a.updateAgentNotice(p, was.Agent)
 			// A program that ran a while and finished out of sight
 			// asks for attention.
 			if !was.Idle && was.Program != "" && in.Idle && was.Program != in.Program {
@@ -838,18 +895,34 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 				if !seen {
 					p.attention = true
 				}
-				if !a.focusedWin && time.Since(was.LastInput) > 8*time.Second {
+				var completion uint64
+				if in.Agent.State == agents.Completed || in.Agent.State == agents.Failed {
+					completion = in.Agent.CompletionRevision
+				}
+				if was.Agent.State == agents.Completed || was.Agent.State == agents.Failed {
+					if agent, ok := agents.Detect(was.Program, was.Args); ok && agent.ID == was.Agent.ID {
+						completion = max(completion, was.Agent.CompletionRevision)
+					}
+				}
+				integratedFinished := completion > 0 && a.agentFinishedNotified[p.SID] >= completion
+				if !seen && !integratedFinished && time.Since(was.LastInput) > 8*time.Second {
 					prog := programOf(was.Program)
-					n := mygo.NewNotification(mygo.NotificationOptions{
+					a.showPaneNotice(p, "program", mygo.NotificationOptions{
 						Title: prog.Name + " finished",
 						Body:  "in " + shortDir(in.Dir),
 					})
-					n.Show()
 				}
 			}
 			if was.Dir != in.Dir {
 				a.changed()
 			}
+		}
+	}
+	for sid, close := range a.agentNotices {
+		if _, ok := byID[sid]; !ok {
+			close()
+			delete(a.agentNotices, sid)
+			delete(a.agentNoticeKinds, sid)
 		}
 	}
 	if a.saveDue && time.Since(a.lastSave) > time.Second {

@@ -19,6 +19,7 @@ type command struct {
 }
 
 var (
+	cmdSettings    = command{Title: "Settings…", Accel: "CmdOrCtrl+,", Keys: "⌘,", Run: func(a *App) { a.openSettings() }}
 	cmdNewTab      = command{Title: "New Tab", Accel: "CmdOrCtrl+T", Keys: "⌘T", Run: func(a *App) { a.newTab(a.currentDir()) }}
 	cmdSplitRight  = command{Title: "Split Right", Accel: "CmdOrCtrl+D", Keys: "⌘D", Run: func(a *App) { a.split(false) }}
 	cmdSplitDown   = command{Title: "Split Down", Accel: "CmdOrCtrl+Shift+D", Keys: "⇧⌘D", Run: func(a *App) { a.split(true) }}
@@ -26,8 +27,8 @@ var (
 	cmdCloseTab    = command{Title: "Close Tab", Accel: "CmdOrCtrl+Shift+W", Keys: "⇧⌘W", Run: func(a *App) { a.closeActiveTab() }}
 	cmdZoom        = command{Title: "Zoom Pane", Accel: "CmdOrCtrl+Shift+Enter", Keys: "⇧⌘↩", Run: func(a *App) { a.toggleZoom() }}
 	cmdEqualize    = command{Title: "Equalize Panes", Accel: "CmdOrCtrl+Ctrl+=", Keys: "⌃⌘=", Run: func(a *App) { a.equalize() }}
-	cmdNextTab     = command{Title: "Next Tab", Accel: "CmdOrCtrl+Shift+]", Keys: "⇧⌘]", Run: func(a *App) { a.cycleTab(1) }}
-	cmdPrevTab     = command{Title: "Previous Tab", Accel: "CmdOrCtrl+Shift+[", Keys: "⇧⌘[", Run: func(a *App) { a.cycleTab(-1) }}
+	cmdNextTab     = command{Title: "Next Tab", Accel: "Ctrl+Tab", Keys: "⌃Tab", Run: func(a *App) { a.cycleTab(1) }}
+	cmdPrevTab     = command{Title: "Previous Tab", Accel: "Ctrl+Shift+Tab", Keys: "⌃⇧Tab", Run: func(a *App) { a.cycleTab(-1) }}
 	cmdRenameTab   = command{Title: "Rename Tab…", Accel: "CmdOrCtrl+Shift+R", Keys: "⇧⌘R", Run: func(a *App) { a.startRename() }}
 	cmdPalette     = command{Title: "Command Palette…", Accel: "CmdOrCtrl+Shift+P", Keys: "⇧⌘P", Run: func(a *App) { a.openPalette() }, Hidden: true}
 	cmdPalette2    = command{Title: "Go to Pane…", Accel: "CmdOrCtrl+P", Keys: "⌘P", Run: func(a *App) { a.openPalette() }, Hidden: true}
@@ -45,6 +46,9 @@ var (
 	cmdBigger      = command{Title: "Bigger Text", Accel: "CmdOrCtrl+=", Keys: "⌘+", Run: func(a *App) { a.setFontSize(termFont.Size + 1) }}
 	cmdSmaller     = command{Title: "Smaller Text", Accel: "CmdOrCtrl+-", Keys: "⌘−", Run: func(a *App) { a.setFontSize(termFont.Size - 1) }}
 	cmdActualSize  = command{Title: "Actual Size", Accel: "CmdOrCtrl+0", Keys: "⌘0", Run: func(a *App) { a.setFontSize(defaultFontSize) }}
+	cmdFind        = command{Title: "Find…", Accel: "CmdOrCtrl+F", Keys: "⌘F", Run: func(a *App) { a.openFind() }}
+	cmdFindNext    = command{Title: "Find Next", Accel: "CmdOrCtrl+G", Keys: "⌘G", Run: func(a *App) { a.findStep(1) }}
+	cmdFindPrev    = command{Title: "Find Previous", Accel: "CmdOrCtrl+Shift+G", Keys: "⇧⌘G", Run: func(a *App) { a.findStep(-1) }}
 	cmdLight       = command{Title: "Appearance: Light", Run: func(a *App) { a.setAppearance("light") }}
 	cmdDark        = command{Title: "Appearance: Dark", Run: func(a *App) { a.setAppearance("dark") }}
 	cmdSystem      = command{Title: "Appearance: System", Run: func(a *App) { a.setAppearance("") }}
@@ -53,12 +57,14 @@ var (
 
 // paletteCommands are those the command palette lists, before the tabs.
 var paletteCommands = []*command{
+	&cmdSettings,
 	&cmdNewTab, &cmdSplitRight, &cmdSplitDown, &cmdZoom, &cmdEqualize, &cmdClosePane, &cmdCloseTab,
 	&cmdNextTab, &cmdPrevTab, &cmdRenameTab,
 	&cmdFocusLeft, &cmdFocusRight, &cmdFocusUp, &cmdFocusDown,
 	&cmdGrowLeft, &cmdGrowRight, &cmdGrowUp, &cmdGrowDown,
 	&cmdBigger, &cmdSmaller, &cmdActualSize, &cmdLight, &cmdDark, &cmdSystem,
 	&cmdClearScroll, &cmdRestart, &cmdEndAll,
+	&cmdFind, &cmdFindNext, &cmdFindPrev,
 }
 
 // menu builds the menu bar, whose items run commands in the window.
@@ -68,7 +74,13 @@ func (a *App) menu() *mygo.Menu {
 			a.run(cmd)
 		}}
 	}
-	tabItems := []*mygo.MenuItem{item(&cmdNextTab), item(&cmdPrevTab), mygo.Separator()}
+	nextTab, prevTab := item(&cmdNextTab), item(&cmdPrevTab)
+	nextTab.Accelerator, prevTab.Accelerator = "CmdOrCtrl+Shift+]", "CmdOrCtrl+Shift+["
+	tabItems := []*mygo.MenuItem{
+		nextTab, prevTab,
+		{Label: "Cycle Tabs", Submenu: []*mygo.MenuItem{item(&cmdNextTab), item(&cmdPrevTab)}},
+		mygo.Separator(),
+	}
 	for i := 1; i <= 9; i++ {
 		i := i
 		tabItems = append(tabItems, &mygo.MenuItem{
@@ -84,13 +96,26 @@ func (a *App) menu() *mygo.Menu {
 			},
 		})
 	}
+	a.appearanceItems = make(map[string]*mygo.MenuItem)
 	appearance := func(label, v string) *mygo.MenuItem {
-		return &mygo.MenuItem{Label: label, Type: mygo.MenuItemRadio, Checked: prefs.Appearance == v, Click: func(*mygo.MenuItem, *mygo.Window) {
+		it := &mygo.MenuItem{Label: label, Type: mygo.MenuItemRadio, Checked: prefs.Appearance == v, Click: func(*mygo.MenuItem, *mygo.Window) {
 			a.setAppearance(v)
 		}}
+		a.appearanceItems[v] = it
+		return it
 	}
 	return mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu},
+		{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+			{Role: mygo.RoleAbout},
+			mygo.Separator(),
+			item(&cmdSettings),
+			mygo.Separator(),
+			{Role: mygo.RoleServices},
+			mygo.Separator(),
+			{Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide},
+			mygo.Separator(),
+			{Role: mygo.RoleQuit},
+		}},
 		{Label: "Shell", Submenu: []*mygo.MenuItem{
 			item(&cmdNewTab),
 			mygo.Separator(),
@@ -111,6 +136,8 @@ func (a *App) menu() *mygo.Menu {
 			{Role: mygo.RoleCopy},
 			{Role: mygo.RolePaste},
 			{Role: mygo.RoleSelectAll},
+			mygo.Separator(),
+			item(&cmdFind), item(&cmdFindNext), item(&cmdFindPrev),
 			mygo.Separator(),
 			item(&cmdClear),
 		}},
@@ -153,8 +180,13 @@ func (a *App) do(fn func()) {
 // window again when it was closed.
 func (a *App) run(cmd *command) {
 	if a.win == nil {
-		if cmd == &cmdNewTab {
-			mygo.RunOnMain(a.open)
+		if cmd == &cmdNewTab || cmd == &cmdSettings {
+			mygo.RunOnMain(func() {
+				a.open()
+				if cmd == &cmdSettings && a.win != nil {
+					a.do(a.openSettings)
+				}
+			})
 		}
 		return
 	}
@@ -194,10 +226,18 @@ func (a *App) clearFocused() {
 	if t := a.tab(); t != nil && t.Focus != nil && t.Focus.term != nil {
 		// Clear the scrollback and the screen, and have the shell draw
 		// its prompt again, as Command-K does in Terminal.
-		t.Focus.term.Feed([]byte("\x1b[H\x1b[2J\x1b[3J"))
-		if t.Focus.info.Idle {
-			t.Focus.term.Send([]byte{0x0c})
+		p := t.Focus
+		p.term.Feed([]byte("\x1b[H\x1b[2J\x1b[3J"))
+		idle := p.info.Idle
+		client := a.client
+		if client == nil || p.SID == "" {
+			return
 		}
+		go func() {
+			if err := client.Clear(p.SID); err == nil && idle {
+				p.term.Send([]byte{0x0c})
+			}
+		}()
 	}
 }
 
@@ -245,18 +285,43 @@ func (a *App) quitAndEnd() {
 }
 
 func (a *App) openPalette() {
+	a.settingsOpen = false
 	a.paletteOpen, a.paletteQuery, a.paletteSel = true, "", 0
 	a.focusReq = nil // the palette takes the focus
 }
 
-// shortcuts handles the keys the menus do not: Escape out of a zoomed
-// pane, and Control-Tab between tabs.
+// shortcuts also handles tab navigation in views without a native menu.
+// Control-Tab is a menu accelerator so AppKit handles it before its own
+// key-view navigation. The original bracket shortcuts remain aliases.
 func (a *App) shortcuts(c *ui.Context) {
-	if c.Shortcut(ui.Ctrl, ui.KeyTab) {
-		a.cycleTab(1)
+	if c.Shortcut(ui.Cmd, ui.KeyComma) {
+		a.openSettings()
+		c.Invalidate()
 	}
-	if c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyTab) {
+	if a.settingsOpen {
+		return
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyF) {
+		a.openFind()
+		c.Invalidate()
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyG) {
+		a.findStep(1)
+		c.Invalidate()
+	}
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyG) {
+		a.findStep(-1)
+		c.Invalidate()
+	}
+	nextTab := c.Shortcut(ui.Ctrl, ui.KeyTab)
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketRight) || nextTab {
+		a.cycleTab(1)
+		c.Invalidate()
+	}
+	prevTab := c.Shortcut(ui.Ctrl|ui.Shift, ui.KeyTab)
+	if c.Shortcut(ui.Cmd|ui.Shift, ui.KeyBracketLeft) || prevTab {
 		a.cycleTab(-1)
+		c.Invalidate()
 	}
 }
 
@@ -374,9 +439,11 @@ func (a *App) palette(c *ui.Context, k *colors) {
 			}
 		})
 	})
-	if was && !a.paletteOpen {
+	if was && !a.paletteOpen && !a.settingsOpen {
 		if t := a.tab(); t != nil && a.focusReq == nil {
-			a.focusReq = t.Focus
+			if t.Focus == nil || !t.Focus.find.focus {
+				a.focusReq = t.Focus
+			}
 		}
 	}
 }

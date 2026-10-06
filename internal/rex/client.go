@@ -169,6 +169,10 @@ func (c *Client) Resize(sid string, cols, rows int) error {
 	return c.call(Request{Op: "resize", SID: sid, Cols: cols, Rows: rows}, nil)
 }
 
+func (c *Client) Clear(sid string) error {
+	return c.call(Request{Op: "clear", SID: sid}, nil)
+}
+
 func (c *Client) Layout() (json.RawMessage, error) {
 	var l json.RawMessage
 	err := c.call(Request{Op: "getLayout"}, &l)
@@ -190,6 +194,7 @@ type Stream struct {
 	c        *Client
 	sid      string
 	attachMu sync.Mutex // one attach at a time
+	syncMu   sync.Mutex // preserve the order of resize requests
 	mu       sync.Mutex
 	cond     *sync.Cond
 	conn     net.Conn
@@ -199,6 +204,8 @@ type Stream struct {
 	// size the server was told last.
 	cols, rows         int
 	sentCols, sentRows int
+	resizeTimer        *time.Timer
+	resizeAt           time.Time
 
 	// OnData, when set, is called with the size of what the session
 	// prints, from the reading goroutine.
@@ -256,15 +263,22 @@ func (s *Stream) attach() {
 // sync tells the server the terminal's size, once attached, when it was
 // told another.
 func (s *Stream) sync() error {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
 	s.mu.Lock()
-	if s.conn == nil || s.cols == s.sentCols && s.rows == s.sentRows {
+	if s.closed || s.conn == nil || s.cols == s.sentCols && s.rows == s.sentRows {
 		s.mu.Unlock()
 		return nil
 	}
 	cols, rows := s.cols, s.rows
+	s.mu.Unlock()
+	if err := s.c.Resize(s.sid, cols, rows); err != nil {
+		return err
+	}
+	s.mu.Lock()
 	s.sentCols, s.sentRows = cols, rows
 	s.mu.Unlock()
-	return s.c.Resize(s.sid, cols, rows)
+	return nil
 }
 
 // readOK reads the server's answer to an attach, a byte at a time so as
@@ -329,19 +343,63 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return conn.Write(p)
 }
 
-// Resize tells the session the size of the screen, attaching first.
+// resizeDelay keeps window animations from making the shell redraw its
+// prompt at every intermediate size, while the window is already drawing
+// at the next one.
+const resizeDelay = 75 * time.Millisecond
+
+// Resize attaches at the first size and coalesces subsequent changes.
 func (s *Stream) Resize(cols, rows int) error {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return io.ErrClosedPipe
+	}
+	cols, rows = max(cols, 1), max(rows, 1)
+	attached := s.conn != nil
+	if attached && s.cols == cols && s.rows == rows {
+		s.mu.Unlock()
+		return nil
+	}
 	s.cols, s.rows = cols, rows
+	s.resizeAt = time.Now()
+	if attached {
+		if s.resizeTimer == nil {
+			s.resizeTimer = time.AfterFunc(resizeDelay, s.resizeSettled)
+		} else {
+			s.resizeTimer.Reset(resizeDelay)
+		}
+	}
 	s.mu.Unlock()
+	if attached {
+		return nil
+	}
 	s.attach()
 	return s.sync()
+}
+
+func (s *Stream) resizeSettled() {
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	if remaining := resizeDelay - time.Since(s.resizeAt); remaining > 0 {
+		s.resizeTimer.Reset(remaining)
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+	s.sync()
 }
 
 // Close detaches; the session goes on.
 func (s *Stream) Close() error {
 	s.mu.Lock()
 	s.closed = true
+	if s.resizeTimer != nil {
+		s.resizeTimer.Stop()
+	}
 	conn := s.conn
 	s.cond.Broadcast()
 	s.mu.Unlock()

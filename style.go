@@ -3,8 +3,8 @@ package main
 import (
 	_ "embed"
 
-	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
+	"gorex/internal/terminal"
 )
 
 // colors are the app's own, in light and dark windows.
@@ -15,6 +15,7 @@ type colors struct {
 
 	card, cardFocused, cardBorder, cardBorderFocused ui.Color
 	shadow, shadowFocused                            ui.Color
+	header, headerFocused, headerBorder              ui.Color
 
 	text, textMuted, textFaint, iconMuted ui.Color
 	hover, pressed                        ui.Color
@@ -65,40 +66,44 @@ var lightColors = colors{
 }
 
 var darkColors = colors{
-	bgTop:    ui.Hex("#2c2131"),
-	bgMid:    ui.Hex("#231e27"),
-	bgLow:    ui.Hex("#221f22"),
-	bgBottom: ui.Hex("#2a2619"),
-	bgTint:   ui.RGBA(80, 40, 60, 0.25),
+	// Neutral charcoal chrome, inspired by iTerm2's dark appearance.
+	bgTop:    ui.Hex("#27292c"),
+	bgMid:    ui.Hex("#212326"),
+	bgLow:    ui.Hex("#1e2023"),
+	bgBottom: ui.Hex("#1b1d20"),
+	bgTint:   ui.RGBA(0, 0, 0, 0),
 
-	card:              ui.RGBA(20, 20, 24, 0.5),
-	cardFocused:       ui.RGBA(36, 36, 41, 0.94),
-	cardBorder:        ui.RGBA(255, 255, 255, 0.05),
-	cardBorderFocused: ui.RGBA(255, 255, 255, 0.14),
-	shadow:            ui.RGBA(0, 0, 0, 0.25),
-	shadowFocused:     ui.RGBA(0, 0, 0, 0.4),
+	card:              ui.Hex("#181a1c"),
+	cardFocused:       ui.Hex("#111315"),
+	cardBorder:        ui.Hex("#303337"),
+	cardBorderFocused: ui.Hex("#4a4e54"),
+	shadow:            ui.RGBA(0, 0, 0, 0.16),
+	shadowFocused:     ui.RGBA(0, 0, 0, 0.28),
+	header:            ui.Hex("#202225"),
+	headerFocused:     ui.Hex("#25272a"),
+	headerBorder:      ui.Hex("#303337"),
 
-	text:      ui.Hex("#f2f2f7"),
-	textMuted: ui.Hex("#aeaeb2"),
-	textFaint: ui.Hex("#8e8e93"),
-	iconMuted: ui.Hex("#98989d"),
-	hover:     ui.RGBA(255, 255, 255, 0.08),
-	pressed:   ui.RGBA(255, 255, 255, 0.14),
+	text:      ui.Hex("#ededed"),
+	textMuted: ui.Hex("#b6b8bc"),
+	textFaint: ui.Hex("#91959c"),
+	iconMuted: ui.Hex("#a1a5ac"),
+	hover:     ui.RGBA(255, 255, 255, 0.07),
+	pressed:   ui.RGBA(255, 255, 255, 0.12),
 
-	track:       ui.RGBA(255, 255, 255, 0.06),
-	trackBorder: ui.RGBA(255, 255, 255, 0.06),
-	tabActive:   ui.RGBA(255, 255, 255, 0.14),
-	tabSep:      ui.RGBA(255, 255, 255, 0.14),
-	tileRim:     ui.RGBA(255, 255, 255, 0.22),
+	track:       ui.Hex("#1c1e21"),
+	trackBorder: ui.Hex("#36393e"),
+	tabActive:   ui.Hex("#3a3d42"),
+	tabSep:      ui.Hex("#41454b"),
+	tileRim:     ui.RGBA(255, 255, 255, 0.18),
 
 	busy:      ui.Hex("#4ade80"),
 	attention: ui.Hex("#fbbf24"),
 	exited:    ui.Hex("#636366"),
 
-	panel:       ui.RGBA(38, 38, 42, 0.97),
-	panelBorder: ui.RGBA(255, 255, 255, 0.1),
-	panelSel:    ui.RGBA(108, 178, 255, 0.18),
-	backdrop:    ui.RGBA(0, 0, 0, 0.2),
+	panel:       ui.Hex("#25272b"),
+	panelBorder: ui.Hex("#44484f"),
+	panelSel:    ui.Hex("#354863"),
+	backdrop:    ui.RGBA(0, 0, 0, 0.32),
 }
 
 func colorsOf(c *ui.Context) *colors {
@@ -110,6 +115,14 @@ func colorsOf(c *ui.Context) *colors {
 
 // paintBackground paints the window's background.
 func paintBackground(p *ui.Painter, r ui.Rect, k *colors) {
+	if prefs.CompactMode {
+		bg := lightTerm.Background
+		if k == &darkColors {
+			bg = darkTerm.Background
+		}
+		p.Fill(r, bg, 0)
+		return
+	}
 	h1, h2 := r.H*0.38, r.H*0.32
 	p.FillGradient(ui.Rect{X: r.X, Y: r.Y, W: r.W, H: h1 + 1}, ui.LinearGradient{From: k.bgTop, To: k.bgMid, Angle: 180}, 0)
 	p.FillGradient(ui.Rect{X: r.X, Y: r.Y + h1, W: r.W, H: h2 + 1}, ui.LinearGradient{From: k.bgMid, To: k.bgLow, Angle: 180}, 0)
@@ -117,6 +130,13 @@ func paintBackground(p *ui.Painter, r ui.Rect, k *colors) {
 	clear := k.bgTint
 	clear.A = 0
 	p.FillGradient(r, ui.LinearGradient{From: clear, To: k.bgTint, Angle: 90, Start: 0.35, End: 1}, 0)
+}
+
+func terminalBackground(c *ui.Context) ui.Color {
+	if c.Theme().Dark {
+		return darkTerm.Background
+	}
+	return lightTerm.Background
 }
 
 //go:embed assets/fonts/JetBrainsMono-Regular.ttf
@@ -154,14 +174,16 @@ var lightTerm = &terminal.Theme{
 }
 
 var darkTerm = &terminal.Theme{
-	Foreground: ui.Hex("#e6e6ea"),
-	Background: ui.Hex("#1e1e22"),
-	Cursor:     ui.Hex("#e6e6ea"),
-	Selection:  ui.RGBA(108, 178, 255, 0.28),
+	Foreground:    ui.Hex("#d8d8d8"),
+	Background:    darkColors.cardFocused,
+	Cursor:        ui.Hex("#e8e8e8"),
+	CursorText:    darkColors.cardFocused,
+	Selection:     ui.Hex("#385779"),
+	SelectionText: ui.Hex("#ffffff"),
 	Palette: [16]ui.Color{
-		ui.Hex("#3a3a40"), ui.Hex("#ff6b7f"), ui.Hex("#7bd88f"), ui.Hex("#e5c07b"),
-		ui.Hex("#6cb2ff"), ui.Hex("#c792ea"), ui.Hex("#56d4dd"), ui.Hex("#d0d0d6"),
-		ui.Hex("#6e6e78"), ui.Hex("#ff8c9c"), ui.Hex("#9be8a8"), ui.Hex("#f2d28a"),
-		ui.Hex("#8ec5ff"), ui.Hex("#d7a8f2"), ui.Hex("#7fe3ea"), ui.Hex("#ffffff"),
+		ui.Hex("#1b1d1f"), ui.Hex("#cc6666"), ui.Hex("#b5bd68"), ui.Hex("#f0c674"),
+		ui.Hex("#81a2be"), ui.Hex("#b294bb"), ui.Hex("#8abeb7"), ui.Hex("#c5c8c6"),
+		ui.Hex("#707880"), ui.Hex("#e88989"), ui.Hex("#c7d28c"), ui.Hex("#f4d58d"),
+		ui.Hex("#a1bed6"), ui.Hex("#c9aed3"), ui.Hex("#a5d4ce"), ui.Hex("#ffffff"),
 	},
 }

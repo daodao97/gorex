@@ -13,7 +13,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egoist/mygo/plugins/terminal"
+	"gorex/internal/terminal"
 )
 
 // scrollback is about how many bytes of output a session keeps above its
@@ -22,10 +22,12 @@ const scrollback = 8 << 20
 
 // session is a pseudo-terminal of the server and its shell.
 type session struct {
-	id      string
-	shell   string
-	created time.Time
-	p       *pty
+	id         string
+	shell      string
+	created    time.Time
+	p          *pty
+	agentToken string
+	agent      agentTracker
 
 	mu sync.Mutex
 	// vt is the session's screen, kept by the terminal emulator of the
@@ -39,6 +41,8 @@ type session struct {
 	lastOutput time.Time
 	lastInput  time.Time
 	resync     *time.Timer
+	resizeAt   time.Time
+	prompt     promptTracker
 	exited     bool
 	code       int
 	cols, rows int
@@ -76,6 +80,10 @@ func (a *attached) writer() {
 }
 
 func newSession(id string, o CreateOptions) (*session, error) {
+	return newSessionForServer(id, o, "")
+}
+
+func newSessionForServer(id string, o CreateOptions, serverToken string) (*session, error) {
 	path, argv, name, err := shellCommand(o.Command)
 	if err != nil {
 		return nil, err
@@ -88,13 +96,27 @@ func newSession(id string, o CreateOptions) (*session, error) {
 	if dir == "" {
 		dir, _ = os.UserHomeDir()
 	}
+	token := newID() + newID()
 	env := sessionEnv(id, o.Env)
-	p, err := startPTY(path, argv, dir, env, cols, rows)
+	exe, _ := os.Executable()
+	env = append(env, "GOREX_SESSION="+id, "GOREX_AGENT_TOKEN="+token, "GOREX_AGENT_SOCKET="+SocketPath(), "GOREX_HOOK="+exe)
+	env = append(env, "GOREX_AGENT_SERVER_TOKEN="+serverToken)
+	env, shellDir, err := zshEnv(path, env)
 	if err != nil {
 		return nil, err
 	}
+	cleanupShell := func() {
+		if shellDir != "" {
+			os.RemoveAll(shellDir)
+		}
+	}
+	p, err := startPTY(path, argv, dir, env, cols, rows)
+	if err != nil {
+		cleanupShell()
+		return nil, err
+	}
 	s := &session{
-		id: id, shell: name, created: time.Now(), p: p,
+		id: id, shell: name, created: time.Now(), p: p, agentToken: token,
 		clients: map[*attached]struct{}{},
 		cols:    cols, rows: rows, done: make(chan struct{}),
 	}
@@ -104,9 +126,13 @@ func newSession(id string, o CreateOptions) (*session, error) {
 	vt, err := terminal.New(terminal.Options{Conn: discard{pr}, Scrollback: scrollback, OnBell: func() { s.bells.Add(1) }})
 	if err != nil {
 		p.hangup()
+		cleanupShell()
 		return nil, err
 	}
 	vt.Resize(cols, rows)
+	if name == "zsh" {
+		vt.Feed([]byte(promptRedraw))
+	}
 	s.vt, s.vtIn = vt, pw
 	read := make(chan struct{})
 	go func() {
@@ -115,6 +141,7 @@ func newSession(id string, o CreateOptions) (*session, error) {
 	}()
 	go func() {
 		code := p.wait()
+		cleanupShell()
 		// What it printed last is still to read; then hang up whatever
 		// else holds the terminal, as terminal apps do.
 		select {
@@ -177,6 +204,7 @@ func (s *session) read() {
 		if n > 0 {
 			data := append([]byte(nil), buf[:n]...)
 			s.mu.Lock()
+			s.prompt.feed(data)
 			s.vt.Feed(data)
 			s.output += uint64(n)
 			s.lastOutput = time.Now()
@@ -201,11 +229,13 @@ func (s *session) attach(conn net.Conn, cols, rows int) {
 	a := &attached{conn: conn, out: make(chan []byte, 2048)}
 	s.mu.Lock()
 	if cols > 0 && rows > 0 {
-		// The screen reflows to the window's size, which the program
-		// learns next.
-		s.vt.Resize(cols, rows)
+		// Resize both the screen and PTY before queuing the snapshot.
+		s.resizeLocked(cols, rows)
 	}
 	snap := s.vt.Snapshot()
+	if s.shell == "zsh" {
+		snap = append([]byte(promptRedraw), snap...)
+	}
 	if title := s.vt.Title(); title != "" {
 		snap = append([]byte("\x1b]2;"+title+"\x07"), snap...)
 	}
@@ -220,9 +250,6 @@ func (s *session) attach(conn net.Conn, cols, rows int) {
 	go a.writer()
 	if exited {
 		return
-	}
-	if cols > 0 && rows > 0 {
-		s.resize(cols, rows)
 	}
 	buf := make([]byte, 32<<10)
 	for {
@@ -255,10 +282,23 @@ func (s *session) input(p []byte) {
 // resize sets the size of the terminal and reports whether it changed.
 func (s *session) resize(cols, rows int) bool {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.resizeLocked(cols, rows)
+}
+
+func (s *session) resizeLocked(cols, rows int) bool {
+	cols, rows = clamp(cols), clamp(rows)
+	oldCols := s.cols
 	changed := cols != s.cols || rows != s.rows
 	s.cols, s.rows = cols, rows
 	exited := s.exited
 	if changed {
+		s.resizeAt = time.Now()
+		// Clear a marked prompt at its old width before reflow. A right
+		// prompt's padding would otherwise wrap into extra prompt rows.
+		if s.prompt.active && cols != oldCols {
+			s.vt.Resize(oldCols, rows+1)
+		}
 		s.vt.Resize(cols, rows)
 		// Once the program drew its screen at the new size, the windows
 		// get it again.
@@ -268,7 +308,6 @@ func (s *session) resize(cols, rows int) bool {
 			s.resync.Reset(resyncDelay)
 		}
 	}
-	s.mu.Unlock()
 	if changed && !exited {
 		setSize(s.p.master, cols, rows)
 	}
@@ -279,26 +318,57 @@ func (s *session) resize(cols, rows int) bool {
 // full-screen program is sent again.
 const resyncDelay = 150 * time.Millisecond
 
-// resyncScreen sends the windows the screen of a full-screen program as
-// the session has it. A window resizes its terminal as it draws, and the
+// libghostty's C API defaults to preserving prompts on resize. Opt in
+// for zsh, which redraws its full prompt on SIGWINCH.
+const promptRedraw = "\x1b]133;A;redraw=1\x07\x1b]133;C\x07"
+
+// resyncScreen sends the windows the session's screen after resizing.
+// A window resizes its terminal as it draws, and the
 // session as the request reaches it, while the program's output is on its
 // way: what the program drew for one size may land in a screen of
 // another, which full-screen programs, redrawing only what changed, do
-// not mend. Shells' scrollback reflows alike in both and needs nothing.
+// not mend. A shell's right prompt can likewise wrap differently while
+// the window reflows through an animation's intermediate sizes.
 func (s *session) resyncScreen() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.exited || len(s.clients) == 0 {
 		return
 	}
+	if !s.resizeAt.IsZero() {
+		if remaining := resyncDelay - time.Since(s.resizeAt); remaining > 0 {
+			s.resync.Reset(remaining)
+			return
+		}
+	}
 	snap := s.vt.Snapshot()
-	if !bytes.Contains(snap, []byte("\x1b[?1049h")) {
+	var msg []byte
+	if bytes.Contains(snap, []byte("\x1b[?1049h")) {
+		// Clear the alternate screen the window shows, then draw it anew.
+		msg = append([]byte("\x1b[?1049h\x1b[H\x1b[2J"), snap...)
+	} else if s.shell == "zsh" {
+		// Replace the primary screen and history, rather than appending
+		// a snapshot to the window's independently reflowed scrollback.
+		msg = append([]byte("\x1b[?6l\x1b[r\x1b[H\x1b[2J\x1b[3J"+promptRedraw), snap...)
+	} else {
 		return
 	}
-	// Clear the alternate screen the window shows, then draw it anew.
-	msg := append([]byte("\x1b[?1049h\x1b[H\x1b[2J"), snap...)
 	for a := range s.clients {
 		if !a.send(msg) {
+			a.finish()
+			delete(s.clients, a)
+		}
+	}
+}
+
+// clear keeps the authoritative screen in step with Command-K.
+func (s *session) clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data := []byte("\x1b[H\x1b[2J\x1b[3J")
+	s.vt.Feed(data)
+	for a := range s.clients {
+		if !a.send(data) {
 			a.finish()
 			delete(s.clients, a)
 		}
@@ -330,6 +400,7 @@ func (s *session) info() SessionInfo {
 		Title: s.vt.Title(), LastOutput: s.lastOutput, LastInput: s.lastInput,
 		Output: s.output, Bells: int(s.bells.Load()), Exited: s.exited, ExitCode: s.code,
 		Attached: len(s.clients), Cols: s.cols, Rows: s.rows,
+		Agent: s.agent.state,
 	}
 	s.mu.Unlock()
 	if s.p.cmd.Process != nil {
@@ -343,6 +414,11 @@ func (s *session) info() SessionInfo {
 		fg = in.PID
 	}
 	in.Idle = fg == in.PID
+	// A crashed/killed agent cannot emit SessionEnd. Do not leave its
+	// last waiting state on a shell prompt. Allow startup hooks to settle.
+	if in.Idle && time.Since(in.Agent.Updated) > 2*time.Second {
+		in.Agent = AgentState{}
+	}
 	p := inspect(fg)
 	in.Program, in.Args, in.Dir = p.programName(), p.args, p.dir
 	if in.Program == "" {
