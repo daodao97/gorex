@@ -69,8 +69,10 @@ type view struct {
 	t *Terminal
 	c *ui.Context
 
-	theme   *Theme
-	applied *Theme // the theme the emulator has
+	theme              *Theme
+	applied            *Theme // the theme the emulator has
+	adaptiveColors     bool
+	oppositeBackground ui.Color
 
 	// The grid, in device pixels: the cells, the baseline in a cell, and
 	// the origin of the grid relative to the element; scale is device
@@ -89,6 +91,7 @@ type view struct {
 	searchRects   []vt.MatchRect
 	lines         []rowCache
 	shaped        lru
+	contrast      map[contrastPair]ui.Color
 
 	keys    *vt.KeyEncoder
 	mouse   *vt.MouseEncoder
@@ -137,12 +140,27 @@ func (v *view) build(c *ui.Context, e *ui.Element) {
 		theme = defaultTheme(dark)
 	}
 	v.theme = theme
+	if adaptive := t.opts.AdaptiveColors; adaptive != v.adaptiveColors {
+		v.adaptiveColors = adaptive
+		clear(v.contrast)
+		v.lines = nil
+	}
+	opposite := t.opts.DarkTheme
+	if theme.dark() {
+		opposite = t.opts.Theme
+	}
+	if opposite == nil || opposite.dark() == theme.dark() {
+		opposite = defaultTheme(!theme.dark())
+	}
+	v.oppositeBackground = opposite.Background
 	if t.term == nil {
 		v.release()
 	} else {
 		if v.applied != theme {
 			theme.apply(t.term)
 			v.applied = theme
+			clear(v.contrast)
+			v.lines = nil
 		}
 		t.curTheme = theme
 		if focused != v.focused && t.term.Mode(vt.ModeFocusEvent) {
@@ -158,7 +176,16 @@ func (v *view) build(c *ui.Context, e *ui.Element) {
 	}
 	copied := t.clipOut
 	t.clipOut = nil
+	var holdDue time.Time
+	if t.term != nil && t.held {
+		holdDue = t.heldSince.Add(syncOutputTimeout)
+	}
 	t.mu.Unlock()
+	if !holdDue.IsZero() {
+		// The watchdog must also wake a window with a hidden cursor and no
+		// further output; otherwise an incomplete update could stay frozen.
+		c.After(max(holdDue.Sub(c.Now()), time.Millisecond))
+	}
 	for _, s := range copied {
 		c.WriteClipboard(s)
 	}

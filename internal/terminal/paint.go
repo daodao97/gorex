@@ -90,6 +90,12 @@ const asciiPrintable = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUV
 // paint updates the rows that changed and draws the terminal.
 func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	t := v.t
+	var event *RenderEvent
+	defer func() {
+		if event != nil && t.opts.OnRenderEvent != nil {
+			t.opts.OnRenderEvent(*event)
+		}
+	}()
 	v.layout(r, p.Scale())
 	bg := v.theme.Background
 	t.mu.Lock()
@@ -111,8 +117,10 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	}
 	t.rmu.Lock()
 	defer t.rmu.Unlock()
-	// A synchronized update shows when it ends, or after a second.
-	if t.held && time.Since(t.heldSince) > time.Second {
+	// Keep active updates hidden even if they take longer than a second.
+	// Recover only when the program stops sending data without committing.
+	if t.held && time.Since(t.heldSince) >= syncOutputTimeout {
+		event = &RenderEvent{Kind: "sync_timeout", Duration: time.Since(t.holdStarted)}
 		t.term.SetMode(vt.ModeSyncOutput, false)
 		t.held = false
 	}
@@ -149,6 +157,7 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 type resolved struct {
 	fg, bg, ul       ui.Color
 	hasBg, hasUl     bool
+	adaptiveBg       bool
 	variant          int // 1 bold, 2 italic
 	invisible        bool
 	underline        int
@@ -169,9 +178,11 @@ func (v *view) resolve(s vt.Style) resolved {
 	var r resolved
 	r.fg, _ = col(s.FG, v.colors.Foreground)
 	r.bg, r.hasBg = col(s.BG, v.colors.Background)
+	r.adaptiveBg = s.BG.Kind == 2 || s.BG.Kind == 1 && s.BG.Index >= 16
 	r.ul, r.hasUl = col(s.UnderlineColor, v.colors.Foreground)
 	if s.Inverse {
 		r.fg, r.bg, r.hasBg = r.bg, r.fg, true
+		r.adaptiveBg = s.FG.Kind == 2 || s.FG.Kind == 1 && s.FG.Index >= 16
 	}
 	if s.Faint {
 		r.fg = r.fg.Alpha(0.5)
@@ -241,6 +252,18 @@ func (v *view) buildRow(line *rowCache, rs *vt.RenderState, cols int) {
 				bg = v.colors.Palette[c.Background.R]
 			}
 			st.bg, st.hasBg = color(bg), true
+			st.adaptiveBg = !c.Palette || c.Background.R >= 16
+		}
+		if st.adaptiveBg && !drawn(c.Codepoint) {
+			st.bg = v.adaptiveBackground(st.bg)
+		}
+		// Cell backgrounds can be independent of the style, so adjust only
+		// after resolving both. Preserve the colors of block/line artwork.
+		if !st.invisible && c.Codepoint != 0 && !drawn(c.Codepoint) {
+			st.fg = v.readableForeground(st.fg, st.bg)
+			if st.hasUl {
+				st.ul = v.readableForeground(st.ul, st.bg)
+			}
 		}
 		if st.hasBg && st.bg != def.bg {
 			if n := len(line.bgs); n > 0 && line.bgs[n-1].x1 == x && line.bgs[n-1].c == st.bg {

@@ -353,6 +353,10 @@ func (s *session) resyncScreen() {
 	} else {
 		return
 	}
+	// A socket can split this replacement between its clear-screen prefix
+	// and the snapshot. Keep the previous frame visible until all of it
+	// arrives, rather than briefly drawing an empty or partial screen.
+	msg = append(append([]byte("\x1b[?2026h"), msg...), []byte("\x1b[?2026l")...)
 	for a := range s.clients {
 		if !a.send(msg) {
 			a.finish()

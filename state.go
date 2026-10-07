@@ -211,7 +211,7 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		a.later(a.ctx, func() { a.splitPane(p, down) })
 	}
 	if p.SID == "" {
-		term, err := terminal.New(terminal.Options{Conn: nopConn{}, Transparent: true, Font: termFont, Theme: lightTerm, DarkTheme: darkTerm, OnSplit: onSplit, CopyRawText: prefs.CopyRawText})
+		term, err := terminal.New(terminal.Options{Conn: nopConn{}, Transparent: true, Font: termFont, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OnSplit: onSplit, CopyRawText: prefs.CopyRawText})
 		if err == nil {
 			term.Feed([]byte("\x1b[31mCould not start a session: " + a.err + "\x1b[0m\r\n"))
 			p.term = term
@@ -231,14 +231,16 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		}
 	}
 	term, err := terminal.New(terminal.Options{
-		Conn:        p.stream,
-		Font:        termFont,
-		Theme:       lightTerm,
-		DarkTheme:   darkTerm,
-		Transparent: true,
-		CopyRawText: prefs.CopyRawText,
-		OnOpenLink:  func(link terminal.Link) { a.openTerminalLink(p, link) },
-		OnSplit:     onSplit,
+		Conn:           p.stream,
+		Font:           termFont,
+		Theme:          lightTerm,
+		DarkTheme:      darkTerm,
+		AdaptiveColors: true,
+		Transparent:    true,
+		CopyRawText:    prefs.CopyRawText,
+		OnOpenLink:     func(link terminal.Link) { a.openTerminalLink(p, link) },
+		OnSplit:        onSplit,
+		OnRenderEvent:  func(event terminal.RenderEvent) { logRenderEvent(p.SID, event) },
 		OnTitle: func(title string) {
 			update(func() { p.title = title })
 		},

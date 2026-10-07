@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -11,9 +10,8 @@ func TestAgentPaneNativeDragIncludesListMarker(t *testing.T) {
 	previous := prefs
 	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
-	a, tt := newTestApp(t)
+	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	waitFor(t, tt, "shell", func() bool { return strings.Contains(p.term.Text(), "$") })
 	for _, compact := range []bool{false, true} {
 		prefs.CompactMode = compact
 		for _, agent := range []string{"codex", "claude"} {

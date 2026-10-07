@@ -46,6 +46,23 @@ func newTestApp(t *testing.T) (*App, *ui.Tester) {
 	return a, tt
 }
 
+// newStaticTestApp renders fed terminal fixtures without a shell that can
+// overwrite them when the UI changes the terminal size (SIGWINCH).
+func newStaticTestApp(t *testing.T) (*App, *ui.Tester) {
+	t.Helper()
+	registerFonts()
+	p := &Pane{ID: 1}
+	tab := &Tab{ID: 1, Root: &Node{ID: 1, Pane: p}, Focus: p}
+	p.Tab, p.Node = tab, tab.Root
+	a := &App{tabs: []*Tab{tab}}
+	a.attach(p, 80, 24)
+	if p.term == nil {
+		t.Fatal("could not create fixture terminal")
+	}
+	t.Cleanup(func() { p.term.Close() })
+	return a, ui.NewTester(a.view, 1000, 620)
+}
+
 // refresh asks the server what runs in the sessions, as the window does
 // every half second.
 func refresh(a *App) {

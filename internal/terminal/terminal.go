@@ -85,6 +85,10 @@ type Options struct {
 	// mouse. Plain clicks and the wheel still reach the program; Alt bypasses
 	// this override for gestures the program should handle itself.
 	SelectOnDrag bool
+	// AdaptiveColors keeps neutral RGB/extended-palette panels and text
+	// readable when a program caches its startup palette across theme changes.
+	// Normal ANSI background colors and colored panels retain their colors.
+	AdaptiveColors bool
 	// Transparent leaves the terminal's background undrawn, so that what
 	// is under the view shows through, as the window's material or an
 	// element's translucent background, as Ghostty's background-opacity
@@ -102,6 +106,10 @@ type Options struct {
 	OnExit   func(code int)
 	OnBell   func()
 	OnNotify func(title, body string)
+	// OnRenderEvent reports slow synchronized updates and watchdog releases,
+	// without terminal contents. It runs on the reader or UI thread after
+	// releasing emulator locks; calls back into the terminal are safe.
+	OnRenderEvent func(RenderEvent)
 	// OnOpenLink runs on the UI thread, without holding the emulator lock.
 	// It receives a Command-clicked URL or printed file path and location.
 	OnOpenLink func(Link)
@@ -150,10 +158,11 @@ type Terminal struct {
 
 	// rmu guards what frames draw from: the render state, which a
 	// program's synchronized update (mode 2026) holds.
-	rmu       sync.Mutex
-	rs        *vt.RenderState
-	held      bool
-	heldSince time.Time
+	rmu         sync.Mutex
+	rs          *vt.RenderState
+	held        bool
+	heldSince   time.Time // most recent input during a synchronized update
+	holdStarted time.Time
 
 	draw     atomic.Pointer[func()] // asks for a frame of the view
 	done     chan struct{}
@@ -169,12 +178,22 @@ type Terminal struct {
 // gridSize is the size of the screen in cells and of a cell in pixels.
 type gridSize struct{ cols, rows, cellW, cellH int }
 
+// RenderEvent describes a rendering delay without recording program output.
+type RenderEvent struct {
+	Kind     string // "slow_sync" or "sync_timeout"
+	Duration time.Duration
+}
+
+const syncOutputTimeout = time.Second
+const slowSyncThreshold = 250 * time.Millisecond
+
 // events are what a program did while the reader wrote its output, for
 // the callbacks, which run once the lock is released.
 type events struct {
 	title  bool
 	bells  int
 	notify [][2]string
+	render []RenderEvent
 }
 
 // New makes a terminal running opts.Command, or connected to opts.Conn.
@@ -387,6 +406,11 @@ func (t *Terminal) write(p []byte) {
 	var title string
 	if t.term != nil {
 		t.term.Write(p)
+		if t.held && len(p) != 0 {
+			// A slow but active redraw is not a stalled program. Only release
+			// an unfinished update after incoming data has stopped.
+			t.heldSince = time.Now()
+		}
 		ev, t.events = t.events, events{}
 		if ev.title {
 			title = t.term.Title()
@@ -399,6 +423,11 @@ func (t *Terminal) write(p []byte) {
 
 func (t *Terminal) fire(ev events, title string) {
 	o := &t.opts
+	for _, event := range ev.render {
+		if o.OnRenderEvent != nil {
+			o.OnRenderEvent(event)
+		}
+	}
 	if ev.title && o.OnTitle != nil {
 		o.OnTitle(title)
 	}
@@ -528,6 +557,18 @@ func (t *Terminal) SetSelectOnDrag(selectOnDrag bool) {
 	t.mu.Lock()
 	t.opts.SelectOnDrag = selectOnDrag
 	t.mu.Unlock()
+}
+
+// SetAdaptiveColors changes rendering without altering the terminal's cells
+// or restarting the program that owns them.
+func (t *Terminal) SetAdaptiveColors(adaptive bool) {
+	t.mu.Lock()
+	changed := t.opts.AdaptiveColors != adaptive
+	t.opts.AdaptiveColors = adaptive
+	t.mu.Unlock()
+	if changed {
+		t.redraw()
+	}
 }
 
 // Resize sets the size of the screen in cells, for a terminal no view
@@ -691,9 +732,18 @@ func (t *Terminal) resize(s gridSize) {
 // frames show the screen as it was when it started; t.mu is held.
 func (t *Terminal) renderHold(held bool) {
 	t.rmu.Lock()
-	if held && t.rs != nil {
-		t.rs.Update(t.term)
+	if held {
+		if !t.held {
+			if t.rs != nil {
+				t.rs.Update(t.term)
+			}
+			t.holdStarted = time.Now()
+		}
 		t.heldSince = time.Now()
+	} else if t.held {
+		if elapsed := time.Since(t.holdStarted); elapsed >= slowSyncThreshold {
+			t.events.render = append(t.events.render, RenderEvent{Kind: "slow_sync", Duration: elapsed})
+		}
 	}
 	t.held = held
 	t.rmu.Unlock()

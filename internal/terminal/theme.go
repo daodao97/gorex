@@ -17,6 +17,10 @@ type Theme struct {
 	// opaque, when zero. SelectionText colors the selected text: its own
 	// colors when zero.
 	Selection, SelectionText ui.Color
+	// MinimumContrast adjusts rendered text against its cell background,
+	// including program-supplied RGB and faint text. Zero preserves colors.
+	// Backgrounds, concealed text and drawn block characters stay unchanged.
+	MinimumContrast float64
 	// Palette holds the 16 colors of programs: black, red, green, yellow,
 	// blue, magenta, cyan and white, then their bright kinds.
 	Palette [16]ui.Color

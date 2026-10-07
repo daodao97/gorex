@@ -102,6 +102,14 @@ terminal plugin (Ghostty's libghostty-vt). No webview, no cgo: one ~15 MB app.
   switch; View ▸ Appearance (or right-click the theme button) also offers
   following the system. Your choice is remembered. Text size (⌘+ ⌘− ⌘0),
   JetBrains Mono embedded.
+  Light mode uses a darker ANSI palette and adjusts low-contrast terminal
+  text against its cell background, including 256-color, RGB and faint Agent
+  output. Text adjustment only affects rendering; copied text, concealed
+  text and block artwork retain their existing behavior.
+  All panes additionally adapt neutral RGB/256-color panels
+  cached by programs such as Codex across appearance changes. Their text
+  stays readable in either theme without restarting the program; colored and
+  standard ANSI backgrounds retain their program-supplied colors.
 
 ## Shortcuts
 
@@ -175,6 +183,13 @@ that developing never touches the sessions of the app you use
 not a rebuild: a development build replaces a server that an older build
 started, ending its sessions, which then start again in the same
 directories.
+
+Slow synchronized redraws and incomplete-update watchdog releases are
+recorded in `render.log` in the same data directory. This contains only
+timestamps, session IDs and durations, never terminal output or input, and
+rotates at 1 MiB with one previous file. The watchdog waits for one second
+without incoming output, so a large active redraw can finish without exposing
+its intermediate clear-screen frame.
 
 ## Layout
 

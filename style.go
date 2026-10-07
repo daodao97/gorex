@@ -43,9 +43,9 @@ var lightColors = colors{
 	shadowFocused:     ui.RGBA(60, 40, 50, 0.12),
 
 	text:      ui.Hex("#1d1d1f"),
-	textMuted: ui.Hex("#636366"),
-	textFaint: ui.Hex("#8e8e93"),
-	iconMuted: ui.Hex("#8a8a8f"),
+	textMuted: ui.Hex("#565960"),
+	textFaint: ui.Hex("#60636a"),
+	iconMuted: ui.Hex("#737680"),
 	hover:     ui.RGBA(0, 0, 0, 0.055),
 	pressed:   ui.RGBA(0, 0, 0, 0.1),
 
@@ -55,9 +55,9 @@ var lightColors = colors{
 	tabSep:      ui.RGBA(0, 0, 0, 0.13),
 	tileRim:     ui.RGBA(255, 255, 255, 0.95),
 
-	busy:      ui.Hex("#34a853"),
-	attention: ui.Hex("#f59e0b"),
-	exited:    ui.Hex("#a1a1a6"),
+	busy:      ui.Hex("#26773b"),
+	attention: ui.Hex("#9a6500"),
+	exited:    ui.Hex("#666a73"),
 
 	panel:       ui.RGBA(252, 252, 253, 0.97),
 	panelBorder: ui.RGBA(0, 0, 0, 0.08),
@@ -161,15 +161,17 @@ var termFont = terminal.Font{Family: "JetBrains Mono, SF Mono, Menlo, monospace"
 
 // The terminals' colors: soft ink on the panes' paper, and the dark kind.
 var lightTerm = &terminal.Theme{
-	Foreground: ui.Hex("#2a2d31"),
-	Background: ui.Hex("#fbfbfb"),
-	Cursor:     ui.Hex("#3a3d42"),
-	Selection:  ui.RGBA(46, 111, 208, 0.2),
+	Foreground:      ui.Hex("#2a2d31"),
+	Background:      ui.Hex("#fbfbfb"),
+	Cursor:          ui.Hex("#3a3d42"),
+	Selection:       ui.Hex("#d4e4fc"),
+	SelectionText:   ui.Hex("#1f2a3d"),
+	MinimumContrast: 4.5,
 	Palette: [16]ui.Color{
-		ui.Hex("#2a2d31"), ui.Hex("#c2465a"), ui.Hex("#4e8e5f"), ui.Hex("#b07a1e"),
-		ui.Hex("#2e6fd0"), ui.Hex("#9050c8"), ui.Hex("#1e8c9c"), ui.Hex("#8a8d93"),
-		ui.Hex("#6e7178"), ui.Hex("#d9566b"), ui.Hex("#5ba671"), ui.Hex("#c89026"),
-		ui.Hex("#4a8fe0"), ui.Hex("#a56bd8"), ui.Hex("#2ba2b3"), ui.Hex("#b5b8be"),
+		ui.Hex("#2a2d31"), ui.Hex("#b33449"), ui.Hex("#327343"), ui.Hex("#896014"),
+		ui.Hex("#245fb5"), ui.Hex("#7c3daf"), ui.Hex("#176b7a"), ui.Hex("#61656c"),
+		ui.Hex("#656971"), ui.Hex("#be354c"), ui.Hex("#28763e"), ui.Hex("#916000"),
+		ui.Hex("#2767bc"), ui.Hex("#8544b5"), ui.Hex("#147484"), ui.Hex("#4b4f56"),
 	},
 }
 

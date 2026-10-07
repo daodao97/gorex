@@ -15,3 +15,22 @@ tracks the mouse, deferring plain clicks until release and preserving mouse
 scrolling. GoRex enables this for recognized Agent panes so their generated
 Markdown markers remain selectable. Option bypasses it; Shift still forces
 selection for other mouse-aware programs.
+
+Theme.MinimumContrast optionally adjusts text foregrounds against their final
+cell background, including RGB, extended-palette and faint text. GoRex enables
+this for its light theme. Backgrounds, concealed text and drawn block/line
+characters are preserved. Adjustments use a bounded color-pair cache while
+building changed rows; terminal state and selection copying are unaffected.
+
+Options.AdaptiveColors / SetAdaptiveColors handle programs that cache
+their startup palette. Neutral RGB/extended-palette backgrounds with the
+opposite appearance are mapped relative to the light/dark theme backgrounds,
+and text gets a 4.5 contrast floor in both themes. Standard ANSI backgrounds,
+colored panels and block/line artwork are preserved. GoRex enables this for
+all panes; disabling it invalidates cached renderer rows.
+
+Synchronized-output protection uses an inactivity watchdog rather than the
+update's total age, and schedules its own wakeup even with a hidden cursor.
+Active long redraws keep the previous frame visible until commit. Optional
+OnRenderEvent reports slow updates and watchdog releases outside emulator
+locks, with timing metadata only; GoRex stores these in a bounded render log.
