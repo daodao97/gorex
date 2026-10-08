@@ -6,6 +6,7 @@ import (
 )
 
 func (m *mobileApp) pauseConnection() {
+	m.cancelImagePaste()
 	m.generation++
 	if m.cancel != nil {
 		m.cancel()

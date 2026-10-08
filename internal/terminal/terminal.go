@@ -130,6 +130,9 @@ type Options struct {
 	// OnSplit runs on the UI thread when a context-menu split is chosen.
 	// down is false for side-by-side panes and true for stacked panes.
 	OnSplit func(down bool)
+	// OnPaste runs on the UI thread and can handle clipboard data externally.
+	// Returning true suppresses the normal bracketed text paste.
+	OnPaste func(*ui.Context) bool
 }
 
 // CursorStyle is the shape of the cursor.

@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -87,7 +88,15 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
-	bridge, err := Start(ctx, rex.SocketPath())
+	imagePastes := make(chan string, 1)
+	image := clipboardPNG(t)
+	bridge, err := Start(ctx, rex.SocketPath(), Options{OnPasteImage: func(_ context.Context, sid string, data []byte) error {
+		if string(data) != string(image) {
+			return fmt.Errorf("image bytes changed in tunnel")
+		}
+		imagePastes <- sid
+		return nil
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +130,17 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	list, err := client.List()
 	if err != nil || len(list) != 1 || list[0].ID != existing.ID {
 		t.Fatalf("existing desktop session not listed: %v", err)
+	}
+	if err := client.PasteImage(ctx, existing.ID, image); err != nil {
+		t.Fatal("image upload over Tailcat failed", err)
+	}
+	select {
+	case sid := <-imagePastes:
+		if sid != existing.ID {
+			t.Fatal("image targeted wrong session")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("image upload not delivered")
 	}
 	deadline = time.Now().Add(time.Second)
 	for len(bridge.Devices()) == 0 && time.Now().Before(deadline) {

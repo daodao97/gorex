@@ -60,7 +60,7 @@ func (a *App) openPhonePair() {
 				default:
 				}
 			}
-		}})
+		}, OnPasteImage: pasteRemoteImage})
 		if err != nil {
 			close(stopPush)
 		} else {

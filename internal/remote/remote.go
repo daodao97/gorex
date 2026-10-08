@@ -52,17 +52,21 @@ func ParseLink(raw string) (tailcat.Addr, error) {
 	return tailcat.Addr(addr), nil
 }
 
-// Bridge exposes only the session socket. Closing it revokes the QR capability
+// Bridge exposes session transport and image paste to a paired phone. Closing it revokes the QR capability
 // and closes all tunneled connections, while the desktop sessions keep running.
 type Bridge struct {
-	server   *tailcat.Server
-	listener net.Listener
-	mu       sync.Mutex
-	closed   bool
-	conns    map[net.Conn]bool
-	devices  map[net.Conn]ConnectedDevice
-	onDevice func(rex.DeviceInfo)
-	onClose  func()
+	server       *tailcat.Server
+	listener     net.Listener
+	mu           sync.Mutex
+	closed       bool
+	conns        map[net.Conn]bool
+	devices      map[net.Conn]ConnectedDevice
+	onDevice     func(rex.DeviceInfo)
+	onClose      func()
+	onImage      func(context.Context, string, []byte) error
+	imageGate    chan struct{}
+	imageContext context.Context
+	imageCancel  context.CancelFunc
 }
 
 // OnClose registers cleanup before publishing this bridge to consumers.
@@ -72,15 +76,22 @@ type Options struct {
 	// OnDevice receives metadata only after a successful compatible control
 	// response. Callbacks must not block; terminal bytes are forwarded unchanged.
 	OnDevice func(rex.DeviceInfo)
+	// OnPasteImage runs off the UI thread after a bounded authenticated upload.
+	// It must copy to the desktop clipboard before sending Ctrl+V to the session.
+	OnPasteImage func(context.Context, string, []byte) error
 }
 
 func Start(ctx context.Context, socket string, options ...Options) (*Bridge, error) {
 	b := &Bridge{server: &tailcat.Server{Logf: quiet}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
+	b.imageContext, b.imageCancel = context.WithCancel(context.Background())
+	b.imageGate = make(chan struct{}, 1)
 	if len(options) > 0 {
 		b.onDevice = options[0].OnDevice
+		b.onImage = options[0].OnPasteImage
 	}
 	ln, err := b.server.Listen(ctx, "tcp", fmt.Sprintf(":%d", Port))
 	if err != nil {
+		b.imageCancel()
 		b.server.Close()
 		return nil, err
 	}
@@ -107,13 +118,7 @@ func (b *Bridge) accept(socket string) {
 		b.mu.Unlock()
 		go func() {
 			defer func() { conn.Close(); b.mu.Lock(); delete(b.conns, conn); delete(b.devices, conn); b.mu.Unlock() }()
-			local, err := net.DialTimeout("unix", socket, 5*time.Second)
-			if err != nil {
-				return
-			}
-			defer local.Close()
-			observed := b.observe(conn)
-			tailcat.ProxyConns(observed, local)
+			b.serveConnection(conn, socket)
 		}()
 	}
 }
@@ -125,6 +130,9 @@ func (b *Bridge) Close() {
 		return
 	}
 	b.closed = true
+	if b.imageCancel != nil {
+		b.imageCancel()
+	}
 	if b.onClose != nil {
 		b.onClose()
 	}

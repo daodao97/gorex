@@ -62,6 +62,8 @@ github.com/daodao97/mygo v0.0.0-20261008011830-d552173a6e88 h1:7R0qk6v5Lnx51Nl7G
 github.com/daodao97/mygo v0.0.0-20261008011830-d552173a6e88/go.mod h1:1sRzZ6jEhKE7iuEQXjyoXDgxyxQ1uTgMHDcDKZvoDIU=
 github.com/daodao97/mygo v0.0.0-20261008013113-ddcf19aab80b h1:273deJyA8ogW76cnpVpWoLWHzDWtlU61XowZhN4hb98=
 github.com/daodao97/mygo v0.0.0-20261008013113-ddcf19aab80b/go.mod h1:1sRzZ6jEhKE7iuEQXjyoXDgxyxQ1uTgMHDcDKZvoDIU=
+github.com/daodao97/mygo v0.0.0-20261008015444-202e2f392f39 h1:y3fJ2lWbhOTQ6myXOuklZdIjcphseMhTtCQgB2EQCrI=
+github.com/daodao97/mygo v0.0.0-20261008015444-202e2f392f39/go.mod h1:1sRzZ6jEhKE7iuEQXjyoXDgxyxQ1uTgMHDcDKZvoDIU=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=

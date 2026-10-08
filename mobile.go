@@ -70,6 +70,9 @@ type mobileApp struct {
 	noticeReceipts                          map[string]time.Time
 	noticeReceiptsLoaded                    bool
 	preferenceTouched                       map[string]bool
+	imagePasteBusy                          bool
+	imagePasteCancel                        context.CancelFunc
+	imagePasteEpoch                         int
 }
 
 type desktopRecent struct {
@@ -226,6 +229,7 @@ func (m *mobileApp) invalidate() {
 }
 
 func (m *mobileApp) detach() {
+	m.cancelImagePaste()
 	m.keyboardMore = false
 	if m.term != nil {
 		m.term.Close()
@@ -493,7 +497,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		})
 	})
 	stream.geometry(s.Cols, s.Rows)
-	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true})
+	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, OnPaste: m.pasteClipboard})
 	if err != nil {
 		stream.Close()
 		m.error = "无法打开终端：" + err.Error()
@@ -906,6 +910,9 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	if m.selected.Exited {
 		ui.Text(c, "会话已结束").FontSize(13).Padding(6, 16).TextColor(c.Theme().TextMuted)
 	}
+	if m.imagePasteBusy {
+		ui.Text(c, "正在粘贴图片…").FontSize(13).Padding(6, 16).TextColor(c.Theme().TextMuted)
+	}
 	var element *ui.Element
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Padding(4).Background(c.Theme().Background).Children(func() {
 		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().Disabled(m.reconnecting).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputAccessory(mobileKeyboardActions, func(id string) { m.keyboardAction(c, id) })
@@ -946,7 +953,7 @@ func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
 	}
 	switch id {
 	case "paste":
-		m.term.Paste(c.ReadClipboard())
+		m.pasteClipboard(c)
 	case "more":
 		m.keyboardMore = !m.keyboardMore
 	case "dismiss":

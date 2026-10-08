@@ -112,7 +112,13 @@ lists the desktop's sessions; tap one to attach or the top-right **＋** to star
 default shell in a desktop directory. The terminal follows the system keyboard, including Chinese nine-key input.
 A fixed accessory row provides Esc, Tab, Ctrl+C, up/down, **更多** and **收起**.
 **更多** expands left/right, Ctrl+D, Ctrl+R, paste and common symbols while keeping
-the keyboard open. Reading hides the accessory; tap the header keyboard icon to
+the keyboard open. Copy an image in Photos or another iPhone app, then choose
+**更多 → 粘贴** in the terminal. The paired desktop receives the PNG over Tailcat,
+copies it to its system clipboard and sends Ctrl+V to that session, using the
+desktop Agent's existing image paste. System paste commands use the same flow;
+text still uses bracketed paste. Images are limited to 32 MB / 32 million pixels.
+Leaving the session or backgrounding cancels an unfinished transfer; uncertain
+failures are never retried automatically. Reading hides the accessory; tap the header keyboard icon to
 resume input. Long-press to select text, then use the nearby copy/select-all menu.
 Leaving a terminal detaches it; desktop sessions continue running. Returning
 from the background reconnects to the selected session. Swipe right from the

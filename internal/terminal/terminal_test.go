@@ -736,3 +736,38 @@ func TestCloseKillsWhatIgnoresHangups(t *testing.T) {
 		t.Fatal("Done was not closed: the program outlived Close")
 	}
 }
+
+func TestExternalClipboardPasteHandlesSystemKeyboardAndMenu(t *testing.T) {
+	loadLib(t)
+	conn := newPipe()
+	calls := 0
+	var term *Terminal
+	var err error
+	term, err = New(Options{Conn: conn, OnPaste: func(c *ui.Context) bool { calls++; term.Send([]byte("image")); return true }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill().AutoFocus() }, 400, 200)
+	tt.SetClipboard("must-not-paste-text")
+	tt.Command("paste")
+	if got := conn.take(5); got != "image" {
+		t.Fatal("system paste bypassed custom clipboard handler", got)
+	}
+	mods := ui.Ctrl | ui.Shift
+	if runtime.GOOS == "darwin" {
+		mods = ui.Super
+	}
+	tt.Key(mods, ui.KeyV)
+	if got := conn.take(5); got != "image" {
+		t.Fatal("keyboard paste bypassed custom clipboard handler", got)
+	}
+	x, y := cellCenter(term, 1, 0)
+	tt.RightClickAt(x, y)
+	if err := tt.ChooseMenuItem("Paste"); err != nil {
+		t.Fatal(err)
+	}
+	if got := conn.take(5); got != "image" || calls != 3 {
+		t.Fatal("context menu paste bypassed custom clipboard handler", got, calls)
+	}
+}

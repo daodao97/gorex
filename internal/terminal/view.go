@@ -334,6 +334,9 @@ func (v *view) keyDown(ev ui.InputEvent) bool {
 	case mods == copyMods && key == ui.KeyV:
 		v.paste()
 		return true
+	case runtime.GOOS == "ios" && mods == ui.Ctrl && key == ui.KeyV && t.opts.OnPaste != nil:
+		v.paste()
+		return true
 	case mods == ui.Shift && (key == ui.KeyPageUp || key == ui.KeyPageDown) && v.scrollPage(key == ui.KeyPageUp):
 		return true
 	case mods&ui.Super != 0:
@@ -509,6 +512,9 @@ func (v *view) copy() {
 }
 
 func (v *view) paste() {
+	if v.t.opts.OnPaste != nil && v.t.opts.OnPaste(v.c) {
+		return
+	}
 	if text := v.c.ReadClipboard(); text != "" {
 		v.t.Paste(text)
 	}
