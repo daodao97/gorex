@@ -14,6 +14,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"gorex/internal/agents"
 	"gorex/internal/mobile"
 	"gorex/internal/remote"
 	"gorex/internal/rex"
@@ -888,11 +889,6 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 							if m.preference(s.ID).Pinned {
 								ui.Text(c, "置顶").FontSize(11).TextColor(c.Theme().TextMuted)
 							}
-							color := c.Theme().TextMuted
-							if sessionAgentState(s).State == "waiting" {
-								color = colorsOf(c).attention
-							}
-							ui.Text(c, m.sessionStatus(s)).FontSize(12).TextColor(color).Shrink(0)
 						})
 						dir := s.Dir
 						if home := strings.TrimRight(m.hello.Host.Home, "/\\"); home != "" && (dir == home || strings.HasPrefix(dir, home+"/") || strings.HasPrefix(dir, home+"\\")) {
@@ -900,7 +896,11 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 						}
 						ui.Text(c, dir).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…")
 					})
-					ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
+					if sessionAgentState(s).State == agents.Running {
+						ui.Spinner(c).Size(16, 16).Label("Agent 正在运行")
+					} else {
+						ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
+					}
 				})
 				if row.Clicked() && !m.editingOpen {
 					m.openSession(s)
