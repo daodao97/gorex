@@ -115,6 +115,10 @@ func (m *mobileApp) enterForeground() {
 		return
 	}
 	m.link, m.resumeLink = m.resumeLink, ""
+	if m.connectionIssue != nil && !m.connectionIssue.automatic {
+		m.invalidate()
+		return
+	}
 	if m.connectionUsable() && time.Since(m.backgroundAt) < mobileBackgroundRetention {
 		m.checkRetainedConnection()
 	} else {
@@ -168,6 +172,7 @@ func (m *mobileApp) finishRetainedConnection(client *rex.Client, generation int,
 		return
 	}
 	m.reconnecting, m.retryAttempt, m.error = false, 0, ""
+	m.connectionIssue, m.connectionDetailsOpen = nil, false
 	m.updateSessions(sessions, false)
 	if m.resumeSID != "" && m.resumeSID != m.selected.ID {
 		sid := m.resumeSID

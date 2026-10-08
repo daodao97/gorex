@@ -2,7 +2,7 @@
 
 #import <Foundation/Foundation.h>
 
-extern void gorexNetworkResult(long long token, char *message);
+extern void gorexNetworkResult(long long token, int failure);
 static NSMutableDictionary<NSNumber *, NSURLSessionDataTask *> *networkTasks;
 
 void gorex_network_start(long long token, const char *rawURL) {
@@ -15,7 +15,15 @@ void gorex_network_start(long long token, const char *rawURL) {
   NSURLSessionDataTask *task = [NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
    dispatch_async(dispatch_get_main_queue(), ^{
     [networkTasks removeObjectForKey:@(token)];
-    gorexNetworkResult(token, error ? (char *)error.localizedDescription.UTF8String : NULL);
+    int failure = 0;
+    if (error) {
+     failure = 3;
+     if ([error.domain isEqualToString:NSURLErrorDomain]) {
+      if (error.code == NSURLErrorNotConnectedToInternet || error.code == NSURLErrorDataNotAllowed || error.code == NSURLErrorInternationalRoamingOff) failure = 1;
+      else if (error.code == NSURLErrorTimedOut) failure = 2;
+     }
+    }
+    gorexNetworkResult(token, failure);
    });
   }];
   networkTasks[@(token)] = task;

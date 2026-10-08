@@ -26,7 +26,10 @@ type mobileStream struct {
 }
 
 func newMobileStream(stream mobileTransport, failed func()) *mobileStream {
-	s := &mobileStream{current: stream, failed: failed}
+	_, initialSnapshot := stream.(interface {
+		ReadSnapshot() ([]byte, int, int, error)
+	})
+	s := &mobileStream{current: stream, failed: failed, reset: initialSnapshot, paused: initialSnapshot}
 	s.cond = sync.NewCond(&s.mu)
 	return s
 }

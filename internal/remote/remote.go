@@ -182,7 +182,7 @@ func Connect(ctx context.Context, raw string) (*rex.Client, func(), error) {
 func connect(ctx context.Context, raw string, reportFailure bool) (*rex.Client, func(), error) {
 	addr, err := ParseLink(raw)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, &ConnectionError{Kind: InvalidLink, Cause: err}
 	}
 	if err := prepareNetwork(ctx, addr); err != nil {
 		return nil, nil, err
@@ -208,11 +208,11 @@ func connect(ctx context.Context, raw string, reportFailure bool) (*rex.Client, 
 	client, err := rex.ConnectDial(ctx, dial)
 	if err != nil {
 		go tunnel.Close()
-		detail := strings.ReplaceAll(err.Error(), string(addr), "<desktop>")
+		failure := &ConnectionError{Kind: Failure(err), Cause: err}
 		if reportFailure {
-			log.Printf("GoRex tunnel dial failed: %s", detail)
+			log.Printf("GoRex tunnel dial failed: %s", failure)
 		}
-		return nil, nil, fmt.Errorf("桌面连接失败：%s", detail)
+		return nil, nil, failure
 	}
 	return client, func() {
 		// Send the final FIN/ACK before shutting down the userspace TCP stack.

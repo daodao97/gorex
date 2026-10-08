@@ -51,7 +51,7 @@ func mobileRetryDelay(attempt int) time.Duration {
 }
 
 func (m *mobileApp) scheduleRetry() {
-	if m.background || !m.reconnecting {
+	if m.background || !m.reconnecting || m.connectionIssue != nil && !m.connectionIssue.automatic {
 		return
 	}
 	if m.retryTimer != nil {

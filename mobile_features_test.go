@@ -87,6 +87,8 @@ func TestMobileReconnectRetainsPageAndCancelReleasesTerminal(t *testing.T) {
 	if _, ok := tt.Find("正在重连"); !ok {
 		t.Fatal("missing reconnection indicator")
 	}
+	tt.Click("连接恢复操作")
+	tt.Frame()
 	tt.Click("取消重连")
 	tt.Frame()
 	if m.term != nil || m.reconnecting || m.retryTimer != nil || m.navigation.Path() != "/connect" {

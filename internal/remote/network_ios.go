@@ -13,7 +13,6 @@ import "C"
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -84,15 +83,22 @@ func prepareNetwork(ctx context.Context, addr tailcat.Addr) error {
 }
 
 //export gorexNetworkResult
-func gorexNetworkResult(token C.longlong, message *C.char) {
+func gorexNetworkResult(token C.longlong, failure C.int) {
 	networkRequests.Lock()
 	ch := networkRequests.pending[int64(token)]
 	delete(networkRequests.pending, int64(token))
 	networkRequests.Unlock()
 	if ch != nil {
 		var err error
-		if message != nil {
-			err = fmt.Errorf("手机网络不可用：%s", C.GoString(message))
+		if failure != 0 {
+			kind := RelayUnavailable
+			if failure == 1 {
+				kind = NetworkUnavailable
+			}
+			if failure == 2 {
+				kind = ConnectionTimeout
+			}
+			err = &ConnectionError{Kind: kind}
 		}
 		ch <- err
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -288,5 +289,60 @@ func TestViewStreamReadsGeometryBeforeFragmentedANSI(t *testing.T) {
 	}
 	if !viewer.HasScreenSize() {
 		t.Fatal("framing negotiation missing")
+	}
+}
+
+func TestSnapshotDeadlineCoversStalledHeaderAndPartialBody(t *testing.T) {
+	for _, partial := range []bool{false, true} {
+		conn, peer := net.Pipe()
+		s := &Stream{conn: conn, screenFrames: true}
+		s.cond = sync.NewCond(&s.mu)
+		if partial {
+			go func() {
+				var h [8]byte
+				binary.BigEndian.PutUint32(h[:], 1000)
+				binary.BigEndian.PutUint16(h[4:], 80)
+				binary.BigEndian.PutUint16(h[6:], 24)
+				peer.Write(h[:])
+				peer.Write([]byte("incomplete"))
+			}()
+		}
+		start := time.Now()
+		data, _, _, err := s.readSnapshot(30 * time.Millisecond)
+		var timeout net.Error
+		if len(data) != 0 || !errors.As(err, &timeout) || !timeout.Timeout() || time.Since(start) > time.Second {
+			t.Fatal("stalled snapshot was not rejected", err)
+		}
+		s.Close()
+		peer.Close()
+	}
+}
+
+func TestSnapshotDeadlineIsClearedForQuietLiveSession(t *testing.T) {
+	conn, peer := net.Pipe()
+	defer peer.Close()
+	s := &Stream{conn: conn, screenFrames: true}
+	s.cond = sync.NewCond(&s.mu)
+	defer s.Close()
+	frame := func(text string) []byte {
+		b := make([]byte, 8+len(text))
+		binary.BigEndian.PutUint32(b, uint32(len(text)))
+		binary.BigEndian.PutUint16(b[4:], 80)
+		binary.BigEndian.PutUint16(b[6:], 24)
+		copy(b[8:], text)
+		return b
+	}
+	go func() {
+		peer.Write(frame("snapshot"))
+		time.Sleep(60 * time.Millisecond)
+		peer.Write(frame("late live output"))
+	}()
+	if _, _, _, err := s.readSnapshot(30 * time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	p := make([]byte, 64)
+	n, _, _, err := s.ReadScreen(p)
+	if err != nil || string(p[:n]) != "late live output" {
+		t.Fatal("snapshot deadline leaked into live reading", err)
 	}
 }

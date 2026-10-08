@@ -402,6 +402,10 @@ func (s *Stream) Read(p []byte) (int, error) {
 // consuming bytes and continue through ReadScreen. A failed partial transfer
 // must never replace the viewer's last complete screen.
 func (s *Stream) ReadSnapshot() ([]byte, int, int, error) {
+	return s.readSnapshot(15 * time.Second)
+}
+
+func (s *Stream) readSnapshot(timeout time.Duration) ([]byte, int, int, error) {
 	conn, err := s.wait()
 	if err != nil {
 		return nil, 0, 0, err
@@ -409,6 +413,13 @@ func (s *Stream) ReadSnapshot() ([]byte, int, int, error) {
 	if !s.HasScreenSize() {
 		return nil, 0, 0, nil
 	}
+	// A healthy control socket does not guarantee the viewer delivers its
+	// snapshot. Bound the whole frame, then clear the deadline for idle live
+	// sessions whose output may legitimately remain quiet indefinitely.
+	if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return nil, 0, 0, err
+	}
+	defer conn.SetReadDeadline(time.Time{})
 	buf := make([]byte, 64<<10)
 	n, cols, rows, err := s.ReadScreen(buf)
 	if err != nil {

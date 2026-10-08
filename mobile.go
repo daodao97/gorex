@@ -77,6 +77,8 @@ type mobileApp struct {
 	imagePasteBusy                          bool
 	imagePasteCancel                        context.CancelFunc
 	imagePasteEpoch                         int
+	connectionIssue                         *mobileConnectionIssue
+	connectionDetailsOpen                   bool
 }
 
 type desktopRecent struct {
@@ -261,6 +263,7 @@ func (m *mobileApp) disconnect(forget bool) {
 	m.busy, m.creating = false, false
 	m.sessions = nil
 	m.resumeLink, m.resumeSID = "", ""
+	m.connectionIssue, m.connectionDetailsOpen = nil, false
 	if forget {
 		m.link, m.resumeLink, m.resumeSID = "", "", ""
 		m.historyEpoch++
@@ -277,7 +280,8 @@ func (m *mobileApp) disconnect(forget bool) {
 func (m *mobileApp) connect(raw string) {
 	addr, err := remote.ParseLink(raw)
 	if err != nil {
-		m.error = err.Error()
+		m.connectionIssue = connectionIssueFor(&remote.ConnectionError{Kind: remote.InvalidLink, Cause: err})
+		m.error = ""
 		m.invalidate()
 		return
 	}
@@ -307,7 +311,7 @@ func (m *mobileApp) connect(raw string) {
 }
 
 func (m *mobileApp) startConnection(recovering bool) {
-	if m.background {
+	if m.background || m.busy {
 		return
 	}
 	m.busy, m.error = true, ""
@@ -335,13 +339,13 @@ func (m *mobileApp) startConnection(recovering bool) {
 			hello, err = client.HelloFrom(device)
 		}
 		if err == nil && !rex.CompatibleProtocol(hello.Version) {
-			err = fmt.Errorf("请更新桌面端 GoRex 后重新连接")
+			err = &remote.ConnectionError{Kind: remote.ProtocolMismatch}
 		}
 		if err == nil {
 			sessions, err = client.List()
 		}
 		stop()
-		if err == nil {
+		if ctx.Err() != nil {
 			err = ctx.Err()
 		}
 		cancel()
@@ -354,19 +358,13 @@ func (m *mobileApp) startConnection(recovering bool) {
 					go closeTunnel()
 				}
 				if generation == m.generation {
-					m.busy = false
-					m.cancel = nil
-					m.error = err.Error()
-					if recovering {
-						m.scheduleRetry()
-					}
-					log.Printf("GoRex desktop connection failed: %s", m.error)
-					m.invalidate()
+					m.connectionFailed(err, recovering)
 				}
 				return
 			}
 			m.client, m.closeTunnel, m.hello = client, closeTunnel, hello
 			m.reconnecting, m.retryAttempt = false, 0
+			m.connectionIssue, m.connectionDetailsOpen = nil, false
 			currentDesktop := desktopRecent{Link: m.link, Name: m.hello.Host.Name, ID: m.hello.Host.ID}
 			m.migrateRecentDesktop(currentDesktop)
 			m.history = mergeDesktopHistory([]desktopRecent{currentDesktop}, m.history)
@@ -438,7 +436,11 @@ func (m *mobileApp) poll(ctx context.Context, client *rex.Client, generation int
 			if ctx.Err() != nil {
 				return
 			}
-			checkCtx, cancel := context.WithTimeout(ctx, mobileResumeCheckTimeout)
+			// Stopping foreground polling must not close a healthy retained
+			// connection when a list request happens to be in flight. Let
+			// that bounded request finish; the parent still suppresses its
+			// callback after background entry or a transport replacement.
+			checkCtx, cancel := context.WithTimeout(context.Background(), mobileResumeCheckTimeout)
 			sessions, err := checkMobileConnection(checkCtx, client, m.pushSnapshot.Load())
 			cancel()
 			mygo.RunOnMain(func() {
@@ -590,6 +592,7 @@ func (m *mobileApp) view(c *ui.Context) {
 		})
 	})
 	m.sessionEditor(c)
+	m.connectionDialog(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
 		// A completed edge gesture changes history. Release resources only
 		// after the new page has built; a cancelled preview keeps them alive.
@@ -666,9 +669,24 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 		} else {
 			ui.Box(c).Size(44, 44).Shrink(0)
 		}
-		ui.Text(c, title).FontSize(17).Bold().TextAlign(ui.Center).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+			size := float32(17)
+			if terminalPage && m.needsRecovery() {
+				size = 15
+			}
+			ui.Text(c, title).FontSize(size).Bold().TextAlign(ui.Center).FillWidth().SingleLine().Ellipsis("…")
+			if terminalPage && m.needsRecovery() {
+				ui.Text(c, m.recoveryStatus()).Label("正在重连").FontSize(11).TextColor(c.Theme().TextMuted).TextAlign(ui.Center).FillWidth().SingleLine().Ellipsis("…")
+			}
+		})
 		if terminalPage && m.term != nil {
-			if ui.ButtonBase(c).Key("mobile-keyboard").Label("键盘").Role(ui.RoleButton).KeepFocus().Disabled(m.reconnecting || m.stream != nil && !m.stream.inputReady()).Size(44, 44).Children(func() {
+			if m.needsRecovery() {
+				if ui.ButtonBase(c).Label("连接恢复操作").Role(ui.RoleButton).Size(44, 44).Children(func() {
+					ui.Text(c, "•••").FontSize(16).TextColor(c.Theme().TextMuted)
+				}).Clicked() {
+					m.connectionDetailsOpen = true
+				}
+			} else if ui.ButtonBase(c).Key("mobile-keyboard").Label("键盘").Role(ui.RoleButton).KeepFocus().Size(44, 44).Children(func() {
 				ui.Icon(c, icon("keyboard")).Size(22, 22).TextColor(c.Theme().Accent)
 			}).Clicked() {
 				m.focusTerminal = true
@@ -691,13 +709,10 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 }
 
 func (m *mobileApp) errorView(c *ui.Context) {
-	if m.reconnecting || m.stream != nil && !m.stream.inputReady() {
-		ui.Row(c).FillWidth().Padding(0, 16).Gap(8).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "正在重连…").Label("正在重连").FontSize(13).TextColor(c.Theme().TextMuted).Grow(1)
-			if mobileTextAction(c, "取消重连", "取消").Clicked() {
-				m.disconnect(false)
-			}
-		})
+	if m.needsRecovery() || m.connectionIssue != nil {
+		if m.term == nil {
+			m.connectionFeedback(c)
+		}
 		return
 	}
 	if m.error != "" {
@@ -727,9 +742,8 @@ func (m *mobileApp) connectView(c *ui.Context) {
 		}).Clicked() {
 			m.scan()
 		}
-		if m.reconnecting {
-			m.errorView(c)
-		} else if m.busy {
+		m.connectionFeedback(c)
+		if !m.reconnecting && m.busy {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "正在连接桌面…").Label("正在连接桌面").FontSize(14).TextColor(c.Theme().TextMuted).Grow(1)
 				if mobileTextAction(c, "取消连接", "取消").Clicked() {
