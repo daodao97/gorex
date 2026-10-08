@@ -64,6 +64,16 @@ func ConnectDial(ctx context.Context, dial func(context.Context) (net.Conn, erro
 	return NewClient(conn, dial), nil
 }
 
+// Redial opens a new control connection over the existing transport, including
+// after this control connection has closed. It never restarts the session
+// server or retries terminal input. The caller still owns the old client.
+func (c *Client) Redial(ctx context.Context) (*Client, error) {
+	if c.dial == nil {
+		return nil, errors.New("rex: transport cannot reopen a control connection")
+	}
+	return ConnectDial(ctx, c.dial)
+}
+
 // NewClient takes ownership of conn; dial opens independent session streams.
 func NewClient(conn net.Conn, dial func(context.Context) (net.Conn, error)) *Client {
 	c := &Client{conn: conn, dial: dial, pending: map[int64]chan Response{}, closed: make(chan struct{})}

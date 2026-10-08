@@ -178,7 +178,9 @@ func TestMobileRecoveryAcrossDesktopBridgeRestart(t *testing.T) {
 	// A long locked/background visit restores the same screen and session too.
 	mygo.RunOnMain(func() {
 		m.enterBackground()
-		m.backgroundAt = time.Now().Add(-mobileBackgroundRetention - time.Second)
+		// Simulate the control socket expiring while iOS suspended its
+		// timers; the authenticated tunnel and terminal must stay reusable.
+		m.client.Close()
 		m.enterForeground()
 	})
 	if !wait(35*time.Second, func() bool {

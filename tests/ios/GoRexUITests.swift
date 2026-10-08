@@ -1,6 +1,49 @@
 import XCTest
 
 final class GoRexUITests: XCTestCase {
+    func testBackgroundConnectionRetention() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication(bundleIdentifier: "dev.gorex.app")
+        app.launchEnvironment["GOREX_UI_TEST"] = "1"
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["扫码连接桌面"].waitForExistence(timeout: 15))
+        if #available(iOS 16.4, *) { app.open(URL(string: Fixture.link)!) }
+        else { throw XCTSkip("URL opening requires iOS 16.4") }
+        let existing = app.buttons["打开会话 " + Fixture.existing]
+        XCTAssertTrue(existing.waitForExistence(timeout: 45), app.debugDescription)
+        existing.tap()
+        let terminal = app.descendants(matching: .any).matching(identifier: "Terminal").firstMatch
+        XCTAssertTrue(terminal.waitForExistence(timeout: 10))
+        terminal.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
+        for _ in 0..<8 where !app.keys["q"].exists { app.buttons["Next keyboard"].tap() }
+        XCTAssertTrue(app.keys["q"].exists)
+        app.typeText("touch '" + Fixture.directory + "/background-start'\n")
+        app.buttons["收起"].tap()
+        screenshot("background-before")
+        XCUIDevice.shared.press(.home)
+        Thread.sleep(forTimeInterval: 45)
+        let started = Date()
+        app.activate()
+        XCTAssertTrue(app.buttons["键盘"].waitForExistence(timeout: 8), app.debugDescription)
+        XCTAssertTrue(terminal.isHittable)
+        screenshot("background-resumed")
+        print("BACKGROUND_RESUME_SECONDS", Date().timeIntervalSince(started))
+        app.buttons["键盘"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.typeText("touch '" + Fixture.directory + "/background-returned'\n")
+        app.typeText("touch '" + Fixture.directory + "/disconnect-control'\n")
+        // Recovery temporarily removes input controls; do not try to tap an
+        // accessory key while the fixture is deliberately closing control.
+        Thread.sleep(forTimeInterval: 4)
+        XCTAssertTrue(app.buttons["键盘"].waitForExistence(timeout: 8), app.debugDescription)
+        app.buttons["键盘"].tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+        app.typeText("touch '" + Fixture.directory + "/redial-returned'\n")
+        screenshot("background-control-recovered")
+    }
+
     func nineKey(_ app: XCUIApplication, _ letters: String) -> XCUIElement {
         // The native nine-key labels include spaces between and after letters.
         let pattern = "\\s*" + letters.map(String.init).joined(separator: "\\s*") + "\\s*"

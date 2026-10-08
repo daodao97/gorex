@@ -12,6 +12,42 @@ import (
 	"gorex/internal/rex"
 )
 
+type deadlineConn struct {
+	net.Conn
+	readDeadline time.Time
+}
+
+func (c *deadlineConn) SetReadDeadline(deadline time.Time) error {
+	c.readDeadline = deadline
+	return c.Conn.SetReadDeadline(deadline)
+}
+
+func TestPushHelloDoesNotShortenEstablishedControlRetention(t *testing.T) {
+	server, peer := net.Pipe()
+	defer server.Close()
+	defer peer.Close()
+	conn := &deadlineConn{Conn: server}
+	b := &Bridge{devices: make(map[net.Conn]ConnectedDevice)}
+	observed := b.observe(conn)
+	observed.reads.feed([]byte("{\"id\":1,\"op\":\"hello\"}\n"))
+	if time.Until(conn.readDeadline) > time.Minute {
+		t.Fatal("incomplete handshake received a long idle grant")
+	}
+	observed.writes.feed([]byte("{\"id\":1,\"data\":{\"version\":4}}\n"))
+	observed.reads.feed([]byte("{\"id\":2,\"op\":\"list\"}\n"))
+	observed.writes.feed([]byte("{\"id\":2,\"data\":[]}\n"))
+	observed.reads.feed([]byte("{\"id\":3,\"op\":\"hello\",\"device\":{\"name\":\"mini\"}}\n"))
+	if time.Until(conn.readDeadline) < 9*time.Minute {
+		t.Fatal("push registration hello reset the established socket to 30 seconds")
+	}
+	d := b.devices[conn]
+	d.lastSeen = time.Now().Add(-deviceLease - time.Second)
+	b.devices[conn] = d
+	if len(b.Devices()) != 0 || time.Until(conn.readDeadline) < 9*time.Minute {
+		t.Fatal("UI presence and transport retention were coupled")
+	}
+}
+
 func TestPushMetadataRequiresSuccessfulCompatibleControlResponse(t *testing.T) {
 	for _, version := range []int{4, rex.ProtocolVersion, rex.ProtocolVersion + 1} {
 		t.Run(fmt.Sprint(version), func(t *testing.T) {

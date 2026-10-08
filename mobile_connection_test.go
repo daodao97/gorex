@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"gorex/internal/remote"
 	"gorex/internal/rex"
 	"gorex/internal/terminal"
 )
@@ -61,6 +62,107 @@ func TestMobileHomeReusesDesktopConnectionAndExplicitDisconnectClosesIt(t *testi
 	}
 }
 
+func TestMobileResumeReusesHealthyControlOrRedialsExpiredControl(t *testing.T) {
+	for _, expired := range []bool{false, true} {
+		t.Run(map[bool]string{false: "healthy", true: "expired"}[expired], func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer peer.Close()
+			var dialed int
+			var requests []rex.Request
+			serve := func(p net.Conn) {
+				defer p.Close()
+				decoder := json.NewDecoder(p)
+				for {
+					var req rex.Request
+					if decoder.Decode(&req) != nil {
+						return
+					}
+					requests = append(requests, req)
+					var value any = []rex.SessionInfo{{ID: "existing", Cols: 80, Rows: 24}}
+					if req.Op == "hello" {
+						value = rex.Hello{Version: 4, Host: rex.HostInfo{ID: "desktop"}}
+					}
+					data, _ := json.Marshal(value)
+					if json.NewEncoder(p).Encode(rex.Response{ID: req.ID, Data: data}) != nil {
+						return
+					}
+				}
+			}
+			client := rex.NewClient(conn, func(ctx context.Context) (net.Conn, error) {
+				dialed++
+				c, p := net.Pipe()
+				go serve(p)
+				return c, nil
+			})
+			defer client.Close()
+			if expired {
+				client.Close()
+				<-client.Closed()
+			} else {
+				go serve(peer)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			next, hello, sessions, err := resumeMobileConnection(ctx, client, &rex.DeviceInfo{Name: "mini"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer next.Close()
+			if len(sessions) != 1 || sessions[0].ID != "existing" {
+				t.Fatal("resume lost the existing session")
+			}
+			if expired && (next == client || dialed != 1 || hello.Host.ID != "desktop" || len(requests) != 2 || requests[0].Op != "hello") {
+				t.Fatal("expired control rebuilt the tunnel or lost its handshake")
+			}
+			if !expired && (next != client || dialed != 0 || len(requests) != 1) {
+				t.Fatal("healthy control was replaced")
+			}
+			for _, req := range requests {
+				if req.Op != "hello" && req.Op != "list" || req.Device == nil || req.Device.Name != "mini" {
+					t.Fatal("resume lost metadata or retried terminal operations", req.Op)
+				}
+			}
+		})
+	}
+}
+
+func TestMobileResumeRedialDeadlineAndIncompatibleDesktop(t *testing.T) {
+	for _, compatible := range []bool{false, true} {
+		t.Run(map[bool]string{false: "incompatible", true: "unresponsive"}[compatible], func(t *testing.T) {
+			old, oldPeer := net.Pipe()
+			defer oldPeer.Close()
+			conn, peer := net.Pipe()
+			defer peer.Close()
+			client := rex.NewClient(old, func(context.Context) (net.Conn, error) { return conn, nil })
+			client.Close()
+			<-client.Closed()
+			if !compatible {
+				go func() {
+					var req rex.Request
+					json.NewDecoder(peer).Decode(&req)
+					data, _ := json.Marshal(rex.Hello{Version: rex.ProtocolVersion + 1})
+					json.NewEncoder(peer).Encode(rex.Response{ID: req.ID, Data: data})
+				}()
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			defer cancel()
+			next, _, _, err := resumeMobileConnection(ctx, client, nil)
+			if err == nil || next != nil {
+				t.Fatal("failed resume retained an invalid control channel")
+			}
+			if !compatible && remote.Failure(err) != remote.ProtocolMismatch {
+				t.Fatal("incompatible desktop became an automatic network retry")
+			}
+			if compatible && !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatal("unresponsive redial ignored its deadline", err)
+			}
+			if _, err := conn.Write([]byte("must be closed")); err == nil {
+				t.Fatal("failed redial leaked a connection")
+			}
+		})
+	}
+}
+
 func TestMobileBackgroundRetainsConnectionAndStopsForegroundWork(t *testing.T) {
 	conn, peer := net.Pipe()
 	defer peer.Close()
@@ -76,9 +178,8 @@ func TestMobileBackgroundRetainsConnectionAndStopsForegroundWork(t *testing.T) {
 		client: client, stream: stream, link: "fixture", home: true,
 		pollCancel: func() { polled = true }, presenceCancel: func() { probed = true },
 	}
-	defer m.stopBackgroundTimer()
 	m.enterBackground()
-	if m.client != client || m.generation != 0 || m.reconnecting || !m.background || !polled || !probed || m.backgroundTimer == nil || m.resumeLink != "fixture" {
+	if m.client != client || m.generation != 0 || m.reconnecting || !m.background || !polled || !probed || m.resumeLink != "fixture" {
 		t.Fatal("short background visit closed the connection or kept polling")
 	}
 	if !stream.hasTransport() {

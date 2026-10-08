@@ -22,6 +22,10 @@ type ConnectedDevice struct {
 
 const deviceLease = 20 * time.Second
 
+// UI presence expires quickly, but a suspended iPhone can reuse its control
+// socket on return. Keep authenticated idle connections bounded separately.
+const controlIdleTimeout = 10 * time.Minute
+
 // Devices counts control connections, excluding terminal streams opened by
 // the same phone. Removing a control connection also removes its status.
 func (b *Bridge) Devices() []ConnectedDevice {
@@ -62,7 +66,13 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 		}
 		if req.Op == "hello" {
 			control = true
-			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			timeout := controlIdleTimeout
+			if d.Connected.IsZero() {
+				timeout = 30 * time.Second
+			}
+			// Push receipt updates also use hello. Once authenticated,
+			// they must not shorten an established idle connection again.
+			conn.SetReadDeadline(time.Now().Add(timeout))
 			if req.Device != nil {
 				if name := deviceLabel(req.Device.Name); name != "" {
 					d.Name = name
@@ -116,7 +126,7 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 			d.Connected = now
 		}
 		d.lastSeen = now
-		conn.SetReadDeadline(now.Add(30 * time.Second))
+		conn.SetReadDeadline(now.Add(controlIdleTimeout))
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		if !b.closed {

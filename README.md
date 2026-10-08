@@ -125,9 +125,15 @@ text still uses bracketed paste. Images are limited to 32 MB / 32 million pixels
 Leaving the session or backgrounding cancels an unfinished transfer; uncertain
 failures are never retried automatically. Reading hides the accessory; tap the header keyboard icon to
 resume input. Long-press to select text, then use the nearby copy/select-all menu.
-Leaving a terminal detaches it; desktop sessions continue running. Returning
-from the background validates or reconnects to the selected session. Foreground
-connection checks have a two-second deadline; interrupted connections recover
+Leaving a terminal detaches it; desktop sessions continue running. Backgrounding
+stops polling and input while retaining the idle encrypted tunnel. Returning
+first validates the existing socket, then reopens only the control channel on
+that tunnel if needed, before falling back to a fresh connection. Desktop UI
+presence expires after 20 seconds without polling; authenticated control sockets
+remain reusable for up to 10 idle minutes. iOS may suspend or terminate the app,
+so this is not an unrestricted background execution grant. Foreground
+connection checks have a two-second deadline and cached-tunnel recovery a
+four-second total deadline; interrupted connections recover
 immediately, with failed attempts retried at intervals capped at five seconds.
 Recovery keeps the terminal page and allows reading/selection while input is
 paused. Offline keystrokes are discarded, never replayed. On desktops supporting
@@ -197,11 +203,15 @@ restart and a long background visit without touching existing sessions.
 
 ```sh
 IOS_TEAM=YOUR_TEAM_ID IOS_DEVICE=YOUR_DEVICE_UDID ./scripts/test-ios.sh
+IOS_TEST_FLOW=background IOS_TEAM=YOUR_TEAM_ID IOS_DEVICE=YOUR_DEVICE_UDID ./scripts/test-ios.sh
 ```
 
 `tests/ios` contains a real-device XCTest flow for scanner presentation,
 existing/new sessions, keyboard actions, nine-key candidate preservation,
 selection/paste, rotation, background restoration and Keychain reconnection.
+The background flow verifies a 45-second Home-screen visit reuses the same
+control socket, then drops only control and checks recovery into the same
+desktop session without changing its geometry.
 Install English (US) and Simplified Chinese Pinyin nine-key keyboards on the test
 device. The flow uses a separate Keychain namespace so its
 temporary desktop never replaces everyday recent connections. Its private `Fixture.swift` is generated from the

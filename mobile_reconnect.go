@@ -42,6 +42,13 @@ func (m *mobileApp) connectionLost() {
 	if m.reconnecting || m.background || m.link == "" {
 		return
 	}
+	if m.client != nil {
+		m.clearKeyboardModifiers()
+		m.cancelImagePaste()
+		m.stopPolling()
+		m.checkRetainedConnection()
+		return
+	}
 	m.pauseConnection()
 	m.retryAttempt = 0
 	m.scheduleRetry()

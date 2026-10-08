@@ -38,8 +38,7 @@ type mobileApp struct {
 	historyEpoch                            int
 	home                                    bool
 	pollCancel                              context.CancelFunc
-	backgroundTimer                         *time.Timer
-	backgroundAt                            time.Time
+	resumeCheckID                           uint64
 	busy, scanning, creating, focusTerminal bool
 	directory                               string
 	resumeLink, resumeSID                   string
@@ -237,7 +236,6 @@ func (m *mobileApp) detach() {
 
 func (m *mobileApp) disconnect(forget bool) {
 	m.stopRecentPresence()
-	m.stopBackgroundTimer()
 	m.stopPolling()
 	m.home = true
 	m.generation++

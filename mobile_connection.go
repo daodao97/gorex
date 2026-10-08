@@ -5,14 +5,12 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
+	"gorex/internal/remote"
 	"gorex/internal/rex"
 )
 
-// The desktop control lease expires after 30 seconds without polling. Keep a
-// short background visit reusable, then release resources when possible. iOS
-// may suspend timers, so foreground entry also checks the elapsed wall time.
-const mobileBackgroundRetention = 25 * time.Second
 const mobileResumeCheckTimeout = 2 * time.Second
+const mobileResumeRecoveryTimeout = 4 * time.Second
 
 func (m *mobileApp) connectionUsable() bool {
 	if m.client == nil || m.reconnecting {
@@ -62,13 +60,6 @@ func (m *mobileApp) startPolling(client *rex.Client, generation int) {
 	go m.poll(ctx, client, generation)
 }
 
-func (m *mobileApp) stopBackgroundTimer() {
-	if m.backgroundTimer != nil {
-		m.backgroundTimer.Stop()
-		m.backgroundTimer = nil
-	}
-}
-
 func (m *mobileApp) enterBackground() {
 	m.clearKeyboardModifiers()
 	if m.background {
@@ -78,11 +69,11 @@ func (m *mobileApp) enterBackground() {
 	if m.term != nil {
 		m.term.SetInputEnabled(false)
 	}
-	m.backgroundAt = time.Now()
+	m.invalidate()
+	m.resumeCheckID++
 	m.stopRecentPresence()
 	m.stopPolling()
 	m.cancelImagePaste()
-	m.stopBackgroundTimer()
 	if m.client == nil && !m.busy && !m.reconnecting {
 		return
 	}
@@ -90,19 +81,16 @@ func (m *mobileApp) enterBackground() {
 	if m.resumeSID == "" && m.selected.ID != "" {
 		m.resumeSID = m.selected.ID
 	}
-	if !m.connectionUsable() || m.busy {
+	if m.busy {
 		m.pauseConnection()
 		return
 	}
-	generation, backgroundAt := m.generation, m.backgroundAt
-	m.backgroundTimer = time.AfterFunc(mobileBackgroundRetention, func() {
-		mygo.RunOnMain(func() {
-			if m.background && m.backgroundAt == backgroundAt && m.generation == generation {
-				m.backgroundTimer = nil
-				m.pauseConnection()
-			}
-		})
-	})
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	// Let iOS suspend this idle transport. No background heartbeat or UI work
+	// is needed, and an elapsed timer must not destroy a reusable tunnel.
 }
 
 func (m *mobileApp) enterForeground() {
@@ -110,7 +98,6 @@ func (m *mobileApp) enterForeground() {
 		return
 	}
 	m.background = false
-	m.stopBackgroundTimer()
 	if m.resumeLink == "" {
 		m.invalidate()
 		return
@@ -120,7 +107,7 @@ func (m *mobileApp) enterForeground() {
 		m.invalidate()
 		return
 	}
-	if m.connectionUsable() && time.Since(m.backgroundAt) < mobileBackgroundRetention {
+	if m.client != nil {
 		m.checkRetainedConnection()
 	} else {
 		m.pauseConnection()
@@ -133,17 +120,76 @@ func (m *mobileApp) enterForeground() {
 // stale TCP connection after a network change cannot delay recovery for 15s.
 func (m *mobileApp) checkRetainedConnection() {
 	client, generation := m.client, m.generation
-	ctx, cancel := context.WithTimeout(context.Background(), mobileResumeCheckTimeout)
+	m.resumeCheckID++
+	checkID := m.resumeCheckID
+	ctx, cancel := context.WithTimeout(context.Background(), mobileResumeRecoveryTimeout)
 	m.cancel = cancel
 	m.reconnecting = true // Disable terminal input until the check completes.
 	if m.term != nil {
 		m.term.SetInputEnabled(false)
 	}
+	m.invalidate()
 	go func() {
-		sessions, err := checkMobileConnection(ctx, client, m.pushSnapshot.Load())
+		next, hello, sessions, err := resumeMobileConnection(ctx, client, m.pushSnapshot.Load())
 		cancel()
-		mygo.RunOnMain(func() { m.finishRetainedConnection(client, generation, sessions, err) })
+		mygo.RunOnMain(func() {
+			if m.generation != generation || m.client != client || m.background || m.resumeCheckID != checkID {
+				if next != nil && next != client {
+					next.Close()
+				}
+				return
+			}
+			if err == nil && next != client {
+				client.Close()
+				m.client, m.hello = next, hello
+				if m.stream != nil {
+					m.stream.replace(nil)
+				}
+			}
+			m.finishRetainedConnection(m.client, generation, sessions, err)
+		})
 	}()
+}
+
+// Check a retained socket first, then reopen only its control channel on the
+// same authenticated Tailcat tunnel. A network change may require a fresh
+// tunnel; the caller falls back to the ordinary reconnect in that case.
+func resumeMobileConnection(ctx context.Context, client *rex.Client, info *rex.DeviceInfo) (*rex.Client, rex.Hello, []rex.SessionInfo, error) {
+	checkCtx, cancel := context.WithTimeout(ctx, mobileResumeCheckTimeout)
+	sessions, err := checkMobileConnection(checkCtx, client, info)
+	cancel()
+	if err == nil {
+		return client, rex.Hello{}, sessions, nil
+	}
+	if ctx.Err() != nil {
+		return nil, rex.Hello{}, nil, ctx.Err()
+	}
+	next, err := client.Redial(ctx)
+	if err != nil {
+		return nil, rex.Hello{}, nil, err
+	}
+	stop := context.AfterFunc(ctx, func() { next.Close() })
+	var hello rex.Hello
+	if info != nil {
+		hello, err = next.HelloFrom(*info)
+	} else {
+		hello, err = next.Hello()
+	}
+	if err == nil && !rex.CompatibleProtocol(hello.Version) {
+		err = &remote.ConnectionError{Kind: remote.ProtocolMismatch}
+	}
+	if err == nil {
+		sessions, err = checkMobileConnection(ctx, next, info)
+	}
+	stop()
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
+	if err != nil {
+		next.Close()
+		return nil, rex.Hello{}, nil, err
+	}
+	return next, hello, sessions, nil
 }
 
 func checkMobileConnection(ctx context.Context, client *rex.Client, info *rex.DeviceInfo) ([]rex.SessionInfo, error) {
@@ -169,7 +215,11 @@ func (m *mobileApp) finishRetainedConnection(client *rex.Client, generation int,
 	m.cancel = nil
 	if err != nil {
 		m.pauseConnection()
-		m.startConnection(true)
+		if remote.Failure(err) == remote.ProtocolMismatch {
+			m.connectionFailed(err, true)
+		} else {
+			m.startConnection(true)
+		}
 		return
 	}
 	m.reconnecting, m.retryAttempt, m.error = false, 0, ""
