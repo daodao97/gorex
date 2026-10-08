@@ -127,7 +127,7 @@ func TestMobileRecentSessionHomeRowOpensTargetWithoutChangingDesktopSize(t *test
 	m.recentSessions = []mobileRecentSession{{Desktop: "mac", Session: "target", Title: "任务"}}
 	tt := ui.NewTester(func(c *ui.Context) { ui.Column(c).FillWidth().Grow(1).Children(func() { m.connectView(c) }) }, 390, 750)
 	row, ok := tt.Find("进入最近会话 mac target")
-	desktopRow, desktopOK := tt.Find("重新连接 我的 Mac")
+	desktopRow, desktopOK := tt.Find("打开桌面 我的 Mac")
 	if !ok || !desktopOK || row.Y < desktopRow.Y+desktopRow.H || row.H < 44 || row.X+row.W > 390 {
 		t.Fatal("recent session row is missing, misplaced or too small", row)
 	}

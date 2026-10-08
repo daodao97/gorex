@@ -37,6 +37,10 @@ type mobileApp struct {
 	history                                 []desktopRecent
 	recentSessions                          []mobileRecentSession
 	historyEpoch                            int
+	home                                    bool
+	pollCancel                              context.CancelFunc
+	backgroundTimer                         *time.Timer
+	backgroundAt                            time.Time
 	busy, scanning, creating, focusTerminal bool
 	directory                               string
 	resumeLink, resumeSID                   string
@@ -201,28 +205,8 @@ func mobileMain() {
 			})
 		}
 	})
-	mygo.App.OnDidEnterBackground(func() {
-		m.background = true
-		m.stopRecentPresence()
-		m.presence = nil
-		if m.client != nil || m.busy || m.reconnecting {
-			m.resumeLink = m.link
-			if m.selected.ID != "" {
-				m.resumeSID = m.selected.ID
-			}
-			m.pauseConnection()
-		}
-	})
-	mygo.App.OnWillEnterForeground(func() {
-		m.background = false
-		if m.resumeLink != "" {
-			link := m.resumeLink
-			m.resumeLink = ""
-			m.link = link
-			m.startConnection(true)
-		}
-		m.invalidate()
-	})
+	mygo.App.OnDidEnterBackground(m.enterBackground)
+	mygo.App.OnWillEnterForeground(m.enterForeground)
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -248,6 +232,9 @@ func (m *mobileApp) detach() {
 
 func (m *mobileApp) disconnect(forget bool) {
 	m.stopRecentPresence()
+	m.stopBackgroundTimer()
+	m.stopPolling()
+	m.home = true
 	m.generation++
 	m.reconnecting = false
 	m.retryAttempt = 0
@@ -294,9 +281,28 @@ func (m *mobileApp) connect(raw string) {
 		m.invalidate()
 		return
 	}
+	link := remote.Link(addr)
+	if m.link == link && m.connectionUsable() {
+		m.detach()
+		m.home, m.creating, m.error = false, false, ""
+		m.invalidate()
+		return
+	}
+	if m.link == link && (m.busy || m.reconnecting) {
+		m.home = false
+		m.invalidate()
+		return
+	}
 	m.disconnect(false)
-	m.link = remote.Link(addr)
+	m.home = false
+	m.link = link
 	m.resumeLink, m.resumeSID = "", ""
+	if m.background {
+		m.resumeLink = link
+		m.reconnecting = true
+		m.invalidate()
+		return
+	}
 	m.startConnection(false)
 }
 
@@ -384,7 +390,7 @@ func (m *mobileApp) startConnection(recovering bool) {
 					}
 				}
 			}
-			if recovering && m.term != nil && m.stream != nil {
+			if recovering && m.term != nil && m.stream != nil && (m.resumeSID == "" || m.resumeSID == m.selected.ID) {
 				found := false
 				for _, session := range m.sessions {
 					if session.ID == m.selected.ID {
@@ -400,6 +406,8 @@ func (m *mobileApp) startConnection(recovering bool) {
 					m.error = "原会话已结束，请选择其他会话"
 				}
 				m.resumeSID = ""
+			} else if recovering && m.term != nil && m.resumeSID != "" {
+				m.detach()
 			}
 			if m.resumeSID != "" {
 				sid := m.resumeSID
@@ -407,24 +415,29 @@ func (m *mobileApp) startConnection(recovering bool) {
 				m.openSessionID(sid)
 			}
 			m.invalidate()
-			go m.poll(client, generation)
+			m.startPolling(client, generation)
 		})
 	}()
 }
 
-func (m *mobileApp) poll(client *rex.Client, generation int) {
+func (m *mobileApp) poll(ctx context.Context, client *rex.Client, generation int) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case <-client.Closed():
 			mygo.RunOnMain(func() {
-				if m.generation == generation && m.client == client {
+				if ctx.Err() == nil && !m.background && m.generation == generation && m.client == client {
 					m.connectionLost()
 				}
 			})
 			return
 		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
 			var sessions []rex.SessionInfo
 			var err error
 			if info := m.pushSnapshot.Load(); info != nil {
@@ -433,7 +446,7 @@ func (m *mobileApp) poll(client *rex.Client, generation int) {
 				sessions, err = client.List()
 			}
 			mygo.RunOnMain(func() {
-				if m.generation == generation && m.client == client {
+				if ctx.Err() == nil && !m.background && m.generation == generation && m.client == client {
 					if err != nil {
 						m.connectionLost()
 						return
@@ -490,7 +503,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 	var stream *mobileStream
 	stream = newMobileStream(m.client.ViewStream(s.ID), func() {
 		mygo.RunOnMain(func() {
-			if m.stream == stream {
+			if m.stream == stream && !stream.hasTransport() {
 				if m.selected.Exited {
 					stream.Close()
 					return
@@ -507,6 +520,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		return
 	}
 	m.term, m.stream, m.selected, m.creating, m.error = term, stream, s, false, ""
+	m.resumeSID = ""
 	m.rememberSession(s)
 	m.invalidate()
 }
@@ -583,8 +597,9 @@ func (m *mobileApp) view(c *ui.Context) {
 		// after the new page has built; a cancelled preview keeps them alive.
 		switch page {
 		case "/connect":
-			m.disconnect(false)
+			m.goHome()
 		case "/sessions":
+			m.resumeSID = ""
 			m.detach()
 			m.creating = false
 		}
@@ -601,7 +616,7 @@ func (m *mobileApp) view(c *ui.Context) {
 // Keep asynchronous connection/session state and the navigation stack in sync.
 func (m *mobileApp) syncNavigation() {
 	page := "/connect"
-	if m.client != nil || m.reconnecting {
+	if !m.home && (m.client != nil || m.reconnecting) {
 		page = "/sessions"
 		if m.creating {
 			page = "/sessions/new"
@@ -704,14 +719,19 @@ func (m *mobileApp) connectView(c *ui.Context) {
 				ui.Text(c, "连接桌面").FontSize(20).Bold()
 				ui.Text(c, "电脑上的 GoRex · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted)
 			})
+			if m.client != nil && mobileTextAction(c, "断开桌面连接", "断开").Disabled(m.busy || m.reconnecting).Clicked() {
+				m.disconnect(false)
+			}
 		})
-		if ui.PrimaryButton(c, "").Label("扫码连接桌面").Role(ui.RoleButton).Height(48).FillWidth().Disabled(m.busy || m.scanning).Children(func() {
+		if ui.PrimaryButton(c, "").Label("扫码连接桌面").Role(ui.RoleButton).Height(48).FillWidth().Disabled(m.busy || m.scanning || m.reconnecting).Children(func() {
 			ui.Icon(c, icon("scan-line")).Size(20, 20)
 			ui.Text(c, "扫码连接桌面").FontSize(16)
 		}).Clicked() {
 			m.scan()
 		}
-		if m.busy {
+		if m.reconnecting {
+			m.errorView(c)
+		} else if m.busy {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "正在连接桌面…").Label("正在连接桌面").FontSize(14).TextColor(c.Theme().TextMuted).Grow(1)
 				if mobileTextAction(c, "取消连接", "取消").Clicked() {
@@ -736,7 +756,11 @@ func (m *mobileApp) connectView(c *ui.Context) {
 						mobileListDivider(c)
 					}
 					status := m.presence[entry.Link].state.label()
-					row := mobileListRow(c, "desktop-"+entry.Link, "重新连接 "+entry.Name, 56).Value(status).Disabled(m.busy)
+					label := "重新连接 " + entry.Name
+					if m.isConnectedDesktop(entry) {
+						status, label = "已连接", "打开桌面 "+entry.Name
+					}
+					row := mobileListRow(c, "desktop-"+entry.Link, label, 56).Value(status).Disabled(m.busy || m.scanning || m.reconnecting)
 					row.Children(func() {
 						mobileListIcon(c, "monitor")
 						ui.Text(c, entry.Name).FontSize(15).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
@@ -751,7 +775,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 						ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
 					})
 					if row.Clicked() {
-						m.connect(entry.Link)
+						m.openDesktop(entry)
 					}
 				}
 			})
@@ -793,7 +817,7 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 		if ui.ButtonBase(c).Label("返回").Role(ui.RoleButton).Size(44, 44).Children(func() {
 			ui.Icon(c, icon("chevron-left")).Size(24, 24).TextColor(c.Theme().Accent)
 		}).Clicked() {
-			m.disconnect(false)
+			m.goHome()
 		}
 		ui.Text(c, "会话").FontSize(17).Bold().TextAlign(ui.Center).Grow(1)
 		if ui.ButtonBase(c).Label("新建会话").Disabled(m.reconnecting).Role(ui.RoleButton).Size(44, 44).Children(func() {
@@ -901,7 +925,7 @@ func (m *mobileApp) createView(c *ui.Context) {
 }
 
 func (m *mobileApp) terminalView(c *ui.Context) {
-	m.header(c, m.sessionTitle(m.selected), func() { m.detach() }, true)
+	m.header(c, m.sessionTitle(m.selected), func() { m.resumeSID = ""; m.detach() }, true)
 	if m.term == nil {
 		c.Invalidate()
 		return

@@ -65,7 +65,12 @@ func (m *mobileApp) openNotifiedSession(desktop, sid string) {
 	if desktop == "" || sid == "" {
 		return
 	}
-	if desktop == m.desktopKey() && m.client != nil {
+	if m.background && desktop == m.desktopKey() && m.client != nil {
+		m.home, m.resumeSID = false, sid
+		return
+	}
+	if desktop == m.desktopKey() && m.connectionUsable() {
+		m.home = false
 		for _, s := range m.sessions {
 			if s.ID == sid {
 				if m.selected.ID != sid || m.term == nil {

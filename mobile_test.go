@@ -45,8 +45,8 @@ func TestMobileNavigationBackReleasesOnlyCurrentPage(t *testing.T) {
 	}
 	m.navigation.Back()
 	tt.Frame()
-	if m.client != nil || m.navigation.CanGoBack() || len(m.history) != 1 {
-		t.Fatal("sessions Back did not disconnect and preserve recent connections")
+	if m.client != client || !m.home || m.navigation.CanGoBack() || len(m.history) != 1 {
+		t.Fatal("sessions Back did not keep the connection on the home page")
 	}
 }
 

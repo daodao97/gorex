@@ -156,6 +156,12 @@ func (s *mobileStream) HasScreenSize() bool {
 	return stream != nil && stream.HasScreenSize()
 }
 
+func (s *mobileStream) hasTransport() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.closed && s.current != nil
+}
+
 func (s *mobileStream) Close() error {
 	s.mu.Lock()
 	if s.closed {
