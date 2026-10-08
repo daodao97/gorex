@@ -65,6 +65,8 @@ codesign --verify --deep --strict build/darwin-arm64/GoRex.app
 
 构建信息必须包含 `-X github.com/egoist/mygo.production=1` 和 `mygo_noinspector`。需要 DMG 时省略 `-skip-dmg`；Intel Mac 使用 `darwin/amd64`，双架构使用 `darwin/universal`。
 
+GitHub Actions 的 **Build macOS DMG** 工作流在推送 `main`、推送 `v*` 标签或手动运行时生成双架构 DMG。运行成功后，在该次运行的 Artifacts 中下载 `GoRex-macos-universal-dmg`，产物保留 14 天。CI 使用 `GOWORK=off` 和固定版本的 MyGo CLI 进行生产构建，并验证两种架构的 `mygo_noinspector` 标签、应用签名和 DMG 完整性。当前使用 ad hoc 签名，没有 Developer ID 公证；包内版本来自 `mygo.json`，工作流只上传构建产物，不自动创建 GitHub Release。
+
 下面是仅修改 Go 代码、资源和应用配置保持一致时的本机更新流程。先在同一个终端定义只读快照函数；它只发送 `hello`、`list`，不会启动或重启服务，也不保存终端内容、任务提示或 token：
 
 ```sh

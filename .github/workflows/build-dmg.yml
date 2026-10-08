@@ -1,0 +1,61 @@
+name: Build macOS DMG
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dmg:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Build production app and universal DMG
+        run: env -u MYGO_INSPECTOR go tool mygo build -platform darwin/universal -sign - .
+
+      - name: Verify architectures, release tags, signature and disk image
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=build/darwin-universal/GoRex.app
+          binary="$app/Contents/MacOS/GoRex"
+          lipo "$binary" -verify_arch arm64 x86_64
+          for arch in arm64 x86_64; do
+            thin="$RUNNER_TEMP/GoRex-$arch"
+            lipo "$binary" -thin "$arch" -output "$thin"
+            info=$(go version -m "$thin")
+            rg -F mygo_noinspector <<< "$info"
+          done
+          codesign --verify --deep --strict "$app"
+          images=(build/darwin-universal/*.dmg)
+          for image in "${images[@]}"; do
+            hdiutil verify "$image"
+          done
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v7
+        with:
+          name: GoRex-macos-universal-dmg
+          path: build/darwin-universal/*.dmg
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
