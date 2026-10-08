@@ -1,15 +1,102 @@
 package rex
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"io"
 	"net"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestReadSnapshotWaitsForCompleteFrameAndLeavesLiveOutput(t *testing.T) {
+	conn, peer := net.Pipe()
+	s := &Stream{conn: conn, screenFrames: true}
+	s.cond = sync.NewCond(&s.mu)
+	defer s.Close()
+	defer peer.Close()
+	payload := bytes.Repeat([]byte("中文🙂 snapshot "), 6000)
+	frame := func(data []byte) []byte {
+		b := make([]byte, 8+len(data))
+		binary.BigEndian.PutUint32(b, uint32(len(data)))
+		binary.BigEndian.PutUint16(b[4:], 112)
+		binary.BigEndian.PutUint16(b[6:], 42)
+		copy(b[8:], data)
+		return b
+	}
+	firstHalf := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		b := frame(payload)
+		peer.Write(b[:4000])
+		close(firstHalf)
+		<-release
+		peer.Write(b[4000:])
+		peer.Write(frame([]byte("live output")))
+	}()
+	done := make(chan []byte, 1)
+	go func() {
+		data, c, r, e := s.ReadSnapshot()
+		if e != nil || c != 112 || r != 42 {
+			done <- nil
+			return
+		}
+		done <- data
+	}()
+	<-firstHalf
+	select {
+	case <-done:
+		t.Fatal("partial snapshot escaped")
+	case <-time.After(20 * time.Millisecond):
+	}
+	close(release)
+	if got := <-done; !bytes.Equal(got, payload) {
+		t.Fatal("snapshot lost fragmented Unicode data")
+	}
+	buf := make([]byte, 32)
+	n, c, r, e := s.ReadScreen(buf)
+	if e != nil || string(buf[:n]) != "live output" || c != 112 || r != 42 {
+		t.Fatal("snapshot consumed subsequent live output", e)
+	}
+}
+
+func TestReadSnapshotRejectsTruncatedFrameAndPreservesLegacyBytes(t *testing.T) {
+	for _, framed := range []bool{false, true} {
+		conn, peer := net.Pipe()
+		s := &Stream{conn: conn, screenFrames: framed}
+		s.cond = sync.NewCond(&s.mu)
+		go func() {
+			defer peer.Close()
+			if framed {
+				var h [8]byte
+				binary.BigEndian.PutUint32(h[:], 500)
+				binary.BigEndian.PutUint16(h[4:], 80)
+				binary.BigEndian.PutUint16(h[6:], 24)
+				peer.Write(h[:])
+			}
+			peer.Write([]byte("partial"))
+		}()
+		data, _, _, err := s.ReadSnapshot()
+		if framed {
+			if err == nil || len(data) != 0 {
+				t.Fatal("truncated snapshot accepted")
+			}
+		} else {
+			if err != nil || len(data) != 0 {
+				t.Fatal("legacy bytes unexpectedly consumed")
+			}
+			buf := make([]byte, 7)
+			if _, err := io.ReadFull(s, buf); err != nil || string(buf) != "partial" {
+				t.Fatal("legacy fallback lost bytes")
+			}
+		}
+		s.Close()
+	}
+}
 
 func TestViewStreamNeverResizesDesktop(t *testing.T) {
 	s, requests := resizeStream(t)

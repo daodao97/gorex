@@ -179,11 +179,12 @@ type Terminal struct {
 
 	// rmu guards what frames draw from: the render state, which a
 	// program's synchronized update (mode 2026) holds.
-	rmu         sync.Mutex
-	rs          *vt.RenderState
-	held        bool
-	heldSince   time.Time // most recent input during a synchronized update
-	holdStarted time.Time
+	rmu           sync.Mutex
+	rs            *vt.RenderState
+	held          bool
+	heldSince     time.Time // most recent input during a synchronized update
+	holdStarted   time.Time
+	resumeReading *readingPosition
 
 	draw     atomic.Pointer[func()] // asks for a frame of the view
 	done     chan struct{}
@@ -414,12 +415,24 @@ func (t *Terminal) read() {
 	for {
 		var n, cols, rows int
 		var err error
+		var snapshot []byte
 		if src, ok := t.src.(interface {
+			ReadScreenUpdate([]byte) (int, int, int, []byte, error)
+		}); ok {
+			n, cols, rows, snapshot, err = src.ReadScreenUpdate(buf)
+		} else if src, ok := t.src.(interface {
 			ReadScreen([]byte) (int, int, int, error)
 		}); ok {
 			n, cols, rows, err = src.ReadScreen(buf)
 		} else {
 			n, err = t.src.Read(buf)
+		}
+		if len(snapshot) > 0 {
+			t.restoreSnapshot(snapshot, cols, rows)
+			if err != nil {
+				break
+			}
+			continue
 		}
 		if cols > 0 && rows > 0 {
 			t.mu.Lock()
@@ -687,6 +700,19 @@ func (t *Terminal) Send(data []byte) {
 	}
 }
 
+// SetInputEnabled keeps reading and selection available during recovery while
+// discarding queued keystrokes. Commands typed offline are never replayed.
+func (t *Terminal) SetInputEnabled(enabled bool) {
+	t.in.mu.Lock()
+	if t.in.paused != !enabled {
+		t.in.paused = !enabled
+		if !enabled {
+			t.in.queue = nil
+		}
+	}
+	t.in.mu.Unlock()
+}
+
 // Paste pastes text, bracketed when the program asks (mode 2004), so that
 // it does not run as commands as it would typed.
 func (t *Terminal) Paste(text string) {
@@ -913,6 +939,7 @@ type inputQueue struct {
 	cond   *sync.Cond
 	queue  [][]byte
 	closed bool
+	paused bool
 }
 
 func (q *inputQueue) init() {
@@ -924,7 +951,7 @@ func (q *inputQueue) init() {
 func (q *inputQueue) push(p []byte) {
 	q.mu.Lock()
 	q.init()
-	if !q.closed {
+	if !q.closed && !q.paused {
 		q.queue = append(q.queue, p)
 		q.cond.Signal()
 	}

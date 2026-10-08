@@ -74,6 +74,9 @@ func (m *mobileApp) enterBackground() {
 		return
 	}
 	m.background = true
+	if m.term != nil {
+		m.term.SetInputEnabled(false)
+	}
 	m.backgroundAt = time.Now()
 	m.stopRecentPresence()
 	m.stopPolling()
@@ -128,6 +131,9 @@ func (m *mobileApp) checkRetainedConnection() {
 	ctx, cancel := context.WithTimeout(context.Background(), mobileResumeCheckTimeout)
 	m.cancel = cancel
 	m.reconnecting = true // Disable terminal input until the check completes.
+	if m.term != nil {
+		m.term.SetInputEnabled(false)
+	}
 	go func() {
 		sessions, err := checkMobileConnection(ctx, client, m.pushSnapshot.Load())
 		cancel()

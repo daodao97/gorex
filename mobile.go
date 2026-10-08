@@ -438,13 +438,9 @@ func (m *mobileApp) poll(ctx context.Context, client *rex.Client, generation int
 			if ctx.Err() != nil {
 				return
 			}
-			var sessions []rex.SessionInfo
-			var err error
-			if info := m.pushSnapshot.Load(); info != nil {
-				sessions, err = client.ListFrom(*info)
-			} else {
-				sessions, err = client.List()
-			}
+			checkCtx, cancel := context.WithTimeout(ctx, mobileResumeCheckTimeout)
+			sessions, err := checkMobileConnection(checkCtx, client, m.pushSnapshot.Load())
+			cancel()
 			mygo.RunOnMain(func() {
 				if ctx.Err() == nil && !m.background && m.generation == generation && m.client == client {
 					if err != nil {
@@ -457,7 +453,9 @@ func (m *mobileApp) poll(ctx context.Context, client *rex.Client, generation int
 							if m.term != nil && m.stream != nil && !m.stream.HasScreenSize() && (s.Cols != m.selected.Cols || s.Rows != m.selected.Rows) {
 								// Older desktop daemons send raw ANSI. Reattach for a
 								// fresh snapshot if their source grid changes.
-								m.openSession(s)
+								m.selected = s
+								m.stream.geometry(s.Cols, s.Rows)
+								m.stream.replace(client.ViewStream(s.ID))
 							} else {
 								m.selected = s
 							}
@@ -575,7 +573,7 @@ func (m *mobileApp) view(c *ui.Context) {
 	c.SetTheme(&theme)
 	c.Root().Background(theme.Background)
 	m.syncNavigation()
-	m.navigation.InteractiveBack = !m.busy && !m.scanning
+	m.navigation.InteractiveBack = (!m.busy || m.reconnecting) && !m.scanning
 	ui.Column(c).Fill().Children(func() {
 		m.navigation.View(c, func(page *ui.Route) {
 			page.Page().Background(theme.Background)
@@ -670,7 +668,7 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 		}
 		ui.Text(c, title).FontSize(17).Bold().TextAlign(ui.Center).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 		if terminalPage && m.term != nil {
-			if ui.ButtonBase(c).Key("mobile-keyboard").Label("键盘").Role(ui.RoleButton).KeepFocus().Size(44, 44).Children(func() {
+			if ui.ButtonBase(c).Key("mobile-keyboard").Label("键盘").Role(ui.RoleButton).KeepFocus().Disabled(m.reconnecting || m.stream != nil && !m.stream.inputReady()).Size(44, 44).Children(func() {
 				ui.Icon(c, icon("keyboard")).Size(22, 22).TextColor(c.Theme().Accent)
 			}).Clicked() {
 				m.focusTerminal = true
@@ -693,7 +691,7 @@ func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPag
 }
 
 func (m *mobileApp) errorView(c *ui.Context) {
-	if m.reconnecting {
+	if m.reconnecting || m.stream != nil && !m.stream.inputReady() {
 		ui.Row(c).FillWidth().Padding(0, 16).Gap(8).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, "正在重连…").Label("正在重连").FontSize(13).TextColor(c.Theme().TextMuted).Grow(1)
 			if mobileTextAction(c, "取消重连", "取消").Clicked() {
@@ -930,6 +928,7 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 		c.Invalidate()
 		return
 	}
+	m.term.SetInputEnabled(!m.reconnecting && !m.background && (m.stream == nil || m.stream.inputReady()))
 	m.errorView(c)
 	if m.term == nil {
 		c.Invalidate()
@@ -943,7 +942,7 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	}
 	var element *ui.Element
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Padding(4).Background(c.Theme().Background).Children(func() {
-		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().Disabled(m.reconnecting).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputAccessory(mobileKeyboardActions, func(id string) { m.keyboardAction(c, id) })
+		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputAccessory(mobileKeyboardActions, func(id string) { m.keyboardAction(c, id) })
 		if m.focusTerminal {
 			element.Focus()
 			m.focusTerminal = false
@@ -954,7 +953,7 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	if runtime.GOOS != "ios" && element.Focused() {
 		m.keyboardPreview(c)
 	}
-	if m.reconnecting {
+	if m.reconnecting || m.stream != nil && !m.stream.inputReady() {
 		c.Blur()
 	}
 	m.selectionMenu(c, element)
@@ -972,7 +971,7 @@ var mobileKeyboardActions = []ui.InputAction{
 }
 
 func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
-	if m.term == nil || m.reconnecting {
+	if m.term == nil || m.reconnecting || m.background || m.stream != nil && !m.stream.inputReady() {
 		return
 	}
 	if data, ok := map[string]string{"escape": "\x1b", "tab": "\t", "interrupt": "\x03", "up": "\x1b[A", "down": "\x1b[B", "left": "\x1b[D", "right": "\x1b[C", "eof": "\x04", "search": "\x12", "/": "/", "-": "-", "|": "|", "~": "~", "\\": "\\"}[id]; ok {

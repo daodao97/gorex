@@ -93,7 +93,7 @@ func TestMobileReconnectRetainsPageAndCancelReleasesTerminal(t *testing.T) {
 		t.Fatal("cancel retained connection resources")
 	}
 	for i := 0; i < 20; i++ {
-		if d := mobileRetryDelay(i); d < time.Second || d > 16*time.Second {
+		if d := mobileRetryDelay(i); d < time.Second || d > 5*time.Second {
 			t.Fatal(d)
 		}
 	}

@@ -397,6 +397,32 @@ func (s *Stream) Read(p []byte) (int, error) {
 	return n, err
 }
 
+// ReadSnapshot consumes the first complete screen frame on a fresh viewer.
+// The caller is the stream's sole reader. Legacy servers return nil without
+// consuming bytes and continue through ReadScreen. A failed partial transfer
+// must never replace the viewer's last complete screen.
+func (s *Stream) ReadSnapshot() ([]byte, int, int, error) {
+	conn, err := s.wait()
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	if !s.HasScreenSize() {
+		return nil, 0, 0, nil
+	}
+	buf := make([]byte, 64<<10)
+	n, cols, rows, err := s.ReadScreen(buf)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	data := make([]byte, n+s.frameLeft)
+	copy(data, buf[:n])
+	if _, err := io.ReadFull(conn, data[n:]); err != nil {
+		return nil, 0, 0, err
+	}
+	s.frameLeft = 0
+	return data, cols, rows, nil
+}
+
 // ReadScreen reads ANSI at its source size. Each frame carries geometry
 // before its payload, so an in-flight resize cannot decode at another size.
 // A legacy server returns zero geometry; callers use the session list size.

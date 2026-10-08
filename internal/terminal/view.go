@@ -285,6 +285,13 @@ func (v *view) menu(m *ui.Menu) {
 
 // input handles the input of the view as it comes.
 func (v *view) input(ev ui.InputEvent) bool {
+	v.t.in.mu.Lock()
+	paused := v.t.in.paused
+	v.t.in.mu.Unlock()
+	if paused && (ev.Kind == ui.InputKeyDown || ev.Kind == ui.InputKeyUp || ev.Kind == ui.InputText || ev.Kind == ui.InputCompose || ev.Kind == ui.InputCommand && ev.Text == "paste") {
+		v.pending, v.preedit = nil, ""
+		return true
+	}
 	if ev.Kind == ui.InputKeyDown || ev.Kind == ui.InputKeyUp || ev.Kind == ui.InputPointerMove || ev.Kind == ui.InputPointerDown || ev.Kind == ui.InputPointerUp {
 		v.linkMods = ev.Mods
 	}

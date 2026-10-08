@@ -75,7 +75,10 @@ func (v *view) presentation() *vt.Terminal {
 	v.compactPrimary(next)
 	next.Resize(v.cols, v.rows, v.cellW, v.cellH)
 	next.ScrollToBottom()
-	if distance > 0 {
+	if t.resumeReading != nil {
+		t.resumeReading.restore(next)
+		t.resumeReading = nil
+	} else if distance > 0 {
 		next.ScrollBy(-distance)
 	}
 	if old != nil {

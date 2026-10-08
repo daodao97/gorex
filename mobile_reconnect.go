@@ -22,6 +22,9 @@ func (m *mobileApp) pauseConnection() {
 	if m.stream != nil {
 		m.stream.replace(nil)
 	}
+	if m.term != nil {
+		m.term.SetInputEnabled(false)
+	}
 	if m.client != nil {
 		m.client.Close()
 		m.client = nil
@@ -44,7 +47,7 @@ func (m *mobileApp) connectionLost() {
 }
 
 func mobileRetryDelay(attempt int) time.Duration {
-	return time.Duration(1<<min(max(attempt, 0), 4)) * time.Second
+	return min(time.Duration(1<<min(max(attempt, 0), 3))*time.Second, 5*time.Second)
 }
 
 func (m *mobileApp) scheduleRetry() {
@@ -56,6 +59,9 @@ func (m *mobileApp) scheduleRetry() {
 	}
 	generation := m.generation
 	delay := mobileRetryDelay(m.retryAttempt)
+	if m.retryAttempt == 0 {
+		delay = 0
+	}
 	m.retryAttempt++
 	m.retryTimer = time.AfterFunc(delay, func() {
 		mygo.RunOnMain(func() {

@@ -20,6 +20,7 @@ type mobileStream struct {
 	current    mobileTransport
 	cols, rows int
 	reset      bool
+	paused     bool
 	closed     bool
 	failed     func()
 }
@@ -42,6 +43,7 @@ func (s *mobileStream) replace(next mobileTransport) {
 	old := s.current
 	s.current = next
 	s.reset = next != nil
+	s.paused = true
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	if old != nil {
@@ -65,8 +67,19 @@ func (s *mobileStream) failure(stream mobileTransport) {
 }
 
 func (s *mobileStream) ReadScreen(p []byte) (int, int, int, error) {
+	n, cols, rows, _, err := s.readScreen(p, false)
+	return n, cols, rows, err
+}
+
+// Terminal readers can apply a complete replacement atomically. Ordinary
+// readers retain the legacy byte-stream behavior.
+func (s *mobileStream) ReadScreenUpdate(p []byte) (int, int, int, []byte, error) {
+	return s.readScreen(p, true)
+}
+
+func (s *mobileStream) readScreen(p []byte, snapshots bool) (int, int, int, []byte, error) {
 	if len(p) == 0 {
-		return 0, 0, 0, nil
+		return 0, 0, 0, nil, nil
 	}
 	for {
 		s.mu.Lock()
@@ -79,7 +92,30 @@ func (s *mobileStream) ReadScreen(p []byte) (int, int, int, error) {
 		s.reset = false
 		s.mu.Unlock()
 		if closed {
-			return 0, 0, 0, io.EOF
+			return 0, 0, 0, nil, io.EOF
+		}
+		if snapshots && reset {
+			if source, ok := stream.(interface {
+				ReadSnapshot() ([]byte, int, int, error)
+			}); ok {
+				data, cols, rows, err := source.ReadSnapshot()
+				s.mu.Lock()
+				active := s.current == stream && !s.closed
+				if active && err == nil && len(data) > 0 {
+					s.paused = false
+				}
+				s.mu.Unlock()
+				if !active {
+					continue
+				}
+				if err != nil {
+					s.failure(stream)
+					continue
+				}
+				if len(data) > 0 {
+					return 0, cols, rows, data, nil
+				}
+			}
 		}
 		prefix := ""
 		if reset {
@@ -91,11 +127,14 @@ func (s *mobileStream) ReadScreen(p []byte) (int, int, int, error) {
 			s.mu.Lock()
 			s.reset = true
 			s.mu.Unlock()
-			return 0, 0, 0, io.ErrShortBuffer
+			return 0, 0, 0, nil, io.ErrShortBuffer
 		}
 		n, cols, rows, err := stream.ReadScreen(p[len(prefix):])
 		s.mu.Lock()
 		active := s.current == stream && !s.closed
+		if active && n > 0 {
+			s.paused = false
+		}
 		s.mu.Unlock()
 		if !active {
 			continue
@@ -111,7 +150,7 @@ func (s *mobileStream) ReadScreen(p []byte) (int, int, int, error) {
 			s.failure(stream)
 		}
 		if n > 0 || err == nil {
-			return n, cols, rows, nil
+			return n, cols, rows, nil, nil
 		}
 	}
 }
@@ -123,12 +162,12 @@ func (s *mobileStream) Read(p []byte) (int, error) {
 
 func (s *mobileStream) Write(p []byte) (int, error) {
 	s.mu.Lock()
-	stream, closed := s.current, s.closed
+	stream, closed, paused := s.current, s.closed, s.paused
 	s.mu.Unlock()
 	if closed {
 		return 0, io.ErrClosedPipe
 	}
-	if stream != nil {
+	if stream != nil && !paused {
 		_, err := stream.Write(p)
 		if err != nil {
 			s.failure(stream)
@@ -160,6 +199,12 @@ func (s *mobileStream) hasTransport() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return !s.closed && s.current != nil
+}
+
+func (s *mobileStream) inputReady() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return !s.closed && s.current != nil && !s.paused
 }
 
 func (s *mobileStream) Close() error {

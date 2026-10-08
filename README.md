@@ -121,7 +121,14 @@ Leaving the session or backgrounding cancels an unfinished transfer; uncertain
 failures are never retried automatically. Reading hides the accessory; tap the header keyboard icon to
 resume input. Long-press to select text, then use the nearby copy/select-all menu.
 Leaving a terminal detaches it; desktop sessions continue running. Returning
-from the background reconnects to the selected session. Swipe right from the
+from the background validates or reconnects to the selected session. Foreground
+connection checks have a two-second deadline; interrupted connections recover
+immediately, with failed attempts retried at intervals capped at five seconds.
+Recovery keeps the terminal page and allows reading/selection while input is
+paused. Offline keystrokes are discarded, never replayed. On desktops supporting
+screen frames, the full replacement snapshot arrives before the visible screen
+changes; retained history keeps its reading position as new output is appended.
+Retries pause while iOS is in the background. Swipe right from the
 left edge to return from a terminal or new-session form to the session list,
 or from the list to the connection screen. Cancelling the swipe keeps the
 current page, selection and keyboard. Recent desktops
@@ -176,7 +183,12 @@ build; device and simulator builds regenerate the static library object.
 ```sh
 go test ./...
 GOREX_REMOTE_E2E=1 go test ./internal/remote -run TestTailcatSessionLifecycle -v
+GOREX_MOBILE_RECOVERY_E2E=1 go test . -run TestMobileRecoveryAcrossDesktopBridgeRestart -v
 ```
+
+The mobile recovery test runs native UI dispatch with offscreen rendering and
+an isolated desktop fixture. It verifies automatic recovery after a bridge
+restart and a long background visit without touching existing sessions.
 
 ```sh
 IOS_TEAM=YOUR_TEAM_ID IOS_DEVICE=YOUR_DEVICE_UDID ./scripts/test-ios.sh
