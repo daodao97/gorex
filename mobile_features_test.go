@@ -127,7 +127,7 @@ func TestMobileSessionNamesAreDeviceScopedAndWaitingWins(t *testing.T) {
 	}
 }
 
-func TestMobileSessionEditorAndNoticeFitPhone(t *testing.T) {
+func TestMobileSessionEditorFitsPhone(t *testing.T) {
 	registerFonts()
 	for _, size := range [][2]int{{375, 620}, {390, 750}, {750, 310}} {
 		m := &mobileApp{client: &rex.Client{}, sessions: []rex.SessionInfo{{ID: "test", Title: "shell"}}}
@@ -141,23 +141,13 @@ func TestMobileSessionEditorAndNoticeFitPhone(t *testing.T) {
 		if m.editingOpen || m.preference("test").Name != "移动开发" || !m.preference("test").Pinned {
 			t.Fatal("editor did not apply name/pin", m.preference("test"))
 		}
-		m.notice = &mobileAgentNotice{Desktop: "desktop", Session: "test", Title: "Claude Code · 等待授权", Body: "移动开发"}
-		tt.Frame()
-		r, ok := tt.Find("任务提醒 Claude Code · 等待授权")
-		if !ok || r.H < 44 || r.X+r.W > float32(size[0]) {
-			t.Fatal("notice not reachable", r)
-		}
-		tt.Click("关闭任务提醒")
-		if m.notice != nil {
-			t.Fatal("notice not dismissible")
-		}
 	}
 }
 
 func TestMobileAgentNotificationsDeduplicateAndCoverCommonAgents(t *testing.T) {
 	for _, id := range agents.Integrated {
 		t.Run(id, func(t *testing.T) {
-			m := &mobileApp{}
+			m := &mobileApp{background: true}
 			m.hello.Version = 5
 			m.hello.Host.ID = "desktop"
 			count := 0
@@ -193,7 +183,7 @@ func TestMobileAgentNotificationsDeduplicateAndCoverCommonAgents(t *testing.T) {
 			s.Agent.State = agents.Waiting
 			s.Agent.WaitRevision = 2
 			m.updateSessions([]rex.SessionInfo{s}, false)
-			if count != 3 || m.notice != nil {
+			if count != 3 {
 				t.Fatal("stale hook on shell notified")
 			}
 			s.Program = id
@@ -247,13 +237,13 @@ func TestMobilePreferenceLoadPreservesEditsAndDeletions(t *testing.T) {
 	}
 }
 
-func TestMobileNoticeOpensTargetAndLegacyCompletionNotifiesOnce(t *testing.T) {
+func TestMobileNotificationClickOpensTargetAndLegacyCompletionNotifiesOnce(t *testing.T) {
 	registerFonts()
 	conn, peer := net.Pipe()
 	defer peer.Close()
 	client := rex.NewClient(conn, nil)
 	defer client.Close()
-	m := &mobileApp{client: client}
+	m := &mobileApp{client: client, background: true}
 	defer m.detach()
 	m.hello.Host.ID = "desktop"
 	m.hello.Version = 4
@@ -267,11 +257,13 @@ func TestMobileNoticeOpensTargetAndLegacyCompletionNotifiesOnce(t *testing.T) {
 	if count != 1 || m.sessions[0].Agent.CompletionRevision != 1 {
 		t.Fatal("legacy completion repeated", count)
 	}
+	m.background = false
 	m.openNotifiedSession("desktop", "target")
-	if m.term == nil || m.selected.ID != "target" || m.notice != nil {
+	if m.term == nil || m.selected.ID != "target" {
 		t.Fatal("notification did not enter its session")
 	}
 	term := m.term
+	m.background = false
 	m.openNotifiedSession("desktop", "target")
 	if m.term != term {
 		t.Fatal("repeat click reset current terminal")

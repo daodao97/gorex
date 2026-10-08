@@ -59,7 +59,6 @@ type mobileApp struct {
 	editingName                             string
 	editingPinned                           bool
 	agentPrevious                           map[string]rex.SessionInfo
-	notice                                  *mobileAgentNotice
 	notificationDenied                      bool
 	agentNotify                             func(mobileAgentNotice)
 	pendingDesktop, pendingSession          string
@@ -249,7 +248,6 @@ func (m *mobileApp) disconnect(forget bool) {
 		m.retryTimer.Stop()
 		m.retryTimer = nil
 	}
-	m.notice = nil
 	m.agentPrevious = nil
 	m.editingOpen = false
 	if m.cancel != nil {
@@ -574,7 +572,6 @@ func (m *mobileApp) view(c *ui.Context) {
 		})
 	})
 	m.sessionEditor(c)
-	m.noticeView(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
 		// A completed edge gesture changes history. Release resources only
 		// after the new page has built; a cancelled preview keeps them alive.

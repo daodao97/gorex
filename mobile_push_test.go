@@ -2,7 +2,9 @@ package main
 
 import (
 	"github.com/egoist/mygo"
+	"gorex/internal/agents"
 	"gorex/internal/rex"
+	"slices"
 	"testing"
 	"time"
 )
@@ -26,8 +28,8 @@ func TestMobileRemoteAndLocalRemindersShareEventIdentity(t *testing.T) {
 	s := rex.SessionInfo{ID: "pane", Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "completed", CompletionRevision: 1, Updated: now}}
 	id := m.taskNoticeID(s)
 	event := mygo.NotificationEvent{ID: id, Source: mygo.NotificationRemote, Data: map[string]string{"desktop": "desktop", "session": "pane", "event": id, "title": "Codex · 已完成", "body": "Task"}}
-	if m.presentNotification(event) != 0 || m.notice == nil {
-		t.Fatal("remote event not surfaced")
+	if m.presentNotification(event) != 0 || len(m.noticeReceipts) != 1 {
+		t.Fatal("remote event not recorded")
 	}
 	if m.presentNotification(event) != 0 {
 		t.Fatal("duplicate remote event shown")
@@ -67,14 +69,15 @@ func TestMobileSeenReceiptsSurviveColdLaunchAndMergeEarlyNotification(t *testing
 		t.Fatal("expired receipt retained")
 	}
 	event := mygo.NotificationEvent{Source: mygo.NotificationRemote, Data: map[string]string{"desktop": "desktop", "session": "pane", "event": "gorex-agent-old"}}
-	if m.presentNotification(event) != 0 || m.notice != nil {
+	if m.presentNotification(event) != 0 {
 		t.Fatal("previously seen remote reminder repeated after cold launch")
 	}
 }
 
-func TestMobilePollingAndAPNsRaceHasOneForegroundReminder(t *testing.T) {
+func TestMobilePollingAndAPNsRaceIsQuietAndRecordsOneReceipt(t *testing.T) {
 	for _, remoteFirst := range []bool{false, true} {
 		m := &mobileApp{hello: rex.Hello{Version: 5, Host: rex.HostInfo{ID: "desktop"}}}
+		m.agentNotify = func(mobileAgentNotice) { t.Fatal("foreground polling raised a reminder") }
 		s := rex.SessionInfo{ID: "pane", Program: "claude", Agent: rex.AgentState{ID: "claude", SessionID: "thread", State: "running"}}
 		m.updateSessions([]rex.SessionInfo{s}, true)
 		s.Agent.State = "completed"
@@ -89,8 +92,33 @@ func TestMobilePollingAndAPNsRaceHasOneForegroundReminder(t *testing.T) {
 		if !remoteFirst && m.presentNotification(event) != 0 {
 			t.Fatal("polling receipt failed to suppress APNs")
 		}
-		if m.notice == nil || m.notice.ID != id || len(m.noticeReceipts) != 1 {
-			t.Fatal("race lost or duplicated the in-app reminder")
+		if len(m.noticeReceipts) != 1 {
+			t.Fatal("race lost or duplicated the receipt")
+		}
+	}
+}
+
+func TestMobileForegroundAgentStatusesRemainVisibleWithoutReminders(t *testing.T) {
+	for _, agent := range agents.Integrated {
+		for _, state := range []string{agents.Waiting, agents.Completed, agents.Failed} {
+			t.Run(agent+"/"+state, func(t *testing.T) {
+				m := &mobileApp{hello: rex.Hello{Version: 5, Host: rex.HostInfo{ID: "desktop"}}, pushDeviceID: "0123456789abcdef0123456789abcdef", pushToken: "fixture"}
+				m.agentNotify = func(mobileAgentNotice) { t.Fatal("active session list raised a reminder") }
+				s := rex.SessionInfo{ID: "pane", Program: agent, Agent: rex.AgentState{ID: agent, SessionID: "thread", State: agents.Running}}
+				m.updateSessions([]rex.SessionInfo{s}, true)
+				s.Agent.State, s.Agent.WaitRevision, s.Agent.CompletionRevision = state, 1, 1
+				m.updateSessions([]rex.SessionInfo{s}, false)
+				if len(m.sessions) != 1 || m.sessions[0].Agent.State != state {
+					t.Fatal("foreground status update lost")
+				}
+				id := m.taskNoticeID(s)
+				if !slices.Contains(m.pushSnapshot.Load().Push.Receipts, id) {
+					t.Fatal("foreground receipt not synchronized to desktop")
+				}
+				if m.presentNotification(mygo.NotificationEvent{Source: mygo.NotificationRemote, Data: map[string]string{"event": id, "desktop": "desktop", "session": "pane"}}) != 0 {
+					t.Fatal("foreground event presented a system banner")
+				}
+			})
 		}
 	}
 }

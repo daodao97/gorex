@@ -114,9 +114,6 @@ func (m *mobileApp) setPushEnabled(enabled bool) {
 			}
 		}
 	}
-	if !enabled {
-		m.notice = nil
-	}
 	m.refreshPushSnapshot()
 	m.syncPushRegistration()
 	if enabled {
@@ -223,12 +220,7 @@ func (m *mobileApp) presentNotification(event mygo.NotificationEvent) mygo.Notif
 	}
 	m.refreshPushSnapshot()
 	m.syncPushRegistration()
-	if m.pushDisabled || m.term != nil && m.selected.ID == sid && m.desktopKey() == desktop && !m.background {
-		return 0
-	}
-	m.notice = &mobileAgentNotice{ID: id, Desktop: desktop, Session: sid, Title: event.Data["title"], Body: event.Data["body"]}
-	m.invalidate()
-	// This handler runs for foreground delivery. The in-app reminder is the
-	// only foreground surface; APNs owns system notifications in background.
+	// Foreground delivery only records the receipt. APNs owns background
+	// notifications; active mobile pages update session status without overlays.
 	return 0
 }
