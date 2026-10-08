@@ -270,6 +270,14 @@ Existing settings and hooks are preserved; the first original file is backed
 up as `<file>.gorex-backup`. Remove integration in the same page to remove only
 GoRex's handlers. The hooks are silent no-ops in other terminal apps.
 
+Desktop reminders and APNs notifications describe the task instead of showing
+the project path. After an authenticated user-prompt hook succeeds, GoRex keeps
+the latest request excerpt (up to 160 characters) per Agent conversation in its
+private application data directory; short continuation replies keep the previous
+task description. Full prompts, transcripts and tool arguments
+are not saved. If no excerpt is available, notifications use the terminal's task
+title or a status-specific message. This also works with existing session daemons.
+
 Gemini CLI and Qwen Code require the protocol-5 session server. Updating the app
 does not replace a running older service. After existing tasks have finished,
 use Shell → Quit and End All Sessions and reopen the updated app to start its

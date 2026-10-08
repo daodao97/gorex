@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/egoist/mygo/push/apns"
+	"gorex/internal/agents"
 	"gorex/internal/rex"
 	"os"
 	"path/filepath"
@@ -17,6 +18,23 @@ type testSender struct {
 	err     error
 	started chan struct{}
 	resume  chan struct{}
+}
+
+func TestPushUsesSpecificTaskInsteadOfHostOrProjectPath(t *testing.T) {
+	s, provider, hello, pane, _ := newFixture(t)
+	now := time.Now()
+	if err := agents.SaveHookTask(s.dir, "codex", agents.HookInput{Event: "UserPromptSubmit", SessionID: pane.Agent.SessionID}, []byte(`{"prompt":"为移动端首页增加最近会话入口"}`), now); err != nil {
+		t.Fatal(err)
+	}
+	pane = complete(s, hello, pane)
+	s.deliver(context.Background(), now.Add(5*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("task notification was not delivered")
+	}
+	payload := provider.sent[0].Payload
+	if payload.Title != "Codex · 已完成" || payload.Body != "任务：为移动端首页增加最近会话入口" || strings.Contains(payload.Body, pane.Dir) || strings.Contains(payload.Body, hello.Host.Name) {
+		t.Fatal("push lacked specific task content or still contained location metadata", payload)
+	}
 }
 
 func (p *testSender) Send(ctx context.Context, n apns.Notification) (apns.Response, error) {

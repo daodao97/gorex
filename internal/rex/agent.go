@@ -215,7 +215,9 @@ func RunAgentHook(agent string, stdin io.Reader) {
 		return
 	}
 	event := AgentEvent{Agent: agent, Input: h, At: time.Now()}
-	_ = ReportAgent(socket, sid, token, event)
+	if ReportAgent(socket, sid, token, event) == nil {
+		_ = agents.SaveHookTask(Dir(), agent, h, data, event.At)
+	}
 }
 
 func ReportAgent(socket, sid, token string, event AgentEvent) error {

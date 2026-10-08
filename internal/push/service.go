@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/egoist/mygo/push/apns"
+	"gorex/internal/agents"
 	"gorex/internal/rex"
 	"os"
 	"path/filepath"
@@ -262,7 +263,10 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 				continue
 			}
 			title := ss.Agent.ID + " · " + stateLabel(ss.Agent.State)
-			s.state.Pending[key] = pendingNotice{ID: id, Device: deviceID, Desktop: desktop, Session: ss.ID, Kind: ss.Agent.State, Title: title, Body: hello.Host.Name + " · " + filepath.Base(ss.Dir), Created: now, Next: now.Add(3 * time.Second)}
+			if agent, ok := agents.Lookup(ss.Agent.ID); ok {
+				title = agent.Name + " · " + stateLabel(ss.Agent.State)
+			}
+			s.state.Pending[key] = pendingNotice{ID: id, Device: deviceID, Desktop: desktop, Session: ss.ID, Kind: ss.Agent.State, Title: title, Body: rex.AgentNoticeBody(s.dir, ss), Created: now, Next: now.Add(3 * time.Second)}
 			changed = true
 		}
 	}
@@ -273,6 +277,12 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 		_, viewed := s.state.DesktopSeen[p.ID]
 		if viewed || !exists || now.Sub(p.Created) > 15*time.Minute || rex.AgentNoticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
 			s.removeLocked(key)
+			changed = true
+		} else if body := rex.AgentNoticeBody(s.dir, ss); p.Body != body {
+			// A prompt excerpt can arrive just after its lifecycle hook, or an
+			// outbox entry may have been created by an older app version.
+			p.Body = body
+			s.state.Pending[key] = p
 			changed = true
 		}
 	}
@@ -341,7 +351,7 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 	defer cancel()
 	s.inflightKey, s.inflightCancel = key, cancel
 	s.mu.Unlock()
-	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body + " · 点击进入会话", Group: "gorex-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
+	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body, Group: "gorex-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inflightKey = ""

@@ -169,7 +169,7 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	if hidden || a.paneIsViewed(p) {
 		return
 	}
-	opts := mygo.NotificationOptions{Title: programOf(s.ID).Name + " · " + agentStateLabel(s), Body: "点击返回对应终端窗格 · " + shortDir(p.info.Dir)}
+	opts := mygo.NotificationOptions{Title: programOf(s.ID).Name + " · " + agentStateLabel(s), Body: rex.AgentNoticeBody(rex.Dir(), p.info)}
 	a.showPaneNotice(p, s.State, opts)
 }
 
