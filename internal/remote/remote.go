@@ -52,8 +52,8 @@ func ParseLink(raw string) (tailcat.Addr, error) {
 	return tailcat.Addr(addr), nil
 }
 
-// Bridge exposes session transport and image paste to a paired phone. Closing it revokes the QR capability
-// and closes all tunneled connections, while the desktop sessions keep running.
+// Bridge exposes session transport and image paste to a paired phone. Closing it
+// disconnects phones without forgetting a persisted identity or ending sessions.
 type Bridge struct {
 	server       *tailcat.Server
 	listener     net.Listener
@@ -67,12 +67,16 @@ type Bridge struct {
 	imageGate    chan struct{}
 	imageContext context.Context
 	imageCancel  context.CancelFunc
+	identityLock *os.File
 }
 
 // OnClose registers cleanup before publishing this bridge to consumers.
 func (b *Bridge) OnClose(fn func()) { b.mu.Lock(); b.onClose = fn; b.mu.Unlock() }
 
 type Options struct {
+	// StateDir persists the identity and relay across restarts. Empty uses an
+	// ephemeral capability, useful for isolated fixtures.
+	StateDir string
 	// OnDevice receives metadata only after a successful compatible control
 	// response. Callbacks must not block; terminal bytes are forwarded unchanged.
 	OnDevice func(rex.DeviceInfo)
@@ -83,6 +87,18 @@ type Options struct {
 
 func Start(ctx context.Context, socket string, options ...Options) (*Bridge, error) {
 	b := &Bridge{server: &tailcat.Server{Logf: quiet}, conns: make(map[net.Conn]bool), devices: make(map[net.Conn]ConnectedDevice)}
+	var stateDir string
+	if len(options) > 0 {
+		stateDir = options[0].StateDir
+	}
+	if stateDir != "" {
+		identity, lock, err := loadIdentity(ctx, stateDir)
+		if err != nil {
+			return nil, err
+		}
+		b.identityLock = lock
+		b.server.Key, b.server.PresharedKey, b.server.Region = identity.Key, identity.PresharedKey, identity.Region
+	}
 	b.imageContext, b.imageCancel = context.WithCancel(context.Background())
 	b.imageGate = make(chan struct{}, 1)
 	if len(options) > 0 {
@@ -93,9 +109,16 @@ func Start(ctx context.Context, socket string, options ...Options) (*Bridge, err
 	if err != nil {
 		b.imageCancel()
 		b.server.Close()
+		releaseIdentity(b.identityLock)
 		return nil, err
 	}
 	b.listener = ln
+	if stateDir != "" {
+		if err := saveIdentity(stateDir, b.server); err != nil {
+			b.Close()
+			return nil, err
+		}
+	}
 	go b.accept(socket)
 	return b, nil
 }
@@ -147,6 +170,7 @@ func (b *Bridge) Close() {
 	defer cancel()
 	b.server.DrainTCP(ctx)
 	b.server.Close()
+	releaseIdentity(b.identityLock)
 }
 
 // Connect owns a Tailcat client until closeTunnel is called. Every Rex stream

@@ -146,8 +146,12 @@ shared session still generate output for a single PTY; the phone never
 changes the desktop's PTY dimensions.
 
 The QR code contains the Tailcat capability needed to access every session
-on that desktop. Keep it private. **停止连接** revokes it and disconnects
-phones; a newly enabled connection produces a new code. No Tailscale account
+on that desktop. Keep it private. The desktop saves its identity and relay in
+a private `remote/identity.json` file in its app data directory. Normal app
+exit disconnects phones; reopening the desktop automatically restores the same
+connection code, so recent connections remain usable without scanning again.
+**停止连接** deletes that identity and disconnects phones; a newly enabled
+connection produces a new code. No Tailscale account
 or separately installed VPN is needed. Both devices need internet access.
 
 ### Build iOS

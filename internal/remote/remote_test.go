@@ -90,7 +90,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	defer cancel()
 	imagePastes := make(chan string, 1)
 	image := clipboardPNG(t)
-	bridge, err := Start(ctx, rex.SocketPath(), Options{OnPasteImage: func(_ context.Context, sid string, data []byte) error {
+	bridge, err := Start(ctx, rex.SocketPath(), Options{StateDir: dir, OnPasteImage: func(_ context.Context, sid string, data []byte) error {
 		if string(data) != string(image) {
 			return fmt.Errorf("image bytes changed in tunnel")
 		}
@@ -316,5 +316,46 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	list, err = desktop.List()
 	if err != nil || len(list) < 2 || list[0].Exited {
 		t.Fatal("revoking pairing ended desktop sessions")
+	}
+	// Closing the GUI preserves both the identity and the session server.
+	// A saved link must reach the reopened bridge without another QR scan.
+	savedLink := bridge.Link()
+	restartCtx, stopRestart := context.WithTimeout(context.Background(), 30*time.Second)
+	defer stopRestart()
+	restarted, err := Start(restartCtx, rex.SocketPath(), Options{StateDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+	if restarted.Link() != savedLink {
+		t.Fatal("desktop restart changed the saved connection code")
+	}
+	phone, closePhone, err := Connect(restartCtx, savedLink)
+	if err != nil {
+		t.Fatal("saved phone link cannot reconnect after desktop restart")
+	}
+	list, err = phone.List()
+	if err != nil || len(list) < 2 || list[0].Exited {
+		t.Fatal("saved phone link did not reach existing sessions")
+	}
+	phone.Close()
+	closePhone()
+	restarted.Close()
+	if err := ForgetIdentity(restartCtx, dir); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := Start(restartCtx, rex.SocketPath(), Options{StateDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	if fresh.Link() == savedLink {
+		t.Fatal("explicit stop reused the old connection code")
+	}
+	oldCtx, stopOld := context.WithTimeout(context.Background(), 3*time.Second)
+	err = Probe(oldCtx, savedLink)
+	stopOld()
+	if err == nil {
+		t.Fatal("old connection code accepted after explicit stop and reenable")
 	}
 }

@@ -191,6 +191,7 @@ func (a *App) open() {
 		a.client.Close()
 		a.win = nil
 	})
+	a.restorePhonePair()
 }
 
 func serverVersionError(version int) string {

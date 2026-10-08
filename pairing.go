@@ -15,6 +15,7 @@ import (
 
 type phonePair struct {
 	open, busy    bool
+	revoking      bool
 	generation    int
 	cancel        context.CancelFunc
 	bridge        *remote.Bridge
@@ -23,12 +24,22 @@ type phonePair struct {
 }
 
 func (a *App) openPhonePair() {
+	a.startPhonePair(true)
+}
+
+func (a *App) restorePhonePair() {
+	if remote.IdentityExists(rex.Dir()) {
+		a.startPhonePair(false)
+	}
+}
+
+func (a *App) startPhonePair(show bool) {
 	if a.phone == nil {
 		a.phone = &phonePair{}
 	}
 	p := a.phone
-	p.open = true
-	if p.bridge != nil || p.busy {
+	p.open = p.open || show
+	if p.bridge != nil || p.busy || p.revoking {
 		return
 	}
 	p.busy, p.message = true, "正在开启手机连接…"
@@ -53,7 +64,7 @@ func (a *App) openPhonePair() {
 				}
 			}
 		}()
-		b, err := remote.Start(ctx, rex.SocketPath(), remote.Options{OnDevice: func(info rex.DeviceInfo) {
+		b, err := remote.Start(ctx, rex.SocketPath(), remote.Options{StateDir: rex.Dir(), OnDevice: func(info rex.DeviceInfo) {
 			if info.Push != nil {
 				select {
 				case registrations <- push.Registration(*info.Push):
@@ -107,6 +118,33 @@ func (a *App) stopPhonePair() {
 		go b.Close()
 	}
 	p.link, p.qr, p.message, p.busy = "", nil, "", false
+	p.open = false
+}
+
+// Explicit stop revokes saved credentials. App/window shutdown only closes the
+// bridge, so the next launch can serve exactly the same capability.
+func (a *App) revokePhonePair() {
+	a.stopPhonePair()
+	p := a.phone
+	if p == nil || p.revoking {
+		return
+	}
+	p.revoking = true
+	dir := rex.Dir()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+		defer cancel()
+		err := remote.ForgetIdentity(ctx, dir)
+		mygo.RunOnMain(func() {
+			p.revoking = false
+			if err != nil {
+				p.open, p.message = true, "无法停止连接，请重试"
+			}
+			if a.win != nil {
+				a.win.Invalidate()
+			}
+		})
+	}()
 }
 
 func (a *App) phonePairButton(c *ui.Context, k *colors, size float32) {
@@ -159,14 +197,17 @@ func (a *App) phonePairDialog(c *ui.Context, k *colors) {
 					c.WriteClipboard(p.link)
 				}
 				if ui.Button(c, "停止连接").Height(44).Grow(1).Clicked() {
-					a.stopPhonePair()
+					a.revokePhonePair()
 					p.open = false
 				}
 			})
 		} else {
 			ui.Text(c, p.message).FontSize(14).TextColor(k.textMuted)
-			if !p.busy && ui.PrimaryButton(c, "重试").Height(44).FillWidth().Clicked() {
+			if !p.busy && !p.revoking && ui.PrimaryButton(c, "重试").Height(44).FillWidth().Clicked() {
 				a.openPhonePair()
+			}
+			if !p.busy && !p.revoking && remote.IdentityExists(rex.Dir()) && ui.Button(c, "停止连接").Height(44).FillWidth().Clicked() {
+				a.revokePhonePair()
 			}
 			if p.busy && ui.Button(c, "取消").Height(44).FillWidth().Clicked() {
 				a.stopPhonePair()
