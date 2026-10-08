@@ -163,7 +163,9 @@ Mac with Xcode and an iOS signing team, build with:
 
 The script downloads Zig 0.16.0 and the pinned Ghostty source into `.mygo/ios`,
 builds libghostty-vt for iOS and embeds it into the Go archive, then invokes
-the fork's MyGo CLI to package and sign the app. Camera access is requested
+the fork's MyGo CLI to package and sign the app. Release builds strip local
+symbols after preserving the matching external dSYM and before signing.
+Camera access is requested
 only when opening the scanner. Use `-ios-simulator` for an arm64 simulator
 build; device and simulator builds regenerate the static library object.
 
