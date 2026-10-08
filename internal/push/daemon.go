@@ -13,9 +13,7 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 )
 
@@ -47,20 +45,12 @@ func Ensure(dir, sessionSocket string) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
-	exe, err := os.Executable()
-	if err != nil {
+	if err := rex.StartBackground([]string{"-push-service", dir, sessionSocket}, dir, "push.log"); err != nil {
 		return err
 	}
-	cmd := exec.Command(exe, "-push-service", dir, sessionSocket)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	cmd.Env = os.Environ()
-	if err = cmd.Start(); err != nil {
-		return err
-	}
-	cmd.Process.Release()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err = Query(dir); err == nil {
+		if _, err := Query(dir); err == nil {
 			return nil
 		}
 		time.Sleep(30 * time.Millisecond)

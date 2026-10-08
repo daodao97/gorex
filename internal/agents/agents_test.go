@@ -21,6 +21,14 @@ func TestDetectLaunchers(t *testing.T) {
 		{"node", []string{"node", "--require", "/tmp/codex.js", "/opt/node_modules/@github/copilot/index.js"}, "copilot"},
 		{"node", []string{"node", "/opt/node_modules/@mariozechner/pi-coding-agent/dist/cli.js"}, "pi"},
 		{"node", []string{"node", "/opt/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js"}, "omp"},
+		{"node", []string{"node", "/opt/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"}, "pi"},
+		{"node", []string{"node", "/opt/node_modules/@deepseek-ai/dsh/bin/cli.js"}, "dsh"},
+		{"node", []string{"node", "/opt/node_modules/@atomgit.com/atomcode/dist/index.js"}, "atomcode"},
+		{"node", []string{"node", "/opt/node_modules/omo-ai/dist/cli.js"}, "omo"},
+		{"pnpm", []string{"pnpm", "dlx", "cline@latest"}, "cline"},
+		{"bun", []string{"bun", "x", "@charmland/crush@latest"}, "crush"},
+		{"agy.exe", []string{`C:\tools\agy.exe`}, "agy"},
+		{"python3", []string{"python3", "/usr/local/bin/hermes"}, "hermes"},
 		{"node", []string{"node", "/opt/node_modules/@qwen-code/qwen-code/cli.js"}, "qwen"},
 		{"npx", []string{"npx", "--yes", "@google/gemini-cli@latest"}, "gemini"},
 		{"npm", []string{"npm", "exec", "--", "@openai/codex"}, "codex"},
@@ -40,6 +48,12 @@ func TestDetectLaunchers(t *testing.T) {
 		{"node", []string{"node", "--require", "codex.js", "app.js"}, ""},
 		{"sh", []string{"sh", "-c", "echo claude"}, ""},
 		{"cursor", []string{"cursor", "/work/repo"}, ""},
+		{"cmd.exe", []string{"cmd.exe", "/c", "command-code"}, ""},
+		{"cc", []string{"cc", "claude.c"}, ""},
+		{"fx", []string{"fx", "input.json"}, ""},
+		{"morph", []string{"morph", "image.png"}, ""},
+		{"node", []string{"node", "app.js", "@deepseek-ai/dsh"}, ""},
+		{"node", []string{"node", "/opt/node_modules/@atomgit.com/atomcode-tools/cli.js"}, ""},
 	} {
 		got, _ := Detect(tc.name, tc.args)
 		if got.ID != tc.want {

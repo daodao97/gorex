@@ -184,6 +184,7 @@ func (m *mobileApp) openSessionID(sid string) {
 }
 
 func (m *mobileApp) openRecentSession(entry mobileRecentSession) {
+	m.historySelection = nil
 	desktop, ok := m.recentDesktop(entry.Desktop)
 	if !ok {
 		m.refreshRecentSessions()
@@ -205,10 +206,10 @@ func (m *mobileApp) openRecentSession(entry mobileRecentSession) {
 
 func (m *mobileApp) recentSessionsView(c *ui.Context) {
 	ui.Column(c).FillWidth().Children(func() {
-		ui.Text(c, "最近会话").FontSize(13).TextColor(c.Theme().TextMuted).Padding(12, 4)
-		ui.Column(c).FillWidth().Radius(12).Clip().Background(c.Theme().Surface).Children(func() {
+		mobileListSectionHeader(c, "最近会话", nil)
+		mobileListGroup(c).Children(func() {
 			if len(m.recentSessions) == 0 {
-				ui.Text(c, "打开过的会话会显示在这里").FontSize(14).TextColor(c.Theme().TextMuted).Padding(16)
+				mobileListEmpty(c, "打开过的会话会显示在这里")
 			}
 			for i, entry := range m.recentSessions {
 				entry := entry
@@ -222,11 +223,8 @@ func (m *mobileApp) recentSessionsView(c *ui.Context) {
 				row := mobileListRow(c, "recent-session-"+entry.Desktop+"-"+entry.Session, "进入最近会话 "+entry.Desktop+" "+entry.Session, 64).Disabled(m.busy || m.scanning || m.reconnecting).Value(m.recentSessionTitle(entry) + " · " + desktop.Name)
 				row.Children(func() {
 					mobileSessionIcon(c, entry.Program)
-					ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-						ui.Text(c, m.recentSessionTitle(entry)).FontSize(15).SingleLine().Ellipsis("…")
-						ui.Text(c, desktop.Name).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…")
-					})
-					ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
+					mobileListText(c, mobileListTextOptions{Title: m.recentSessionTitle(entry), Subtitle: desktop.Name})
+					mobileListChevron(c)
 				})
 				if row.Clicked() {
 					m.openRecentSession(entry)

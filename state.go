@@ -116,6 +116,8 @@ type App struct {
 	agentNotices          map[string]func()
 	agentNoticeKinds      map[string]string
 	agentNotify           func(mygo.NotificationOptions, func()) func()
+	openWindow            func()
+	closedSessions        map[string]bool
 
 	// posted are changes to make in the next frame, from terminals of a
 	// view without a window, as in tests.
@@ -248,10 +250,7 @@ func (a *App) attach(p *Pane, cols, rows int) {
 			update(func() { a.ring(p) })
 		},
 		OnNotify: func(title, body string) {
-			if title == "" {
-				title = "GoRex"
-			}
-			mygo.NewNotification(mygo.NotificationOptions{Title: title, Body: body}).Show()
+			update(func() { a.showTerminalNotice(p, title, body) })
 		},
 		OnExit: func(int) {
 			update(func() {
@@ -362,6 +361,7 @@ func (a *App) closePane(p *Pane) {
 		return
 	}
 	p.closed = true
+	a.markSessionClosed(p.SID)
 	if p.term != nil {
 		p.term.Close()
 	}
@@ -437,6 +437,7 @@ func (a *App) removeTab(t *Tab) {
 func (a *App) closeTab(t *Tab) {
 	for _, p := range t.panes() {
 		p.closed = true
+		a.markSessionClosed(p.SID)
 		if p.term != nil {
 			p.term.Close()
 		}
@@ -457,6 +458,7 @@ func (a *App) selectTab(i int) {
 		t.Focus.attention = false
 	}
 	a.focusReq = t.Focus
+	a.closeViewedPaneNotice()
 	a.changed()
 }
 
@@ -745,11 +747,11 @@ func (a *App) save() {
 // the server still has and starting new ones in place of those it lost.
 func (a *App) restore() bool {
 	raw, err := a.client.Layout()
-	if err != nil || len(raw) == 0 {
+	if err != nil {
 		return false
 	}
 	var l savedLayout
-	if json.Unmarshal(raw, &l) != nil || len(l.Tabs) == 0 {
+	if len(raw) > 0 && json.Unmarshal(raw, &l) != nil {
 		return false
 	}
 	live := map[string]rex.SessionInfo{}
@@ -808,13 +810,7 @@ func (a *App) restore() bool {
 		if used[in.ID] {
 			continue
 		}
-		t := &Tab{ID: a.id()}
-		p := &Pane{ID: a.id(), SID: in.ID, info: in, startDir: in.Dir}
-		a.attach(p, in.Cols, in.Rows)
-		t.Root = &Node{ID: a.id(), Pane: p}
-		p.Tab, p.Node = t, t.Root
-		t.setFocus(p)
-		a.tabs = append(a.tabs, t)
+		a.addSessionTab(in)
 	}
 	if len(a.tabs) == 0 {
 		return false
@@ -822,6 +818,54 @@ func (a *App) restore() bool {
 	a.active = min(max(l.Active, 0), len(a.tabs)-1)
 	a.focusReq = a.tab().Focus
 	return true
+}
+
+func (a *App) markSessionClosed(sid string) {
+	if sid != "" {
+		if a.closedSessions == nil {
+			a.closedSessions = map[string]bool{}
+		}
+		a.closedSessions[sid] = true
+		a.closeAgentNotice(sid)
+	}
+}
+
+func (a *App) addSessionTab(in rex.SessionInfo) {
+	t := &Tab{ID: a.id()}
+	p := &Pane{ID: a.id(), SID: in.ID, info: in, startDir: in.Dir}
+	t.Root = &Node{ID: a.id(), Pane: p}
+	p.Tab, p.Node = t, t.Root
+	t.setFocus(p)
+	a.attach(p, in.Cols, in.Rows)
+	a.tabs = append(a.tabs, t)
+}
+
+// Remote-created sessions share the same server, but not the GUI's layout.
+// Append their tabs without changing focus or resizing any existing session.
+func (a *App) syncSessionTabs(byID map[string]rex.SessionInfo) {
+	if a.client == nil || a.quitting {
+		return
+	}
+	shown := map[string]bool{}
+	for _, t := range a.tabs {
+		for _, p := range t.panes() {
+			shown[p.SID] = true
+		}
+	}
+	added := false
+	for _, in := range sortedInfos(byID) {
+		if in.ID == "" || in.Exited || shown[in.ID] || a.closedSessions[in.ID] {
+			continue
+		}
+		a.addSessionTab(in)
+		added = true
+	}
+	if added {
+		if a.tab() != nil && a.focusReq == nil && len(shown) == 0 {
+			a.focusReq = a.tab().Focus
+		}
+		a.changed()
+	}
 }
 
 func sortedInfos(m map[string]rex.SessionInfo) []rex.SessionInfo {
@@ -870,6 +914,7 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 	if a.win != nil {
 		a.focusedWin = a.win.IsFocused()
 	}
+	a.closeViewedPaneNotice()
 	for ti, t := range a.tabs {
 		for _, p := range t.panes() {
 			in, ok := byID[p.SID]
@@ -923,6 +968,7 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 			delete(a.agentNoticeKinds, sid)
 		}
 	}
+	a.syncSessionTabs(byID)
 	if a.saveDue && time.Since(a.lastSave) > time.Second {
 		a.save()
 	}

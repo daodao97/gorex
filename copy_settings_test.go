@@ -40,6 +40,15 @@ func TestSettingsSelectionCopyAppliesAndPersists(t *testing.T) {
 	panes = append(panes, third)
 	tt.Frame()
 	waitFor(t, tt, "new shell", func() bool { return strings.Contains(third.term.Text(), "$") })
+	// Keep these disposable sessions quiet while switching tabs and resizing
+	// splits. A shell can redraw its prompt after SIGWINCH over the fed fixture.
+	for _, pane := range panes {
+		pane.term.Send([]byte("exec /bin/cat >/dev/null\r"))
+		waitFor(t, tt, "quiet copy fixture", func() bool {
+			refresh(a)
+			return pane.info.Program == "cat" && strings.Contains(pane.term.Text(), "exec /bin/cat")
+		})
+	}
 	copyPane := func(p *Pane, want string) {
 		t.Helper()
 		for i, tab := range a.tabs {

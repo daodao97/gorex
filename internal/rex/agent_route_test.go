@@ -171,7 +171,7 @@ func TestSharedCodexDaemonRoutesToCorrectLivePane(t *testing.T) {
 	if waiting.State != agents.Waiting || waiting.WaitRevision != 1 {
 		t.Fatal("closing original daemon pane broke routing")
 	}
-	e := AgentEvent{Agent: "codex", At: time.Now(), Input: agents.HookInput{SessionID: "conversation-two", Event: "Stop"}}
+	e := AgentEvent{Agent: "codex", At: time.Now(), Input: agents.HookInput{SessionID: "conversation-two", Event: "Stop", Source: agents.CodexLifecycleSource}}
 	if err := ReportAgent(path, first.id, "invalid-token", e); err == nil {
 		t.Fatal("invalid shared token accepted")
 	}

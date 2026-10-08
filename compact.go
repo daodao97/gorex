@@ -51,7 +51,7 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, detail string, hovered bool) {
 	if t.Focus != nil {
 		if prog := paneProgram(t.Focus); prog.Agent {
-			ui.Icon(c, icon(prog.Glyph)).Size(15, 15).TextColor(programIconColor(c, prog)).
+			programIcon(c, prog.Glyph).Size(15, 15).TextColor(programIconColor(c, prog)).
 				Shrink(0).Role(ui.RoleImage).Label(prog.Name + " icon").Tooltip(prog.Name)
 		}
 	}

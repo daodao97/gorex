@@ -67,6 +67,11 @@ func validateAgentEvent(event *AgentEvent) error {
 
 func (t *agentTracker) apply(e AgentEvent) {
 	h := agents.NormalizeHook(e.Agent, e.Input)
+	if e.Agent == "codex" && h.Event == "Stop" && h.Source != agents.CodexLifecycleSource {
+		// A Stop hook is a proposal to finish, before other hooks may continue
+		// the task. Only turn/completed or an idle metadata snapshot confirms it.
+		return
+	}
 	previousTurn := t.turnID
 	state, reason := agents.HookStatus(e.Agent, h)
 	if state == "" || e.At.Before(t.lastAt) {

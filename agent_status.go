@@ -94,8 +94,22 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 }
 
 func (a *App) paneIsViewed(p *Pane) bool {
+	if p == nil || p.closed {
+		return false
+	}
+	focused := a.focusedWin
+	if a.win != nil {
+		focused = a.win.IsFocused() && !a.win.IsMinimized()
+	}
 	t := a.tab()
-	return a.focusedWin && !a.settingsOpen && !a.paletteOpen && t == p.Tab && t != nil && t.Focus == p && (t.Zoom == nil || t.Zoom == p)
+	// Settings and the command palette do not switch the selected pane.
+	return focused && t == p.Tab && t != nil && t.Focus == p && (t.Zoom == nil || t.Zoom == p)
+}
+
+func (a *App) closeViewedPaneNotice() {
+	if t := a.tab(); t != nil && a.paneIsViewed(t.Focus) {
+		a.closeAgentNotice(t.Focus.SID)
+	}
 }
 
 func (a *App) closeAgentNotice(sid string) {
@@ -155,6 +169,11 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 }
 
 func (a *App) showPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions) {
+	// All notification paths, including terminal OSC messages, share the
+	// current focus check. A cached polling snapshot may already be stale.
+	if p == nil || p.closed || a.quitting || a.paneIsViewed(p) {
+		return
+	}
 	// Headless views use an injected notifier, never the native AppKit API.
 	if a.win == nil && a.agentNotify == nil {
 		return
@@ -165,8 +184,8 @@ func (a *App) showPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions
 	a.closeAgentNotice(p.SID)
 	sid := p.SID
 	click := func() {
-		if a.win == nil && a.agentNotify == nil {
-			a.open()
+		if a.win == nil && a.agentNotify == nil && a.openWindow != nil {
+			a.openWindow()
 		}
 		if a.win != nil {
 			if a.win.IsMinimized() {
@@ -195,6 +214,13 @@ func (a *App) showPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions
 		a.agentNoticeKinds = map[string]string{}
 	}
 	a.agentNoticeKinds[sid] = kind
+}
+
+func (a *App) showTerminalNotice(p *Pane, title, body string) {
+	if title == "" {
+		title = "GoRex"
+	}
+	a.showPaneNotice(p, "terminal", mygo.NotificationOptions{Title: title, Body: body})
 }
 
 func (a *App) focusAgentPane(sid string) bool {

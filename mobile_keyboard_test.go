@@ -32,7 +32,7 @@ func TestMobileModifierArmingLockingAndSessionIsolation(t *testing.T) {
 			t.Fatalf("got %q, want %q: %v", b, want, e)
 		}
 	}
-	tt.Click("键盘")
+	tt.Click("Terminal")
 	tt.Click("Ctrl")
 	tt.Type("c")
 	take("\x03")

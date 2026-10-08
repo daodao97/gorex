@@ -19,7 +19,7 @@ var mobileKeyboardActions = []ui.InputAction{
 		{ID: "tab", Label: "Tab"},
 		{ID: "up", Label: "↑", Symbol: "arrow.up"}, {ID: "down", Label: "↓", Symbol: "arrow.down"},
 		{ID: "newline", Label: "换行"},
-		{ID: "/", Label: "/"}, {ID: "-", Label: "-"}, {ID: "|", Label: "|"}, {ID: "\\", Label: "\\"}, {ID: "paste", Label: "粘贴"},
+		{ID: "paste", Label: "粘贴"},
 	}},
 	{ID: "dismiss", Label: "收起", Symbol: "chevron.down"},
 }
@@ -86,11 +86,8 @@ func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
 		c.Invalidate()
 		return
 	}
-	if key, ok := map[string]ui.Key{"escape": ui.KeyEscape, "tab": ui.KeyTab, "up": ui.KeyUp, "down": ui.KeyDown, "left": ui.KeyLeft, "right": ui.KeyRight, "/": ui.KeySlash, "-": ui.KeyMinus, "|": ui.KeyBackslash, "\\": ui.KeyBackslash}[id]; ok {
+	if key, ok := map[string]ui.Key{"escape": ui.KeyEscape, "tab": ui.KeyTab, "up": ui.KeyUp, "down": ui.KeyDown, "left": ui.KeyLeft, "right": ui.KeyRight}[id]; ok {
 		mods := m.keyboardModifiers
-		if id == "|" {
-			mods |= ui.Shift
-		}
 		if m.term.SendKey(key, mods) {
 			m.consumeKeyboardModifiers()
 		}
@@ -150,9 +147,9 @@ func (m *mobileApp) keyboardPreview(c *ui.Context) {
 	ui.Column(c).FillWidth().Padding(0, 8).Background(c.Theme().Surface).Children(func() {
 		if m.keyboardMore {
 			items := actions[6].Items
-			for i := 0; i < len(items); i += 5 {
+			for i := 0; i < len(items); i += 6 {
 				ui.Row(c).FillWidth().Gap(2).Children(func() {
-					for _, a := range items[i:min(i+5, len(items))] {
+					for _, a := range items[i:min(i+6, len(items))] {
 						button(a)
 					}
 				})

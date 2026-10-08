@@ -19,6 +19,7 @@ func (m *mobileApp) pauseConnection() {
 		m.retryTimer = nil
 	}
 	m.busy = false
+	m.endingOpen, m.closingSession = false, ""
 	m.reconnecting = true
 	if m.stream != nil {
 		m.stream.replace(nil)

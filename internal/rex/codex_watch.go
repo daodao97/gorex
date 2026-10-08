@@ -64,7 +64,7 @@ func pollCodexThread(ctx context.Context, socket, thread string, parent int, obs
 			if json.Unmarshal(raw, &response) != nil || response.ID != sequence {
 				continue
 			}
-			if len(response.Error) > 0 {
+			if len(response.Error) > 0 && string(response.Error) != "null" {
 				return errors.New("Codex metadata unavailable")
 			}
 			if result == nil {
@@ -94,6 +94,11 @@ func pollCodexThread(ctx context.Context, socket, thread string, parent int, obs
 		if err := call("thread/turns/list", map[string]any{"threadId": thread, "limit": 1, "sortDirection": "desc", "itemsView": "notLoaded"}, &turns); err != nil {
 			return err
 		}
+		// Confirm status after reading turn history. An earlier idle record
+		// must not finish a turn that started between these separate reads.
+		if err := call("thread/read", map[string]any{"threadId": thread, "includeTurns": false}, &metadata); err != nil {
+			return err
+		}
 		if metadata.Thread.ID != thread || metadata.Thread.Parent != "" {
 			return errors.New("not the requested root thread")
 		}
@@ -121,24 +126,25 @@ func (o *codexObserver) snapshot(thread codexThread, turn codexTurn) {
 	if thread.ID != o.thread.ID {
 		return
 	}
+	o.thread.Status = thread.Status
+	if thread.Status.Type == "active" && !o.active && turn.Status != "inProgress" {
+		// A new active turn may not have reached history yet. Clear the old
+		// completion badge, without attributing the old turn to this new work.
+		o.turn, o.active, o.wait, o.finished = "", true, "", ""
+		o.event("UserPromptSubmit", "")
+	}
 	if turn.ID != "" && turn.Status == "inProgress" && (!o.active || o.turn != turn.ID) {
-		o.turn, o.active, o.wait = turn.ID, true, ""
+		o.turn, o.active, o.wait, o.finished = turn.ID, true, "", ""
 		o.event("UserPromptSubmit", "")
 	}
 	o.waiting(thread.Status)
+	// These two records are fetched separately. An active thread paired with
+	// a completed turn can be an old result or a continuation still running.
 	if o.active && turn.ID == o.turn {
-		event := ""
 		switch turn.Status {
-		case "completed":
-			event = "Stop"
-		case "failed":
-			event = "StopFailure"
-		case "interrupted":
-			event = "Interrupt"
+		case "completed", "failed", "interrupted":
+			o.finished = turn.Status
 		}
-		if event != "" {
-			o.active, o.wait = false, ""
-			o.event(event, "")
-		}
+		o.finishIfIdle()
 	}
 }

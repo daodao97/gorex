@@ -14,6 +14,32 @@ import (
 var assets embed.FS
 
 var svgs = map[string]*ui.SVG{}
+var programBitmaps = map[string]*ui.Bitmap{}
+
+// programIcon shares vector and raster logos across tabs, the command palette
+// and mobile lists. Raster logos keep their original colors.
+func programIcon(c *ui.Context, name string) *ui.Element {
+	if strings.HasPrefix(name, "agent:") && strings.HasSuffix(name, ".png") {
+		bitmap := programBitmaps[name]
+		if bitmap == nil {
+			data, err := assets.ReadFile("assets/agents/" + strings.TrimPrefix(name, "agent:"))
+			if err != nil {
+				panic(err)
+			}
+			bitmap, err = ui.DecodeBitmap(data)
+			if err != nil {
+				panic(err)
+			}
+			programBitmaps[name] = bitmap
+		}
+		return ui.Image(c, bitmap).Fit(ui.Contain)
+	}
+	switch name {
+	case "agent:agy", "agent:dsh", "agent:reasonix", "agent:mistermorph", "agent:muse", "agent:empryo", "agent:minimax-code":
+		return ui.Image(c, icon(name)).Fit(ui.Contain)
+	}
+	return ui.Icon(c, icon(name))
+}
 
 // icon returns an embedded SVG: "x" from the icons, "brand:git" from the
 // brands.
@@ -124,8 +150,10 @@ func init() {
 	}
 	for _, agent := range agents.All {
 		glyph := "agent:" + agent.ID
-		if agent.ID == "aider" {
+		if agent.ID == "aider" || agent.ID == "ante" {
 			glyph = "bot"
+		} else if agent.ID == "atomcode" {
+			glyph += ".png"
 		}
 		color := agentColors[agent.ID]
 		if color == "" {

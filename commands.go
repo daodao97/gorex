@@ -426,7 +426,7 @@ func (a *App) palette(c *ui.Context, k *colors) {
 					it.run()
 				}
 				row.Children(func() {
-					ui.Icon(c, icon(it.glyph)).Size(15, 15).TextColor(k.textMuted)
+					programIcon(c, it.glyph).Size(15, 15).TextColor(k.textMuted)
 					ui.Text(c, it.title).FontSize(13.5).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(0.3).MinWidth(0)
 					if it.detail != "" {
 						ui.Text(c, it.detail).FontSize(13).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)

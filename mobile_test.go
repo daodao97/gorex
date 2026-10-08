@@ -113,9 +113,13 @@ func TestMobileScreensFitPhoneAndKeyboard(t *testing.T) {
 				saveSettingsImage(t, tt, "mobile-connect-"+map[bool]string{false: "light", true: "dark"}[dark])
 			}
 			m.client = &rex.Client{}
-			m.hello.Host.Name = "我的桌面"
+			m.hello.Host.Name = "MacBook Pro (2)"
 			m.hello.Host.Home = "/Users/fixture"
-			m.sessions = []rex.SessionInfo{{ID: "fixture", Title: "Codex", Dir: "/Users/fixture/project", Idle: true, Cols: 80, Rows: 24}}
+			m.sessions = []rex.SessionInfo{
+				{ID: "fixture", Title: "安装当前修改到 iOS 真机 | GoRex 终端与会话同步", Program: "codex", Dir: "/Users/fixture/work/github/quickgui/gorex", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "codex", State: "running"}},
+				{ID: "workers", Title: "确认线上 50 个 worker 生效", Program: "codex", Dir: "/Users/fixture/work/github/gpt-pay", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "codex", State: "waiting"}},
+				{ID: "claude", Title: "Claude Code", Program: "claude", Dir: "/Users/fixture/work/github/quickgui/gorex", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "claude", State: "completed"}},
+			}
 			tt.Frame()
 			if r, ok := tt.Find("打开会话 fixture"); !ok || r.H < 44 || r.X+r.W > size[0]+1 {
 				t.Fatalf("unusable session row on %v", size)
@@ -143,7 +147,12 @@ func TestMobileScreensFitPhoneAndKeyboard(t *testing.T) {
 				saveSettingsImage(t, tt, "mobile-terminal-"+map[bool]string{false: "light", true: "dark"}[dark])
 			}
 			// Back must detach without drawing a closed terminal in the same frame.
-			tt.Click("返回")
+			back, ok := tt.Find("返回")
+			if !ok || back.W < 44 || back.H < 44 {
+				t.Fatal("compact header shrank the back touch target")
+			}
+			// The part of the touch target behind the title still goes back.
+			tt.ClickAt(back.X+back.W-2, back.Y+back.H/2)
 			tt.Frame()
 			if m.term != nil {
 				t.Fatal("Back retained the terminal")
@@ -164,7 +173,7 @@ func TestMobileKeyboardActionsStayVisibleAndKeepFocus(t *testing.T) {
 		if _, ok := tt.Find("Esc"); ok {
 			t.Fatal("reading mode retained a command toolbar")
 		}
-		tt.Click("键盘")
+		tt.Click("Terminal")
 		for _, action := range mobileKeyboardActions {
 			r, ok := tt.Find(action.Label)
 			if !ok || r.W < 44 || r.H < 44 || r.X < 0 || r.X+r.W > float32(width)+1 {
@@ -176,10 +185,19 @@ func TestMobileKeyboardActionsStayVisibleAndKeepFocus(t *testing.T) {
 		if !tt.Focused("Terminal") {
 			t.Fatal("secondary keys dismissed terminal input")
 		}
-		for _, label := range []string{"Shift", "←", "→", "↑", "↓", "粘贴"} {
-			if r, ok := tt.Find(label); !ok || r.W < 44 || r.X+r.W > float32(width)+1 {
+		for _, label := range []string{"Shift", "Tab", "←", "→", "↑", "↓", "换行", "粘贴"} {
+			if r, ok := tt.Find(label); !ok || r.W < 44 || r.H < 44 || r.X+r.W > float32(width)+1 {
 				t.Fatalf("secondary key hidden: %s", label)
 			}
+		}
+		shift, _ := tt.Find("Shift")
+		paste, _ := tt.Find("粘贴")
+		escape, _ := tt.Find("Esc")
+		if shift.Y != paste.Y || escape.Y-shift.Y != 44 {
+			t.Fatalf("expanded accessory must use two rows at width %d: Shift=%+v Paste=%+v Esc=%+v", width, shift, paste, escape)
+		}
+		if width == 390 {
+			saveSettingsImage(t, tt, "mobile-keyboard-expanded")
 		}
 		tt.Click("更多")
 		if _, ok := tt.Find("粘贴"); ok {
@@ -192,7 +210,7 @@ func TestMobileKeyboardActionsStayVisibleAndKeepFocus(t *testing.T) {
 		if _, ok := tt.Find("Esc"); ok {
 			t.Fatal("reading mode retained the keyboard accessory")
 		}
-		tt.Click("键盘")
+		tt.Click("Terminal")
 		if !tt.Focused("Terminal") {
 			t.Fatal("keyboard entry did not resume terminal input")
 		}

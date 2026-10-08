@@ -43,6 +43,11 @@ func NormalizeHook(agent string, h HookInput) HookInput {
 }
 
 const (
+	// CodexLifecycleSource marks events confirmed by the pane's app-server
+	// observer. Native Stop hooks run before continuation hooks have decided
+	// whether the turn is actually over.
+	CodexLifecycleSource = "gorex_codex_lifecycle"
+
 	Ready     = "ready"
 	Running   = "running"
 	Waiting   = "waiting"

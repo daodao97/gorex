@@ -41,6 +41,9 @@ iOS uses the UIKit host in the pinned MyGo fork.
   Qoder CN CLI and TraeCode. Native executables and common Node/Python/npm
   launchers are recognized. Custom tab names remain intact; exiting an Agent
   restores the shell title and removes the Agent icon.
+  Recognition also covers 17 additional Magpie terminal clients, including
+  Antigravity CLI, MiMo Code, OmO, DeepSeek Harness, Hermes Agent, Cline and
+  AtomCode, for 37 in total. See the [full catalog and Magpie comparison](docs/agent-support.md).
 - **Agent status and input reminders:** Claude Code, Codex, Gemini CLI and Qwen Code hooks
   report ready, running, waiting for authorization/answers, completed and
   failed states. Waiting panes take priority in a split tab; click its status
@@ -158,10 +161,9 @@ copies the selected text. Long presses do not open the keyboard,
 and the cursor keeps blinking while the keyboard is hidden. The phone
 decodes ANSI at the desktop's original grid size, then reflows the primary
 screen into its own columns and rows at a readable font size. Keyboard and
-orientation changes adjust only the phone's view. **完整** shows the original
-screen scaled to fit, and **适应** returns to the local layout. The original grid of full-screen programs remains available in **完整** mode. Programs in a
-shared session still generate output for a single PTY; the phone never
-changes the desktop's PTY dimensions.
+orientation changes adjust only the phone's view. Tap the terminal to open
+the keyboard. Full-screen programs still generate one layout for a shared
+PTY; decoding and local reflow do not provide independent application layouts.
 
 The QR code contains the Tailcat capability needed to access every session
 on that desktop. Keep it private. The desktop saves its identity and relay in
@@ -318,8 +320,18 @@ Start a new Agent session after installation. Claude Code runs normally.
 For Codex, run `codex` normally and review/trust the added handlers in `/hooks`.
 New terminals prepend a pane-local Codex launcher. Interactive tasks (including
 resume/fork) connect to the existing shared daemon through a private local relay.
+Desktop zsh, bash, sh, dash, ksh and fish terminals clear inherited color switches
+before loading the user's login configuration, including when the session service
+is retained across an app update. Already-running shells and Agent CLIs keep their
+existing environment; reopen those CLI sessions after their tasks finish to apply
+the new color defaults.
 GoRex observes its structured turn and waiting events, associating the thread IDs
-returned to that CLI with the owning pane. The daemon can already be running outside
+returned to that CLI with the owning pane. Codex completion badges and reminders
+require a final `turn/completed` event or matching idle-thread metadata. A native
+`Stop` hook alone cannot announce success, since another hook can continue the task;
+completed history also cannot override an active thread. This requires the updated
+session service and a newly started CLI relay after existing tasks finish.
+The daemon can already be running outside
 GoRex: no special startup flags, daemon restart or inherited hook environment are
 required. Separate panes in the same directory retain independent status. The relay
 preserves the pane's working directory and forwards messages and approval responses

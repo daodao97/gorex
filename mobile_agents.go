@@ -8,6 +8,15 @@ import (
 type mobileAgentNotice struct{ ID, Desktop, Session, Title, Body string }
 
 func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
+	if len(m.closedSessions) > 0 {
+		filtered := make([]rex.SessionInfo, 0, len(sessions))
+		for _, s := range sessions {
+			if !m.closedSessions[m.preferenceKey(s.ID)] {
+				filtered = append(filtered, s)
+			}
+		}
+		sessions = filtered
+	}
 	if m.agentPrevious == nil {
 		m.agentPrevious = map[string]rex.SessionInfo{}
 	}

@@ -21,7 +21,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -411,28 +410,5 @@ func hostInfo() HostInfo {
 // Spawn starts a server in the background, as a process of its own that
 // outlives the app: the executable run with -server.
 func Spawn() error {
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(Dir(), 0o700); err != nil {
-		return err
-	}
-	logf, err := os.OpenFile(filepath.Join(Dir(), "server.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		return err
-	}
-	defer logf.Close()
-	devnull, err := os.Open(os.DevNull)
-	if err != nil {
-		return err
-	}
-	defer devnull.Close()
-	cmd := exec.Command(exe, "-server")
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = devnull, logf, logf
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return cmd.Process.Release()
+	return StartBackground([]string{"-server"}, Dir(), "server.log")
 }

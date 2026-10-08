@@ -26,7 +26,11 @@ func TestMobileHomeReusesDesktopConnectionAndExplicitDisconnectClosesIt(t *testi
 	m := &mobileApp{client: client, link: link, closeTunnel: func() { closedTunnel <- struct{}{} }, history: []desktopRecent{{ID: "mac", Name: "Mac", Link: link}}}
 	m.hello.Host.ID = "mac"
 	tt := ui.NewTester(m.view, 390, 750)
-	tt.Click("返回")
+	back, ok := tt.Find("返回")
+	if !ok || back.W < 44 || back.H < 44 {
+		t.Fatal("list header shrank the back touch target")
+	}
+	tt.ClickAt(back.X+back.W-2, back.Y+back.H/2)
 	tt.Frame()
 	if !m.home || m.client != client || m.navigation.Path() != "/connect" {
 		t.Fatal("home closed the retained connection")
@@ -45,7 +49,10 @@ func TestMobileHomeReusesDesktopConnectionAndExplicitDisconnectClosesIt(t *testi
 	default:
 	}
 	tt.Click("返回")
-	tt.Click("断开桌面连接")
+	if _, ok := tt.Find("断开桌面连接"); ok {
+		t.Fatal("home retained the removed disconnect action")
+	}
+	m.disconnect(false)
 	tt.Frame()
 	if m.client != nil || len(m.history) != 1 {
 		t.Fatal("explicit disconnect retained the client or removed history")

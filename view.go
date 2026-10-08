@@ -20,6 +20,7 @@ func (a *App) view(c *ui.Context) {
 	a.runPosted()
 	k := colorsOf(c)
 	a.focusedWin = a.win == nil || a.win.IsFocused()
+	a.closeViewedPaneNotice()
 	c.Root().Background(terminalBackground(c))
 	ui.Column(c).Fill().Children(func() {
 		a.compactTitleBar(c, k, c.TitleBar())

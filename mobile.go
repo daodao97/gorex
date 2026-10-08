@@ -14,7 +14,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
 	"gorex/internal/mobile"
 	"gorex/internal/remote"
 	"gorex/internal/rex"
@@ -22,63 +21,67 @@ import (
 )
 
 type mobileApp struct {
-	win                                     *mygo.Window
-	client                                  *rex.Client
-	closeTunnel                             func()
-	cancel                                  context.CancelFunc
-	generation                              int
-	hello                                   rex.Hello
-	sessions                                []rex.SessionInfo
-	term                                    *terminal.Terminal
-	stream                                  *mobileStream
-	overview                                bool
-	selected                                rex.SessionInfo
-	link, error                             string
-	history                                 []desktopRecent
-	recentSessions                          []mobileRecentSession
-	historyEpoch                            int
-	home                                    bool
-	pollCancel                              context.CancelFunc
-	resumeCheckID                           uint64
-	busy, scanning, creating, focusTerminal bool
-	directory                               string
-	resumeLink, resumeSID                   string
-	storage                                 chan func()
-	store                                   *mygo.SecureStore
-	scroll                                  ui.ScrollState
-	navigation                              *ui.Router
-	navigationPage                          string
-	keyboardMore                            bool
-	background                              bool
-	presence                                map[string]desktopPresence
-	presenceCancel                          context.CancelFunc
-	presenceEpoch                           int
-	reconnecting                            bool
-	retryAttempt                            int
-	retryTimer                              *time.Timer
-	sessionPreferences                      map[string]mobileSessionPreference
-	preferenceEpoch                         int
-	editingSession                          string
-	editingOpen                             bool
-	editingName                             string
-	editingPinned                           bool
-	agentPrevious                           map[string]rex.SessionInfo
-	notificationDenied                      bool
-	agentNotify                             func(mobileAgentNotice)
-	pendingDesktop, pendingSession          string
-	pushDeviceID, pushToken, pushError      string
-	pushDisabled                            bool
-	pushRequesting                          bool
-	pushSnapshot                            atomic.Pointer[rex.DeviceInfo]
-	noticeReceipts                          map[string]time.Time
-	noticeReceiptsLoaded                    bool
-	preferenceTouched                       map[string]bool
-	imagePasteBusy                          bool
-	imagePasteCancel                        context.CancelFunc
-	imagePasteEpoch                         int
-	keyboardModifiers, keyboardLocked       ui.Modifiers
-	connectionIssue                         *mobileConnectionIssue
-	connectionDetailsOpen                   bool
+	win                                *mygo.Window
+	client                             *rex.Client
+	closeTunnel                        func()
+	cancel                             context.CancelFunc
+	generation                         int
+	hello                              rex.Hello
+	sessions                           []rex.SessionInfo
+	term                               *terminal.Terminal
+	stream                             *mobileStream
+	selected                           rex.SessionInfo
+	link, error                        string
+	history                            []desktopRecent
+	historySelection                   map[string]bool
+	recentSessions                     []mobileRecentSession
+	historyEpoch                       int
+	home                               bool
+	pollCancel                         context.CancelFunc
+	resumeCheckID                      uint64
+	busy, scanning, creating           bool
+	directory                          string
+	resumeLink, resumeSID              string
+	storage                            chan func()
+	store                              *mygo.SecureStore
+	scroll                             ui.ScrollState
+	navigation                         *ui.Router
+	navigationPage                     string
+	keyboardMore                       bool
+	background                         bool
+	presence                           map[string]desktopPresence
+	presenceCancel                     context.CancelFunc
+	presenceEpoch                      int
+	reconnecting                       bool
+	retryAttempt                       int
+	retryTimer                         *time.Timer
+	sessionPreferences                 map[string]mobileSessionPreference
+	preferenceEpoch                    int
+	editingSession                     string
+	editingOpen                        bool
+	editingName                        string
+	editingPinned                      bool
+	endingSession                      rex.SessionInfo
+	endingOpen                         bool
+	closingSession                     string
+	closedSessions                     map[string]bool
+	agentPrevious                      map[string]rex.SessionInfo
+	notificationDenied                 bool
+	agentNotify                        func(mobileAgentNotice)
+	pendingDesktop, pendingSession     string
+	pushDeviceID, pushToken, pushError string
+	pushDisabled                       bool
+	pushRequesting                     bool
+	pushSnapshot                       atomic.Pointer[rex.DeviceInfo]
+	noticeReceipts                     map[string]time.Time
+	noticeReceiptsLoaded               bool
+	preferenceTouched                  map[string]bool
+	imagePasteBusy                     bool
+	imagePasteCancel                   context.CancelFunc
+	imagePasteEpoch                    int
+	keyboardModifiers, keyboardLocked  ui.Modifiers
+	connectionIssue                    *mobileConnectionIssue
+	connectionDetailsOpen              bool
 }
 
 type desktopRecent struct {
@@ -185,13 +188,14 @@ func mobileMain() {
 		m.storage <- func() {
 			var history []desktopRecent
 			var recentSessions []mobileRecentSession
+			historySaved := false
 			if saved, err := m.store.Get("recent-sessions"); err == nil {
 				json.Unmarshal(saved, &recentSessions)
 			}
 			if saved, err := m.store.Get("history"); err == nil {
-				json.Unmarshal(saved, &history)
+				historySaved = json.Unmarshal(saved, &history) == nil
 			}
-			if len(history) == 0 {
+			if !historySaved {
 				if saved, err := m.store.Get("recent"); err == nil {
 					history = []desktopRecent{{Link: string(saved), Name: "桌面"}}
 				}
@@ -236,6 +240,7 @@ func (m *mobileApp) detach() {
 }
 
 func (m *mobileApp) disconnect(forget bool) {
+	m.historySelection = nil
 	m.stopRecentPresence()
 	m.stopPolling()
 	m.home = true
@@ -248,6 +253,7 @@ func (m *mobileApp) disconnect(forget bool) {
 	}
 	m.agentPrevious = nil
 	m.editingOpen = false
+	m.endingOpen, m.closingSession = false, ""
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -288,6 +294,7 @@ func (m *mobileApp) connect(raw string) {
 		return
 	}
 	link := remote.Link(addr)
+	m.historySelection = nil
 	if m.link == link && m.connectionUsable() {
 		m.detach()
 		m.home, m.creating, m.error = false, false, ""
@@ -506,6 +513,9 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 	stream = newMobileStream(m.client.ViewStream(s.ID), func() {
 		mygo.RunOnMain(func() {
 			if m.stream == stream && !stream.hasTransport() {
+				if m.closingSession == m.selected.ID {
+					return // The requested close is handled by its control response.
+				}
 				if m.selected.Exited {
 					stream.Close()
 					return
@@ -515,7 +525,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		})
 	})
 	stream.geometry(s.Cols, s.Rows)
-	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OptionAsAlt: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, InputContext: true, OnPaste: m.pasteClipboard})
+	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OptionAsAlt: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, InputContext: true, OnPaste: m.pasteClipboard})
 	if err != nil {
 		stream.Close()
 		m.error = "无法打开终端：" + err.Error()
@@ -598,6 +608,7 @@ func (m *mobileApp) view(c *ui.Context) {
 		})
 	})
 	m.sessionEditor(c)
+	m.sessionEndDialog(c)
 	m.connectionDialog(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
 		// A completed edge gesture changes history. Release resources only
@@ -661,52 +672,46 @@ func (m *mobileApp) syncNavigation() {
 	m.navigationPage = page
 }
 
+// Keep the full touch target while letting the title sit beside the visible
+// chevron. Header text passes pointer events through the overlapping area.
+func mobileBackButton(c *ui.Context) *ui.Element {
+	button := ui.ButtonBase(c).Key("mobile-back").Label("返回").Role(ui.RoleButton).Size(44, 44).Margin(0, -20, 0, 0).Justify(ui.Start).Radius(12)
+	if button.Pressed() {
+		button.Background(c.Theme().SurfacePressed)
+	}
+	return button.Children(func() {
+		ui.Icon(c, icon("chevron-left")).Size(24, 24).TextColor(c.Theme().Accent)
+	})
+}
+
 func (m *mobileApp) header(c *ui.Context, title string, back func(), terminalPage bool) {
 	ui.Row(c).Height(52).Padding(0, 8).AlignItems(ui.Center).Children(func() {
 		if back != nil {
-			button := ui.ButtonBase(c).Key("mobile-back").Label("返回").Role(ui.RoleButton).Size(44, 44).Radius(12)
-			if button.Pressed() {
-				button.Background(c.Theme().SurfacePressed)
-			}
-			button.Children(func() { ui.Icon(c, icon("chevron-left")).Size(24, 24).TextColor(c.Theme().Accent) })
-			if button.Clicked() {
+			if mobileBackButton(c).Clicked() {
 				back()
 			}
 		} else {
 			ui.Box(c).Size(44, 44).Shrink(0)
 		}
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).PassThrough().Children(func() {
+			align := ui.Center
+			if back != nil {
+				align = ui.Start
+			}
 			size := float32(17)
 			if terminalPage && m.needsRecovery() {
 				size = 15
 			}
-			ui.Text(c, title).FontSize(size).Bold().TextAlign(ui.Center).FillWidth().SingleLine().Ellipsis("…")
+			ui.Text(c, title).FontSize(size).Bold().TextAlign(align).FillWidth().SingleLine().Ellipsis("…").PassThrough()
 			if terminalPage && m.needsRecovery() {
-				ui.Text(c, m.recoveryStatus()).Label("正在重连").FontSize(11).TextColor(c.Theme().TextMuted).TextAlign(ui.Center).FillWidth().SingleLine().Ellipsis("…")
+				ui.Text(c, m.recoveryStatus()).Label("正在重连").FontSize(11).TextColor(c.Theme().TextMuted).TextAlign(align).FillWidth().SingleLine().Ellipsis("…").PassThrough()
 			}
 		})
-		if terminalPage && m.term != nil {
-			if m.needsRecovery() {
-				if ui.ButtonBase(c).Label("连接恢复操作").Role(ui.RoleButton).Size(44, 44).Children(func() {
-					ui.Text(c, "•••").FontSize(16).TextColor(c.Theme().TextMuted)
-				}).Clicked() {
-					m.connectionDetailsOpen = true
-				}
-			} else if ui.ButtonBase(c).Key("mobile-keyboard").Label("键盘").Role(ui.RoleButton).KeepFocus().Size(44, 44).Children(func() {
-				ui.Icon(c, icon("keyboard")).Size(22, 22).TextColor(c.Theme().Accent)
+		if terminalPage && m.term != nil && m.needsRecovery() {
+			if ui.ButtonBase(c).Label("连接恢复操作").Role(ui.RoleButton).Size(44, 44).Children(func() {
+				ui.Text(c, "•••").FontSize(16).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
-				m.focusTerminal = true
-				c.Invalidate()
-			}
-			label := "完整"
-			if m.overview {
-				label = "适应"
-			}
-			if ui.ButtonBase(c).Label(label).Role(ui.RoleButton).KeepFocus().Size(44, 44).Children(func() {
-				ui.Text(c, label).FontSize(14).TextColor(c.Theme().Accent)
-			}).Clicked() {
-				m.overview = !m.overview
-				m.term.SetFitToView(m.overview)
+				m.connectionDetailsOpen = true
 			}
 		} else {
 			ui.Box(c).Size(44, 44).Shrink(0)
@@ -730,12 +735,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 	m.refreshRecentPresence(c)
 	m.header(c, "GoRex", nil, false)
 	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().HideScrollbars().Padding(16).Gap(16).Children(func() {
-		ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "电脑上的 GoRex · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
-			if m.client != nil && mobileTextAction(c, "断开桌面连接", "断开").Disabled(m.busy || m.reconnecting).Clicked() {
-				m.disconnect(false)
-			}
-		})
+		ui.Text(c, "电脑上的 GoRex · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted).FillWidth()
 		if ui.PrimaryButton(c, "").Label("扫码连接桌面").Role(ui.RoleButton).Height(48).FillWidth().Disabled(m.busy || m.scanning || m.reconnecting).Children(func() {
 			ui.Icon(c, icon("scan-line")).Size(20, 20)
 			ui.Text(c, "扫码连接桌面").FontSize(16)
@@ -752,15 +752,24 @@ func (m *mobileApp) connectView(c *ui.Context) {
 			})
 		}
 		ui.Column(c).FillWidth().Children(func() {
-			ui.Row(c).FillWidth().Height(44).Padding(0, 4).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, "最近连接").FontSize(13).TextColor(c.Theme().TextMuted).Grow(1)
-				if len(m.history) > 0 && mobileTextAction(c, "清除连接记录", "清除").Disabled(m.busy).Clicked() {
-					m.disconnect(true)
+			mobileListSectionHeader(c, "最近连接", func() {
+				if len(m.history) > 0 {
+					label, glyph := "清除连接记录", "trash-2"
+					if m.historySelection != nil {
+						label, glyph = "确认清除连接记录", "check"
+					}
+					if mobileIconAction(c, label, glyph).Disabled(m.busy || m.scanning || m.reconnecting).Clicked() {
+						if m.historySelection == nil {
+							m.historySelection = make(map[string]bool)
+						} else {
+							m.clearSelectedDesktopHistory()
+						}
+					}
 				}
 			})
-			ui.Column(c).FillWidth().Radius(12).Clip().Background(c.Theme().Surface).Children(func() {
+			mobileListGroup(c).Children(func() {
 				if len(m.history) == 0 {
-					ui.Text(c, "连接过的桌面会显示在这里").FontSize(14).TextColor(c.Theme().TextMuted).Padding(16)
+					mobileListEmpty(c, "连接过的桌面会显示在这里")
 				}
 				for i, entry := range m.history {
 					entry := entry
@@ -772,11 +781,23 @@ func (m *mobileApp) connectView(c *ui.Context) {
 					if m.isConnectedDesktop(entry) {
 						status, label = "已连接", "打开桌面 "+entry.Name
 					}
+					selecting := m.historySelection != nil
+					checked := m.historySelection[entry.Link]
+					if selecting {
+						label = "选择连接 " + entry.Name
+					}
 					row := mobileListRow(c, "desktop-"+entry.Link, label, 56).Value(status).Disabled(m.busy || m.scanning || m.reconnecting)
+					if selecting {
+						row.Role(ui.RoleCheckBox).Checked(checked)
+					}
 					row.Children(func() {
-						platform := desktopPlatformProgram(entry.OS)
-						mobileListIcon(c, platform.Glyph, colorsOf(c).iconMuted).Role(ui.RoleImage).Label(platform.Name + " icon")
-						ui.Text(c, entry.Name).FontSize(15).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+						if selecting {
+							mobileHistoryCheckbox(c, checked)
+						} else {
+							platform := desktopPlatformProgram(entry.OS)
+							mobileListIcon(c, platform.Glyph, colorsOf(c).iconMuted).Role(ui.RoleImage).Label(platform.Name + " icon")
+						}
+						mobileListText(c, mobileListTextOptions{Title: entry.Name})
 						ui.Row(c).Gap(5).Shrink(0).AlignItems(ui.Center).Children(func() {
 							color := c.Theme().TextMuted
 							if m.presence[entry.Link].state == desktopOnline {
@@ -785,10 +806,17 @@ func (m *mobileApp) connectView(c *ui.Context) {
 							ui.Box(c).Size(6, 6).Radius(3).Background(color)
 							ui.Text(c, status).Label("设备状态 " + entry.Name + " " + status).FontSize(12).TextColor(c.Theme().TextMuted)
 						})
-						ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
+						if !selecting {
+							mobileListChevron(c)
+						}
 					})
 					if row.Clicked() {
-						m.openDesktop(entry)
+						if selecting {
+							m.historySelection[entry.Link] = !checked
+							c.Invalidate()
+						} else {
+							m.openDesktop(entry)
+						}
 					}
 				}
 			})
@@ -801,38 +829,15 @@ func (m *mobileApp) connectView(c *ui.Context) {
 	})
 }
 
-func mobileTextAction(c *ui.Context, label, text string) *ui.Element {
-	return ui.ButtonBase(c).Label(label).Role(ui.RoleButton).MinWidth(44).Height(44).Padding(0, 8).Children(func() {
-		ui.Text(c, text).FontSize(14).TextColor(c.Theme().Accent)
-	})
-}
-
-func mobileListRow(c *ui.Context, key, label string, height float32) *ui.Element {
-	row := ui.ButtonBase(c).Key(key).Label(label).Role(ui.RoleButton).FillWidth().Height(height).Padding(0, 12).Gap(12)
-	if row.Pressed() {
-		row.Background(c.Theme().SurfacePressed)
-	}
-	return row
-}
-
-func mobileListIcon(c *ui.Context, name string, color ui.Color) *ui.Element {
-	return ui.Box(c).Size(32, 32).Shrink(0).Center().Children(func() {
-		ui.Icon(c, icon(name)).Size(21, 21).TextColor(color)
-	})
-}
-
-func mobileListDivider(c *ui.Context) {
-	ui.Box(c).FillWidth().Height(1).Margin(0, 0, 0, 56).Background(colorsOf(c).hover)
-}
-
 func (m *mobileApp) sessionsView(c *ui.Context) {
 	ui.Row(c).Height(52).Padding(0, 8).AlignItems(ui.Center).Children(func() {
-		if ui.ButtonBase(c).Label("返回").Role(ui.RoleButton).Size(44, 44).Children(func() {
-			ui.Icon(c, icon("chevron-left")).Size(24, 24).TextColor(c.Theme().Accent)
-		}).Clicked() {
+		if mobileBackButton(c).Clicked() {
 			m.goHome()
 		}
-		ui.Text(c, "会话").FontSize(17).Bold().TextAlign(ui.Center).Grow(1)
+		ui.Row(c).Grow(1).Gap(8).AlignItems(ui.Center).PassThrough().Children(func() {
+			ui.Text(c, "会话").FontSize(17).Bold().PassThrough()
+			ui.Text(c, fmt.Sprint(len(m.sessions))).FontSize(13).TextColor(c.Theme().TextMuted).PassThrough()
+		})
 		if ui.ButtonBase(c).Label("新建会话").Disabled(m.reconnecting).Role(ui.RoleButton).Size(44, 44).Children(func() {
 			ui.Icon(c, icon("plus")).Size(23, 23).TextColor(c.Theme().Accent)
 		}).Clicked() {
@@ -841,11 +846,15 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			m.error = ""
 		}
 	})
-	ui.Row(c).FillWidth().Padding(4, 20, 12, 20).Gap(8).AlignItems(ui.Center).Children(func() {
-		ui.Box(c).Size(6, 6).Shrink(0).Radius(3).Background(colorsOf(c).busy.Mix(colorsOf(c).textMuted, 0.3))
-		ui.Text(c, m.hello.Host.Name).FontSize(14).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
-		ui.Text(c, fmt.Sprintf("%d 个会话", len(m.sessions))).FontSize(13).TextColor(c.Theme().TextMuted).Grow(1)
-		ui.Text(c, "提醒").FontSize(13).TextColor(c.Theme().TextMuted)
+	ui.Row(c).FillWidth().Height(44).Padding(0, 20, 8, 20).Gap(8).AlignItems(ui.Center).Children(func() {
+		statusColor := colorsOf(c).busy.Mix(colorsOf(c).textMuted, 0.3)
+		status := "桌面已连接"
+		if m.needsRecovery() || m.connectionIssue != nil {
+			statusColor, status = colorsOf(c).attention, "桌面连接已中断"
+		}
+		ui.Box(c).Label(status).Size(6, 6).Shrink(0).Radius(3).Background(statusColor)
+		ui.Text(c, m.hello.Host.Name).FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+		ui.Icon(c, icon("bell")).Role(ui.RoleImage).Label("任务提醒").Size(16, 16).TextColor(c.Theme().TextMuted)
 		enabled := !m.pushDisabled
 		if ui.Switch(c, &enabled).Label("后台任务提醒").Changed() {
 			m.setPushEnabled(enabled)
@@ -859,54 +868,12 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			}
 		})
 	}
-	m.errorView(c)
-	ui.Scroll(c).Key("mobile-sessions").Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(0, 16, 16, 16).Children(func() {
-		ui.Column(c).FillWidth().Radius(12).Clip().Background(c.Theme().Surface).Children(func() {
-			if len(m.sessions) == 0 {
-				ui.Column(c).FillWidth().Padding(24, 16).Gap(6).Children(func() {
-					ui.Text(c, "暂无会话").FontSize(16)
-					ui.Text(c, "轻点右上角 ＋ 新建终端").FontSize(14).TextColor(c.Theme().TextMuted)
-				})
-			}
-			for i, session := range m.orderedSessions() {
-				s := session
-				if i > 0 {
-					mobileListDivider(c)
-				}
-				row := mobileListRow(c, "session-"+s.ID, "打开会话 "+s.ID, 72).Disabled(m.reconnecting).Value(m.sessionValue(s)).TouchSelection().HandleInput(func(ev ui.InputEvent) bool {
-					if ev.Kind == ui.InputLongPress {
-						m.editSession(s)
-						c.Invalidate()
-						return true
-					}
-					return false
-				})
-				row.Children(func() {
-					mobileSessionIcon(c, sessionProgramName(s))
-					ui.Column(c).Grow(1).MinWidth(0).Gap(5).Children(func() {
-						ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-							ui.Text(c, m.sessionTitle(s)).FontSize(16).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
-							if m.preference(s.ID).Pinned {
-								ui.Text(c, "置顶").FontSize(11).TextColor(c.Theme().TextMuted)
-							}
-						})
-						dir := s.Dir
-						if home := strings.TrimRight(m.hello.Host.Home, "/\\"); home != "" && (dir == home || strings.HasPrefix(dir, home+"/") || strings.HasPrefix(dir, home+"\\")) {
-							dir = "~" + strings.TrimPrefix(dir, home)
-						}
-						ui.Text(c, dir).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…")
-					})
-					if sessionAgentState(s).State == agents.Running {
-						ui.Spinner(c).Size(16, 16).Label("Agent 正在运行")
-					} else {
-						ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
-					}
-				})
-				if row.Clicked() && !m.editingOpen {
-					m.openSession(s)
-				}
-			}
-		})
+	ui.Scroll(c).Key("mobile-sessions").Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(0, 16, 16, 16).Gap(12).Children(func() {
+		m.connectionFeedback(c)
+		if !m.needsRecovery() && m.connectionIssue == nil {
+			m.errorView(c)
+		}
+		m.sessionList(c)
 	})
 }
 
@@ -957,10 +924,6 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 			keyboard = ui.KeyboardASCII
 		}
 		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().InputOptions(ui.InputOptions{Keyboard: keyboard, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputModifiers(m.keyboardModifiers, m.consumeKeyboardModifiers).InputAccessory(m.keyboardActions(), func(id string) { m.keyboardAction(c, id) })
-		if m.focusTerminal {
-			element.Focus()
-			m.focusTerminal = false
-		}
 	})
 	if !element.Focused() {
 		m.clearKeyboardModifiers()

@@ -3,10 +3,17 @@
 package rex
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
 	"gorex/internal/agents"
 )
 
@@ -32,6 +39,10 @@ func TestCodexBridgeOnlyTracksItsCLIThread(t *testing.T) {
 	if tracker.state.SessionID != "own" || tracker.state.State != agents.Running {
 		t.Fatalf("unbound turn: %+v", tracker.state)
 	}
+	tracker.apply(AgentEvent{Agent: "codex", At: time.Now(), Input: agents.HookInput{SessionID: "own", TurnID: "turn", Event: "Stop"}})
+	if tracker.state.State != agents.Running || tracker.state.CompletionRevision != 0 {
+		t.Fatal("native Stop hook finished a turn before the daemon")
+	}
 	message(false, `{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"active","activeFlags":["waitingOnApproval"]}}}`)
 	message(false, `{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"active","activeFlags":["waitingOnApproval"]}}}`)
 	if tracker.state.State != agents.Waiting || tracker.state.Reason != "permission" || tracker.state.WaitRevision != 1 {
@@ -52,6 +63,10 @@ func TestCodexBridgeOnlyTracksItsCLIThread(t *testing.T) {
 	}
 	message(false, `{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"turn","status":"completed"}}}`)
 	message(false, `{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"turn","status":"completed"}}}`)
+	if tracker.state.State != agents.Running || tracker.state.CompletionRevision != 0 {
+		t.Fatal("turn completion announced while thread was still active")
+	}
+	message(false, `{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"idle"}}}`)
 	if tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 1 {
 		t.Fatalf("completion: %+v", tracker.state)
 	}
@@ -59,6 +74,7 @@ func TestCodexBridgeOnlyTracksItsCLIThread(t *testing.T) {
 		message(false, `{"method":"turn/started","params":{"threadId":"own","turn":{"id":"next","status":"inProgress"}}}`)
 		data, _ := json.Marshal(map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": "own", "turn": map[string]string{"id": "next", "status": finish.status}}})
 		o.message(data, false)
+		message(false, `{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"idle"}}}`)
 		if tracker.state.State != finish.want {
 			t.Fatalf("%s treated as %s", finish.status, tracker.state.State)
 		}
@@ -90,6 +106,51 @@ func TestCodexBridgeKeepsSameDirectoryPanesIndependent(t *testing.T) {
 	}
 }
 
+func TestCodexBridgeBindsContinuedThreadFromSuccessfulTurnRequest(t *testing.T) {
+	for _, method := range []string{"turn/start", "turn/steer"} {
+		t.Run(method, func(t *testing.T) {
+			var tracker agentTracker
+			o := &codexObserver{pending: map[string]string{}, emit: func(h agents.HookInput) {
+				tracker.apply(AgentEvent{Agent: "codex", Input: h, At: time.Now()})
+			}}
+			o.message([]byte(`{"id":1,"method":"thread/start"}`), true)
+			o.message([]byte(`{"id":1,"result":{"thread":{"id":"startup","cwd":"/project"}}}`), false)
+			request, _ := json.Marshal(map[string]any{"id": 2, "method": method, "params": map[string]string{"threadId": "continued"}})
+			o.message(request, true)
+			// Broadcasts can arrive before the successful reply and cannot bind
+			// a pane by themselves. An overlapping server request is unrelated.
+			o.message([]byte(`{"method":"turn/started","params":{"threadId":"continued","turn":{"id":"live"}}}`), false)
+			o.message([]byte(`{"id":2,"method":"item/tool/requestUserInput","params":{"threadId":"foreign"}}`), false)
+			if tracker.state.SessionID != "startup" {
+				t.Fatal("broadcast/server request claimed the pane")
+			}
+			response := `{"id":2,"result":{"turn":{"id":"live","status":"inProgress"}}}`
+			if method == "turn/steer" {
+				response = `{"id":2,"result":{"turnId":"live"}}`
+			}
+			o.message([]byte(response), false)
+			if tracker.state.SessionID != "continued" || tracker.state.State != agents.Running || o.thread.CWD != "/project" {
+				t.Fatal("continued CLI thread retained its startup identity", tracker.state)
+			}
+			o.message([]byte(`{"method":"turn/completed","params":{"threadId":"startup","turn":{"id":"old","status":"completed"}}}`), false)
+			o.message([]byte(`{"method":"turn/completed","params":{"threadId":"continued","turn":{"id":"live","status":"completed"}}}`), false)
+			if tracker.state.State != agents.Running {
+				t.Fatal("completion escaped before confirmed idle")
+			}
+			o.message([]byte(`{"method":"thread/status/changed","params":{"threadId":"continued","status":{"type":"idle"}}}`), false)
+			if tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 1 {
+				t.Fatal("continued thread did not produce a completion", tracker.state)
+			}
+			failed, _ := json.Marshal(map[string]any{"id": 3, "method": method, "params": map[string]string{"threadId": "failed"}})
+			o.message(failed, true)
+			o.message([]byte(`{"id":3,"error":{"code":-1,"message":"rejected"}}`), false)
+			if tracker.state.SessionID != "continued" || tracker.state.State != agents.Completed || len(o.pendingTurns) != 0 {
+				t.Fatal("failed turn request replaced the pane owner")
+			}
+		})
+	}
+}
+
 func TestCodexMetadataWatchIgnoresHistoricalCompletion(t *testing.T) {
 	var tracker agentTracker
 	o := &codexObserver{emit: func(h agents.HookInput) { tracker.apply(AgentEvent{Agent: "codex", Input: h, At: time.Now()}) }}
@@ -103,10 +164,146 @@ func TestCodexMetadataWatchIgnoresHistoricalCompletion(t *testing.T) {
 	if tracker.state.State != agents.Waiting || tracker.state.Reason != "permission" {
 		t.Fatal("active existing task not observed")
 	}
+	// Metadata and turn history are separate reads. A completed old snapshot
+	// must not finish the still-active thread, including a blocked Stop hook.
+	o.snapshot(thread, codexTurn{ID: "new", Status: "completed"})
+	if tracker.state.State != agents.Waiting || tracker.state.CompletionRevision != 0 {
+		t.Fatal("completed history overrode active thread metadata")
+	}
 	thread.Status = codexStatus{Type: "idle"}
 	o.snapshot(thread, codexTurn{ID: "new", Status: "completed"})
 	o.snapshot(thread, codexTurn{ID: "new", Status: "completed"})
 	if tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 1 {
 		t.Fatal("polled completion missing or duplicated")
+	}
+	// The thread can become active before its next turn is visible in history.
+	thread.Status = codexStatus{Type: "active"}
+	o.snapshot(thread, codexTurn{ID: "new", Status: "completed"})
+	if tracker.state.State != agents.Running || tracker.state.CompletionRevision != 1 || o.turn != "" {
+		t.Fatal("historical completion badge survived new active work")
+	}
+	o.snapshot(thread, codexTurn{ID: "next", Status: "inProgress"})
+	thread.Status = codexStatus{Type: "idle"}
+	o.snapshot(thread, codexTurn{ID: "next", Status: "completed"})
+	if tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 2 {
+		t.Fatal("new observed turn did not complete independently")
+	}
+}
+
+func TestCodexBridgeUnknownCompletionKeepsObserving(t *testing.T) {
+	var tracker agentTracker
+	o := &codexObserver{pending: map[string]string{}, emit: func(h agents.HookInput) {
+		tracker.apply(AgentEvent{Agent: "codex", Input: h, At: time.Now()})
+	}}
+	o.message([]byte(`{"id":1,"method":"thread/start"}`), true)
+	o.message([]byte(`{"id":1,"result":{"thread":{"id":"own"}}}`), false)
+	o.message([]byte(`{"method":"turn/started","params":{"threadId":"own","turn":{"id":"turn"}}}`), false)
+	o.message([]byte(`{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"turn","status":"inProgress"}}}`), false)
+	o.message([]byte(`{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"turn","status":"completed"}}}`), false)
+	o.message([]byte(`{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"idle"}}}`), false)
+	if tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 1 {
+		t.Fatal("unknown completion status disabled final lifecycle observation")
+	}
+}
+
+func TestCodexBridgeContinuationDoesNotAnnounceIntermediateCompletion(t *testing.T) {
+	var tracker agentTracker
+	o := &codexObserver{pending: map[string]string{}, emit: func(h agents.HookInput) {
+		tracker.apply(AgentEvent{Agent: "codex", Input: h, At: time.Now()})
+	}}
+	message := func(value string) { o.message([]byte(value), false) }
+	o.message([]byte(`{"id":1,"method":"thread/start"}`), true)
+	message(`{"id":1,"result":{"thread":{"id":"own","status":{"type":"idle"}}}}`)
+	message(`{"method":"turn/started","params":{"threadId":"own","turn":{"id":"first"}}}`)
+	message(`{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"first","status":"completed"}}}`)
+	message(`{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"active"}}}`)
+	message(`{"method":"thread/status/changed","params":{"threadId":"foreign","status":{"type":"idle"}}}`)
+	message(`{"method":"turn/started","params":{"threadId":"own","turn":{"id":"continuation"}}}`)
+	message(`{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"first","status":"completed"}}}`)
+	// Idle may arrive before the final completion message. It cannot release
+	// the pending result from the previous turn.
+	message(`{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"idle"}}}`)
+	if tracker.state.State != agents.Running || tracker.state.CompletionRevision != 0 {
+		t.Fatal("intermediate/stale completion escaped during continuation", tracker.state)
+	}
+	message(`{"method":"turn/completed","params":{"threadId":"own","turn":{"id":"continuation","status":"completed"}}}`)
+	message(`{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"idle"}}}`)
+	if tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 1 {
+		t.Fatal("final idle completion missing or repeated", tracker.state)
+	}
+	message(`{"method":"thread/status/changed","params":{"threadId":"own","status":{"type":"active"}}}`)
+	if tracker.state.State != agents.Running {
+		t.Fatal("new active work retained the previous completion badge", tracker.state)
+	}
+}
+
+func TestCodexWatchConfirmsIdleAfterReadingTurnHistory(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "gorex-watch-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "daemon.sock")
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+		reads := 0
+		for {
+			_, raw, err := conn.Read(r.Context())
+			if err != nil {
+				return
+			}
+			var request codexEnvelope
+			if json.Unmarshal(raw, &request) != nil || len(request.ID) == 0 {
+				continue
+			}
+			var result any = map[string]any{}
+			switch request.Method {
+			case "thread/read":
+				reads++
+				status := "active"
+				if reads == 1 || reads >= 5 {
+					status = "idle"
+				}
+				result = map[string]any{"thread": codexThread{ID: "own", Status: codexStatus{Type: status}}}
+			case "thread/turns/list":
+				turn := codexTurn{ID: "old", Status: "completed"}
+				if reads == 3 {
+					turn = codexTurn{ID: "new", Status: "inProgress"}
+				} else if reads >= 5 {
+					turn.ID = "new"
+				}
+				result = map[string]any{"data": []codexTurn{turn}}
+			}
+			response, _ := json.Marshal(map[string]any{"id": request.ID, "result": result, "error": nil})
+			if conn.Write(r.Context(), websocket.MessageText, response) != nil {
+				return
+			}
+		}
+	})}
+	go server.Serve(ln)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var events []agents.HookInput
+	o := &codexObserver{thread: codexThread{ID: "own"}, turn: "old", active: true, emit: func(h agents.HookInput) {
+		events = append(events, h)
+		if h.Event == "Stop" {
+			cancel()
+		}
+	}}
+	err = pollCodexThread(ctx, socket, "own", os.Getpid(), o)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal("watch did not reach the confirmed final completion", err)
+	}
+	if len(events) != 2 || events[0].Event != "UserPromptSubmit" || events[0].TurnID != "new" || events[1].Event != "Stop" || events[1].TurnID != "new" {
+		t.Fatal("old idle metadata announced completion before new work", events)
 	}
 }

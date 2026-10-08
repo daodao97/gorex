@@ -35,6 +35,11 @@ func TestAgentTabs(t *testing.T) {
 		if prog := paneProgram(p); !prog.Agent || prog.Glyph == "square-terminal" {
 			t.Fatalf("%s has a generic program icon", agent.ID)
 		}
+		tt.SetDark(true)
+		if _, ok := tt.Find(agent.Name + " icon"); !ok {
+			t.Fatalf("missing dark %s tab icon", agent.ID)
+		}
+		tt.SetDark(false)
 	}
 	p.info.Program, p.info.Args = "claude", nil
 	for title, want := range map[string]string{
@@ -86,7 +91,7 @@ func TestAgentTabs(t *testing.T) {
 	// agents or changing any of the user's running sessions.
 	if dir := os.Getenv("MYGO_TEST_IMAGES"); dir != "" {
 		a.tabs = nil
-		for i, id := range []string{"claude", "codex", "gemini", "cursor-agent", "opencode", "copilot", "pi", "omp"} {
+		for i, id := range []string{"claude", "codex", "agy", "dsh", "hermes", "reasonix", "mistermorph", "atomcode"} {
 			p := &Pane{ID: 100 + i, info: rex.SessionInfo{Shell: "zsh", Program: id, Dir: "/work/repo"}}
 			if id == "claude" {
 				p.title = "✳ Claude Code"
@@ -117,6 +122,35 @@ func TestAgentTabs(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+		}
+	}
+}
+
+func TestMagpieAgentTitlesAndIconsOnMobile(t *testing.T) {
+	registerFonts()
+	ids := []string{"agy", "openchamber", "mimocode", "aside", "omo", "dsh", "reasonix", "commandcode", "devin", "hermes", "mistermorph", "muse", "empryo", "ante", "minimax-code", "cline", "atomcode"}
+	for start := 0; start < len(ids); start += 6 {
+		m := &mobileApp{client: &rex.Client{}}
+		for _, id := range ids[start:min(start+6, len(ids))] {
+			m.sessions = append(m.sessions, rex.SessionInfo{ID: id, Shell: "zsh", Program: id, Dir: "/work/github/quickgui/gorex", Idle: false})
+		}
+		tt := ui.NewTester(m.view, 390, 750)
+		for _, dark := range []bool{false, true} {
+			tt.SetDark(dark)
+			for _, s := range m.sessions {
+				name := programOf(s.Program).Name
+				if m.sessionTitle(s) != name {
+					t.Fatalf("%s mobile title did not resolve", s.Program)
+				}
+				if _, ok := tt.Find(name + " icon"); !ok {
+					t.Fatalf("missing %s mobile icon", s.Program)
+				}
+			}
+			appearance := "light"
+			if dark {
+				appearance = "dark"
+			}
+			saveSettingsImage(t, tt, "magpie-agents-"+ids[start]+"-"+appearance)
 		}
 	}
 }

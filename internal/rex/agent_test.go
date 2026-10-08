@@ -77,7 +77,7 @@ func TestAgentIgnoresPreviousCodexTurn(t *testing.T) {
 	for i, input := range []agents.HookInput{
 		{SessionID: "thread", Event: "UserPromptSubmit", TurnID: "old"},
 		{SessionID: "thread", Event: "UserPromptSubmit", TurnID: "new"},
-		{SessionID: "thread", Event: "Stop", TurnID: "old"},
+		{SessionID: "thread", Event: "Stop", TurnID: "old", Source: agents.CodexLifecycleSource},
 	} {
 		tracker.apply(AgentEvent{Agent: "codex", Input: input, At: now.Add(time.Duration(i) * time.Millisecond)})
 	}
@@ -91,7 +91,7 @@ func TestAgentCompletionRevisionCountsTurnsNotDuplicateStop(t *testing.T) {
 	clock := time.Now()
 	apply := func(agent, session, event, turn string) {
 		clock = clock.Add(time.Millisecond)
-		tracker.apply(AgentEvent{Agent: agent, At: clock, Input: agents.HookInput{SessionID: session, Event: event, TurnID: turn}})
+		tracker.apply(AgentEvent{Agent: agent, At: clock, Input: agents.HookInput{SessionID: session, Event: event, TurnID: turn, Source: agents.CodexLifecycleSource}})
 	}
 	apply("codex", "thread", "UserPromptSubmit", "first")
 	apply("codex", "thread", "Stop", "first")
@@ -118,6 +118,34 @@ func TestAgentCompletionRevisionCountsTurnsNotDuplicateStop(t *testing.T) {
 	apply("claude", "other", "SessionEnd", "")
 	if tracker.state.CompletionRevision != 3 {
 		t.Fatal("ending session lost completion revision")
+	}
+}
+
+func TestCodexNativeStopCannotCompleteOrReopenTurns(t *testing.T) {
+	var tracker agentTracker
+	now := time.Now()
+	apply := func(input agents.HookInput) {
+		t.Helper()
+		now = now.Add(time.Millisecond)
+		tracker.apply(AgentEvent{Agent: "codex", Input: input, At: now})
+	}
+	apply(agents.HookInput{SessionID: "thread", TurnID: "turn", Event: "UserPromptSubmit"})
+	previous := tracker.state
+	apply(agents.HookInput{SessionID: "thread", TurnID: "turn", Event: "Stop"})
+	if tracker.state != previous || AgentNoticeTransition(SessionInfo{Agent: previous}, SessionInfo{Agent: tracker.state}) {
+		t.Fatal("native hook announced completion while continuation could run")
+	}
+	apply(agents.HookInput{SessionID: "thread", TurnID: "turn", Event: "PermissionRequest", Tool: "Bash"})
+	previous = tracker.state
+	apply(agents.HookInput{SessionID: "thread", TurnID: "turn", Event: "Stop"})
+	if tracker.state != previous {
+		t.Fatal("native Stop cleared an unanswered approval")
+	}
+	apply(agents.HookInput{SessionID: "thread", TurnID: "turn", Event: "Stop", Source: agents.CodexLifecycleSource})
+	previous = tracker.state
+	apply(agents.HookInput{SessionID: "thread", TurnID: "turn", Event: "Stop"})
+	if tracker.state != previous || tracker.state.State != agents.Completed || tracker.state.CompletionRevision != 1 {
+		t.Fatal("late native hook changed the confirmed result")
 	}
 }
 

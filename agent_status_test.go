@@ -245,6 +245,68 @@ func TestBackgroundLongCommandCompletionNotice(t *testing.T) {
 	}
 }
 
+func TestActivePaneSuppressesAllDesktopNoticePaths(t *testing.T) {
+	previous := prefs
+	prefs = settings{FontSize: defaultFontSize}
+	t.Cleanup(func() { prefs = previous })
+	p := &Pane{SID: "active"}
+	other := &Pane{SID: "other"}
+	tab := &Tab{Focus: p, Root: &Node{A: &Node{Pane: p}, B: &Node{Pane: other}}}
+	p.Tab, other.Tab = tab, tab
+	a := &App{tabs: []*Tab{tab}, focusedWin: true}
+	notices, closed := 0, 0
+	a.agentNotify = func(mygo.NotificationOptions, func()) func() {
+		notices++
+		return func() { closed++ }
+	}
+	info := withAgentState(p, "codex", agents.Running, 0)
+	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	info.Agent.State, info.Agent.CompletionRevision = agents.Completed, 1
+	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.showTerminalNotice(p, "Codex · 已完成", "terminal notification")
+	a.showPaneNotice(p, "program", mygo.NotificationOptions{Title: "command finished"})
+	if notices != 0 {
+		t.Fatal("active pane notified through an agent, OSC or command path")
+	}
+	// Opening an overlay keeps this pane active; it must not turn an
+	// otherwise suppressed completion into a desktop notification.
+	a.settingsOpen, a.paletteOpen = true, true
+	info.Agent.CompletionRevision = 2
+	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	a.showTerminalNotice(p, "Codex", "active pane under overlay")
+	if notices != 0 {
+		t.Fatal("an overlay made the selected pane notify")
+	}
+	a.settingsOpen, a.paletteOpen = false, false
+	// An unfocused split in this same tab must still be allowed to notify.
+	a.showTerminalNotice(other, "other", "background split")
+	if notices != 1 {
+		t.Fatal("unfocused split was suppressed with the active pane")
+	}
+	tab.setFocus(other)
+	a.closeViewedPaneNotice()
+	if closed != 1 || a.agentNotices[other.SID] != nil {
+		t.Fatal("returning to the notified split left its banner pending")
+	}
+	tab.setFocus(p)
+	a.focusedWin = false
+	a.showTerminalNotice(p, "", "background window")
+	if notices != 2 {
+		t.Fatal("unfocused window did not notify")
+	}
+	a.focusedWin = true
+	a.closeViewedPaneNotice()
+	if closed != 2 {
+		t.Fatal("returning window focus left the active pane's banner pending")
+	}
+	// Focused completions stay consumed; switching away cannot replay them.
+	tab.setFocus(other)
+	a.apply(map[string]rex.SessionInfo{p.SID: info})
+	if notices != 2 {
+		t.Fatal("leaving the active pane replayed a suppressed completion")
+	}
+}
+
 func TestAgentStateMarkersInTabs(t *testing.T) {
 	previous := prefs
 	t.Cleanup(func() { prefs = previous })

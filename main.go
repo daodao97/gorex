@@ -124,6 +124,7 @@ func main() {
 
 // open opens the window, with the tabs the server kept.
 func (a *App) open() {
+	a.openWindow = a.open
 	client, err := rex.Connect()
 	if err != nil {
 		log.Print(err)
@@ -169,6 +170,7 @@ func (a *App) open() {
 		Content:              ui.View(a.view),
 	})
 	a.win = win
+	win.OnFocus(a.closeViewedPaneNotice)
 	startDesktopPushPresence(win)
 	if !a.restore() {
 		home, _ := os.UserHomeDir()

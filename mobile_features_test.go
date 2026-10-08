@@ -131,17 +131,54 @@ func TestMobileSessionNamesAreDeviceScopedAndWaitingWins(t *testing.T) {
 
 func TestMobileSessionEditorFitsPhone(t *testing.T) {
 	registerFonts()
-	for _, size := range [][2]int{{375, 620}, {390, 750}, {750, 310}} {
+	for _, size := range [][2]int{{320, 568}, {375, 620}, {390, 750}, {390, 360}, {750, 310}} {
 		m := &mobileApp{client: &rex.Client{}, sessions: []rex.SessionInfo{{ID: "test", Title: "shell"}}}
 		m.hello.Host.ID = "desktop"
 		m.editSession(m.sessions[0])
 		tt := ui.NewTester(m.view, size[0], size[1])
+		if tt.Focused("会话名称") {
+			t.Fatal("opening settings should not focus the name and summon a keyboard")
+		}
+		panel, ok := tt.Find("会话编辑面板")
+		if !ok || panel.X < 0 || panel.Y < 0 || panel.X+panel.W > float32(size[0]) || panel.Y+panel.H > float32(size[1]) {
+			t.Fatalf("editor is clipped at %v: %v", size, panel)
+		}
+		for _, label := range []string{"取消", "会话名称", "置顶会话", "结束会话", "保存"} {
+			r, ok := tt.Find(label)
+			if !ok || r.X < panel.X || r.Y < panel.Y || r.X+r.W > panel.X+panel.W+.01 || r.Y+r.H > panel.Y+panel.H+.01 {
+				t.Fatalf("editor control %s is clipped at %v: %v", label, size, r)
+			}
+			if label != "会话名称" && (r.W < 44 || r.H < 44) {
+				t.Fatalf("action %s has a small touch target: %v", label, r)
+			}
+		}
+		if size == [2]int{390, 750} {
+			saveSettingsImage(t, tt, "session-editor-light")
+			tt.SetDark(true)
+			saveSettingsImage(t, tt, "session-editor-dark")
+		}
 		tt.Click("会话名称")
 		tt.Type("移动开发")
 		tt.Click("置顶会话")
+		if size == [2]int{390, 750} {
+			saveSettingsImage(t, tt, "session-editor-edited-dark")
+			tt.SetSize(390, 360)
+			saveSettingsImage(t, tt, "session-editor-keyboard-viewport")
+			tt.SetSize(390, 750)
+		}
 		tt.Click("保存")
 		if m.editingOpen || m.preference("test").Name != "移动开发" || !m.preference("test").Pinned {
 			t.Fatal("editor did not apply name/pin", m.preference("test"))
+		}
+		if size == [2]int{390, 750} {
+			saveSettingsImage(t, tt, "session-editor-saved")
+		}
+		m.editSession(m.sessions[0])
+		tt.Frame()
+		tt.Click("置顶会话")
+		tt.Click("取消")
+		if m.editingOpen || m.preference("test").Name != "移动开发" || !m.preference("test").Pinned {
+			t.Fatal("cancel changed saved preferences", m.preference("test"))
 		}
 	}
 }

@@ -62,6 +62,10 @@ func (m *mobileApp) needsRecovery() bool {
 	return m.reconnecting || m.stream != nil && !m.stream.inputReady()
 }
 
+func (m *mobileApp) recoveryAnimating() bool {
+	return !m.background && m.needsRecovery() && (m.connectionIssue == nil || m.connectionIssue.automatic)
+}
+
 func (m *mobileApp) recoveryStatus() string {
 	if m.connectionIssue != nil && !m.connectionIssue.automatic {
 		return m.connectionIssue.title
@@ -82,8 +86,13 @@ func (m *mobileApp) connectionFeedback(c *ui.Context) {
 	if m.connectionIssue != nil {
 		title, body = m.connectionIssue.title, m.connectionIssue.body
 	}
-	ui.Column(c).Key("connection-feedback").FillWidth().Padding(12).Gap(4).Radius(12).Background(c.Theme().Surface).Children(func() {
-		ui.Text(c, title).FontSize(14).Bold()
+	mobileCard(c).Key("connection-feedback").Label("连接状态").Padding(12).Gap(4).Children(func() {
+		ui.Row(c).FillWidth().Gap(8).Children(func() {
+			if m.recoveryAnimating() {
+				mobileReconnectIcon(c, 14, c.Theme().Accent)
+			}
+			ui.Text(c, title).FontSize(14).Bold().Grow(1)
+		})
 		ui.Text(c, body).FontSize(13).LineHeight(1.4).TextColor(c.Theme().TextMuted)
 		m.connectionActions(c)
 	})
@@ -92,14 +101,14 @@ func (m *mobileApp) connectionFeedback(c *ui.Context) {
 func (m *mobileApp) connectionActions(c *ui.Context) {
 	ui.Row(c).FillWidth().Gap(4).Children(func() {
 		if (m.connectionIssue == nil || m.connectionIssue.retry) && m.link != "" {
-			if mobileTextAction(c, "重试连接", "重试").Disabled(m.busy).Clicked() {
+			if mobileIconAction(c, "重试连接", "rotate-ccw").Disabled(m.busy).Clicked() {
 				m.retryConnection()
 			}
 		}
-		if mobileTextAction(c, "重新扫码连接", "重新扫码").Disabled(m.scanning).Clicked() {
+		if mobileIconAction(c, "重新扫码连接", "scan-line").Disabled(m.scanning).Clicked() {
 			m.rescanConnection()
 		}
-		if m.needsRecovery() && mobileTextAction(c, "取消重连", "停止恢复").Clicked() {
+		if m.needsRecovery() && mobileIconAction(c, "取消重连", "x").Clicked() {
 			m.disconnect(false)
 		}
 	})
@@ -110,13 +119,18 @@ func (m *mobileApp) connectionDialog(c *ui.Context) {
 		back.Background(ui.RGBA(0, 0, 0, .35))
 		panel.Width(340).MaxWidthPercent(95).Padding(20).Radius(18).Background(c.Theme().Surface).Column().Gap(12)
 		title, body := "正在恢复连接", "恢复后将继续当前会话，可先阅读已有内容。"
+		closeText := "继续阅读"
+		if m.term == nil {
+			title, body = "正在重新连接", "会话列表已保留，连接恢复后即可打开会话。"
+			closeText = "返回列表"
+		}
 		if m.connectionIssue != nil {
 			title, body = m.connectionIssue.title, m.connectionIssue.body
 		}
 		ui.Text(c, title).FontSize(18).Bold()
 		ui.Text(c, body).FontSize(14).LineHeight(1.4).TextColor(c.Theme().TextMuted)
 		m.connectionActions(c)
-		if ui.Button(c, "继续阅读").Label("关闭连接提示").FillWidth().Height(44).Clicked() {
+		if ui.Button(c, closeText).Label("关闭连接提示").FillWidth().Height(44).Clicked() {
 			m.connectionDetailsOpen = false
 		}
 	})
