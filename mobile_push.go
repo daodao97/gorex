@@ -3,11 +3,13 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"github.com/egoist/mygo"
 	"gorex/internal/mobile"
 	"gorex/internal/rex"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -38,10 +40,15 @@ func (m *mobileApp) setupPush() {
 			}
 		}
 		disabled := false
+		var receipts map[string]time.Time
+		if saved, e := m.store.Get("notification-receipts"); e == nil {
+			_ = json.Unmarshal(saved, &receipts)
+		}
 		if preference, e := m.store.Get("notifications-enabled"); e == nil {
 			disabled = string(preference) == "0"
 		}
 		mygo.RunOnMain(func() {
+			m.mergeNoticeReceipts(receipts)
 			if err != nil || len(value) != 32 {
 				m.pushError = "无法保存通知设备，请重试"
 				m.invalidate()
@@ -124,13 +131,27 @@ func (m *mobileApp) taskNoticeID(session rex.SessionInfo) string {
 	return rex.AgentNoticeID(m.desktopKey(), session)
 }
 func (m *mobileApp) rememberNotice(id string) bool {
+	if !strings.HasPrefix(id, "gorex-agent-") || len(id) > 64 {
+		return false
+	}
 	if m.noticeReceipts == nil {
 		m.noticeReceipts = map[string]time.Time{}
 	}
+	m.trimNoticeReceipts()
 	if _, seen := m.noticeReceipts[id]; seen {
 		return false
 	}
 	m.noticeReceipts[id] = time.Now()
+	m.trimNoticeReceipts()
+	m.persistNoticeReceipts()
+	return true
+}
+func (m *mobileApp) trimNoticeReceipts() {
+	for id, at := range m.noticeReceipts {
+		if time.Since(at) > 7*24*time.Hour {
+			delete(m.noticeReceipts, id)
+		}
+	}
 	for len(m.noticeReceipts) > 128 {
 		oldest := ""
 		var at time.Time
@@ -141,7 +162,28 @@ func (m *mobileApp) rememberNotice(id string) bool {
 		}
 		delete(m.noticeReceipts, oldest)
 	}
-	return true
+}
+func (m *mobileApp) mergeNoticeReceipts(saved map[string]time.Time) {
+	if m.noticeReceipts == nil {
+		m.noticeReceipts = map[string]time.Time{}
+	}
+	for id, at := range saved {
+		if current, exists := m.noticeReceipts[id]; !exists || at.After(current) {
+			m.noticeReceipts[id] = at
+		}
+	}
+	m.trimNoticeReceipts()
+	m.noticeReceiptsLoaded = true
+	m.persistNoticeReceipts()
+}
+func (m *mobileApp) persistNoticeReceipts() {
+	if !m.noticeReceiptsLoaded || m.store == nil || m.storage == nil {
+		return
+	}
+	data, err := json.Marshal(m.noticeReceipts)
+	if err == nil {
+		m.storage <- func() { _ = m.store.Set("notification-receipts", data) }
+	}
 }
 func (m *mobileApp) refreshPushSnapshot() {
 	info := mobile.DeviceInfo()
@@ -186,5 +228,7 @@ func (m *mobileApp) presentNotification(event mygo.NotificationEvent) mygo.Notif
 	}
 	m.notice = &mobileAgentNotice{ID: id, Desktop: desktop, Session: sid, Title: event.Data["title"], Body: event.Data["body"]}
 	m.invalidate()
-	return mygo.PresentNotificationDefault
+	// This handler runs for foreground delivery. The in-app reminder is the
+	// only foreground surface; APNs owns system notifications in background.
+	return 0
 }

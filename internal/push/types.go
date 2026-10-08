@@ -42,9 +42,18 @@ func (r Registration) Validate() error {
 }
 
 type Status struct {
-	Configured bool      `json:"configured"`
-	Devices    int       `json:"devices"`
-	Sent       uint64    `json:"sent"`
-	LastError  string    `json:"lastError,omitempty"`
-	LastSent   time.Time `json:"lastSent,omitzero"`
+	Configured    bool      `json:"configured"`
+	Devices       int       `json:"devices"`
+	Sent          uint64    `json:"sent"`
+	LastError     string    `json:"lastError,omitempty"`
+	LastSent      time.Time `json:"lastSent,omitzero"`
+	DesktopActive bool      `json:"desktopActive"`
+}
+
+// DesktopActivity is a short-lived foreground lease from a local GUI window.
+// Sequence orders focus/blur updates; a crashed GUI stops renewing its lease.
+type DesktopActivity struct {
+	ID       string `json:"id"`
+	Sequence uint64 `json:"sequence"`
+	Active   bool   `json:"active"`
 }

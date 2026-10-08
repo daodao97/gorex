@@ -68,6 +68,7 @@ type mobileApp struct {
 	pushRequesting                          bool
 	pushSnapshot                            atomic.Pointer[rex.DeviceInfo]
 	noticeReceipts                          map[string]time.Time
+	noticeReceiptsLoaded                    bool
 	preferenceTouched                       map[string]bool
 }
 
@@ -156,6 +157,11 @@ func mobileMain() {
 	mygo.App.OnDidBecomeActive(func() { m.registerSystemPush() })
 	mygo.App.OnNotification(func(event mygo.NotificationEvent) {
 		if event.Clicked {
+			if id := event.Data["event"]; id != "" {
+				m.rememberNotice(id)
+				m.refreshPushSnapshot()
+				m.syncPushRegistration()
+			}
 			m.openNotifiedSession(event.Data["desktop"], event.Data["session"])
 		}
 	})
@@ -902,7 +908,7 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	}
 	var element *ui.Element
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Padding(4).Background(c.Theme().Background).Children(func() {
-		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().Disabled(m.reconnecting).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone}).InputAccessory(mobileKeyboardActions, func(id string) { m.keyboardAction(c, id) })
+		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().Disabled(m.reconnecting).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputAccessory(mobileKeyboardActions, func(id string) { m.keyboardAction(c, id) })
 		if m.focusTerminal {
 			element.Focus()
 			m.focusTerminal = false

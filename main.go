@@ -168,6 +168,7 @@ func (a *App) open() {
 		Content:              ui.View(a.view),
 	})
 	a.win = win
+	startDesktopPushPresence(win)
 	if !a.restore() {
 		home, _ := os.UserHomeDir()
 		a.newTab(home)

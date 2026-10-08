@@ -29,8 +29,9 @@ func serviceSocket(dir string) string {
 }
 
 type serviceRequest struct {
-	Op           string        `json:"op"`
-	Registration *Registration `json:"registration,omitempty"`
+	Op           string           `json:"op"`
+	Registration *Registration    `json:"registration,omitempty"`
+	Desktop      *DesktopActivity `json:"desktop,omitempty"`
 }
 type serviceResponse struct {
 	Error  string `json:"error,omitempty"`
@@ -88,6 +89,10 @@ func call(dir string, req serviceRequest) (Status, error) {
 func Query(dir string) (Status, error) { return call(dir, serviceRequest{Op: "status"}) }
 func Register(dir string, r Registration) (Status, error) {
 	return call(dir, serviceRequest{Op: "register", Registration: &r})
+}
+func ReportDesktop(dir string, activity DesktopActivity) error {
+	_, err := call(dir, serviceRequest{Op: "desktop", Desktop: &activity})
+	return err
 }
 
 func Run(dir, socket string) error {
@@ -158,6 +163,12 @@ func Run(dir, socket string) error {
 			}
 			switch req.Op {
 			case "status":
+			case "desktop":
+				if req.Desktop == nil {
+					response.Error = "missing desktop activity"
+				} else if err := s.desktopActivity(*req.Desktop, time.Now()); err != nil {
+					response.Error = err.Error()
+				}
 			case "register":
 				if req.Registration == nil {
 					response.Error = "missing notification registration"

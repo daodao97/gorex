@@ -9,6 +9,7 @@ import (
 	"gorex/internal/rex"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -38,11 +39,12 @@ func (s savedSession) info() rex.SessionInfo {
 }
 
 type database struct {
-	Devices  map[string]device        `json:"devices"`
-	Previous map[string]savedSession  `json:"previous"`
-	Pending  map[string]pendingNotice `json:"pending"`
-	Sent     uint64                   `json:"sent"`
-	LastSent time.Time                `json:"lastSent,omitzero"`
+	Devices     map[string]device        `json:"devices"`
+	Previous    map[string]savedSession  `json:"previous"`
+	Pending     map[string]pendingNotice `json:"pending"`
+	Sent        uint64                   `json:"sent"`
+	LastSent    time.Time                `json:"lastSent,omitzero"`
+	DesktopSeen map[string]time.Time     `json:"desktopSeen,omitempty"`
 }
 
 type service struct {
@@ -56,6 +58,8 @@ type service struct {
 	initialized    bool
 	inflightKey    string
 	inflightCancel context.CancelFunc
+	desktops       map[string]desktopLease
+	currentDesktop string
 }
 
 func newService(dir string) (*service, error) {
@@ -80,6 +84,10 @@ func newService(dir string) (*service, error) {
 		if s.state.Pending == nil {
 			s.state.Pending = map[string]pendingNotice{}
 		}
+	}
+	s.desktops = map[string]desktopLease{}
+	if s.state.DesktopSeen == nil {
+		s.state.DesktopSeen = map[string]time.Time{}
 	}
 	return s, nil
 }
@@ -107,6 +115,7 @@ func (s *service) register(r Registration) error {
 	if err := r.Validate(); err != nil {
 		return err
 	}
+	r.Token = strings.ToLower(r.Token)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if r.Disabled {
@@ -125,12 +134,41 @@ func (s *service) register(r Registration) error {
 	}
 	if len(s.state.Devices) >= 32 {
 		if _, ok := s.state.Devices[r.ID]; !ok {
-			return errors.New("notification device limit reached")
+			matchingToken := false
+			for _, existing := range s.state.Devices {
+				matchingToken = matchingToken || existing.Token == r.Token
+			}
+			if !matchingToken {
+				return errors.New("notification device limit reached")
+			}
 		}
 	}
 	now := time.Now()
 	d := s.state.Devices[r.ID]
 	changed := false
+	// Reinstallation can change the installation ID while APNs keeps the token.
+	// A physical device must have only one delivery subscription.
+	for otherID, other := range s.state.Devices {
+		if otherID != r.ID && other.Token == r.Token {
+			if d.Receipts == nil {
+				d.Receipts = map[string]time.Time{}
+			}
+			for id, at := range other.Receipts {
+				d.Receipts[id] = at
+			}
+			delete(s.state.Devices, otherID)
+			for key, p := range s.state.Pending {
+				if p.Device == otherID {
+					s.removeLocked(key)
+					p.Device = r.ID
+					if _, acknowledged := d.Receipts[p.ID]; !acknowledged {
+						s.state.Pending[r.ID+":"+p.ID] = p
+					}
+				}
+			}
+			changed = true
+		}
+	}
 	if d.Token != r.Token {
 		d.Token = r.Token
 		d.Updated = now
@@ -140,7 +178,7 @@ func (s *service) register(r Registration) error {
 		d.Receipts = map[string]time.Time{}
 	}
 	for id, at := range d.Receipts {
-		if now.Sub(at) > time.Hour {
+		if now.Sub(at) > receiptLifetime {
 			delete(d.Receipts, id)
 			changed = true
 		}
@@ -177,7 +215,7 @@ func (s *service) register(r Registration) error {
 func (s *service) status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Status{Configured: s.provider != nil, Devices: len(s.state.Devices), Sent: s.state.Sent, LastSent: s.state.LastSent, LastError: s.lastError}
+	return Status{Configured: s.provider != nil, Devices: len(s.state.Devices), Sent: s.state.Sent, LastSent: s.state.LastSent, LastError: s.lastError, DesktopActive: s.desktopActiveLocked(time.Now())}
 }
 func (s *service) removeLocked(key string) {
 	delete(s.state.Pending, key)
@@ -195,14 +233,26 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 	next := make(map[string]rex.SessionInfo, len(sessions))
 	saved := make(map[string]savedSession, len(sessions))
 	changed := false
+	s.currentDesktop = desktop
+	active := s.desktopActiveLocked(now)
+	pruneReceipts(s.state.DesktopSeen, now, 1024)
 	for _, ss := range sessions {
 		next[ss.ID] = ss
 		saved[ss.ID] = savedSession{ID: ss.ID, Agent: ss.Agent, LastInput: ss.LastInput}
 		previous, seen := s.state.Previous[ss.ID]
+		id := rex.AgentNoticeID(desktop, ss)
+		if active && rex.AgentNoticeState(ss) {
+			if _, exists := s.state.DesktopSeen[id]; !exists {
+				s.state.DesktopSeen[id] = now
+				changed = true
+			}
+		}
+		if _, viewed := s.state.DesktopSeen[id]; viewed {
+			continue
+		}
 		if !seen || !rex.AgentNoticeTransition(previous.info(), ss) || ss.Agent.Updated.IsZero() || now.Sub(ss.Agent.Updated) > 15*time.Minute {
 			continue
 		}
-		id := rex.AgentNoticeID(desktop, ss)
 		for deviceID, d := range s.state.Devices {
 			if _, ack := d.Receipts[id]; ack {
 				continue
@@ -220,7 +270,8 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 	s.initialized = true
 	for key, p := range s.state.Pending {
 		ss, exists := next[p.Session]
-		if !exists || now.Sub(p.Created) > 15*time.Minute || rex.AgentNoticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
+		_, viewed := s.state.DesktopSeen[p.ID]
+		if viewed || !exists || now.Sub(p.Created) > 15*time.Minute || rex.AgentNoticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
 			s.removeLocked(key)
 			changed = true
 		}
@@ -259,6 +310,15 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 		s.mu.Unlock()
 		return
 	}
+	if s.desktopActiveLocked(now) {
+		s.markDesktopSeenLocked(now)
+		s.mu.Unlock()
+		return
+	}
+	if s.inflightKey != "" {
+		s.mu.Unlock()
+		return
+	}
 	var chosen pendingNotice
 	key := ""
 	for k, p := range s.state.Pending {
@@ -292,6 +352,13 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 	} // a receipt or new task cancelled it while in flight
 	if err == nil {
 		delete(s.state.Pending, key)
+		fresh := s.state.Devices[chosen.Device]
+		if fresh.Receipts == nil {
+			fresh.Receipts = map[string]time.Time{}
+		}
+		fresh.Receipts[chosen.ID] = now
+		pruneReceipts(fresh.Receipts, now, 256)
+		s.state.Devices[chosen.Device] = fresh
 		s.state.Sent++
 		s.state.LastSent = time.Now()
 		s.lastError = ""

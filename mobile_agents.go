@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"gorex/internal/agents"
 	"gorex/internal/rex"
@@ -56,7 +55,9 @@ func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
 		}
 		notice := mobileAgentNotice{ID: id, Desktop: m.desktopKey(), Session: session.ID, Title: programOf(state.ID).Name + " · " + agentStateLabel(state), Body: m.sessionTitle(session)}
 		m.notice = &notice
-		m.showAgentNotification(notice)
+		if m.agentNotify != nil {
+			m.agentNotify(notice)
+		}
 	}
 	m.refreshPushSnapshot()
 	m.syncPushRegistration()
@@ -67,28 +68,6 @@ func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
 			m.notice = nil
 		}
 	}
-}
-
-func (m *mobileApp) showAgentNotification(notice mobileAgentNotice) {
-	if m.agentNotify != nil {
-		m.agentNotify(notice)
-		return
-	}
-	if m.win == nil || m.notificationDenied {
-		return
-	}
-
-	n := mygo.NewNotification(mygo.NotificationOptions{
-		ID: notice.ID, Group: "gorex-agents",
-		Title: notice.Title, Body: notice.Body + " · 点击进入会话",
-		Data: map[string]string{"desktop": notice.Desktop, "session": notice.Session, "event": notice.ID},
-	})
-	go func() {
-		if err := n.Show(); err != nil {
-			n.Close()
-			mygo.RunOnMain(func() { m.notificationDenied = true })
-		}
-	}()
 }
 
 func (m *mobileApp) noticeView(c *ui.Context) {

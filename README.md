@@ -190,8 +190,11 @@ pinned sessions. Supported lifecycle integrations show running/waiting/completed
 states; reminders can open the corresponding session. Notifications require iOS
 permission. With APNs configured, a separate desktop notification worker observes
 the existing session server and sends waiting/completed/failed reminders while iOS
-is suspended. It keeps running when the desktop window closes. Foreground receipts
-suppress duplicate pushes, new task input cancels stale reminders, and notification
+is suspended. It keeps running when the desktop window closes. A focused desktop
+window handles reminders locally and suppresses phone pushes; switching away does
+not replay those reminders. On the phone, foreground reminders appear only inside
+the app, while APNs handles background system notifications. Persisted event receipts
+suppress duplicate pushes across app/worker restarts, new task input cancels stale reminders, and notification
 taps reconnect to the original desktop and pane, including a cold launch. The
 mobile session list includes a background-reminder switch.
 

@@ -194,3 +194,151 @@ func TestRegistrationRejectsUntrustedMetadata(t *testing.T) {
 		t.Fatal("unbounded receipts accepted")
 	}
 }
+
+func TestActiveDesktopSuppressesPendingAndFuturePhoneNotifications(t *testing.T) {
+	s, provider, h, p, _ := newFixture(t)
+	p = complete(s, h, p)
+	now := time.Now()
+	if err := s.desktopActivity(DesktopActivity{ID: "gui", Sequence: 1, Active: true}, now); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.state.Pending) != 0 {
+		t.Fatal("pending reminder survived foreground desktop")
+	}
+	p = complete(s, h, p)
+	s.deliver(context.Background(), now.Add(4*time.Second))
+	if len(provider.sent) != 0 {
+		t.Fatal("active desktop also notified phone")
+	}
+	// Blur never replays an event already handled by the desktop.
+	s.desktopActivity(DesktopActivity{ID: "gui", Sequence: 2}, now.Add(time.Second))
+	s.observe(h, []rex.SessionInfo{p}, now.Add(2*time.Second))
+	s.deliver(context.Background(), now.Add(6*time.Second))
+	if len(provider.sent) != 0 {
+		t.Fatal("desktop reminder replayed on blur")
+	}
+	reloaded, err := newService(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded.provider = provider
+	p.Agent.State = "running"
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	p.Agent.State = "completed"
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	reloaded.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 0 {
+		t.Fatal("desktop receipt lost on worker restart")
+	}
+	p = complete(reloaded, h, p)
+	reloaded.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("new background turn suppressed")
+	}
+}
+
+func TestDesktopLeaseExpiryOrderingAndMultipleWindows(t *testing.T) {
+	s, provider, h, p, _ := newFixture(t)
+	now := time.Now()
+	s.desktopActivity(DesktopActivity{ID: "gui", Sequence: 2}, now)
+	s.desktopActivity(DesktopActivity{ID: "gui", Sequence: 1, Active: true}, now)
+	if s.desktopActiveLocked(now) {
+		t.Fatal("out-of-order focus overrode blur")
+	}
+	s.desktopActivity(DesktopActivity{ID: "other", Sequence: 1, Active: true}, now)
+	if !s.desktopActiveLocked(now) {
+		t.Fatal("second active window ignored")
+	}
+	after := now.Add(desktopLeaseLifetime + time.Second)
+	p.Agent.State = "completed"
+	p.Agent.CompletionRevision++
+	p.Agent.Updated = after
+	s.observe(h, []rex.SessionInfo{p}, after)
+	s.deliver(context.Background(), after.Add(4*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("crashed GUI lease suppressed background notification forever")
+	}
+}
+
+func TestDeliveredEventCannotReplayAfterStateFluctuationOrRestart(t *testing.T) {
+	s, provider, h, p, r := newFixture(t)
+	p.Agent.State = "waiting"
+	p.Agent.WaitRevision = 1
+	p.Agent.Updated = time.Now()
+	s.observe(h, []rex.SessionInfo{p}, time.Now())
+	s.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("first wait not delivered")
+	}
+	reloaded, err := newService(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded.provider = provider
+	p.Agent.State = "running"
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	p.Agent.State = "waiting"
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	reloaded.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("same wait revision delivered twice")
+	}
+	// An installation ID change on the same phone keeps its delivery receipts.
+	r.ID = strings.Repeat("b", 32)
+	if err := reloaded.register(r); err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.state.Devices) != 1 {
+		t.Fatal("same APNs token has duplicate subscriptions")
+	}
+	p.Agent.State = "running"
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	p.Agent.State = "waiting"
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	reloaded.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("installation migration lost receipts")
+	}
+	p.Agent.WaitRevision++
+	reloaded.observe(h, []rex.SessionInfo{p}, time.Now())
+	reloaded.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 2 {
+		t.Fatal("new wait revision suppressed")
+	}
+}
+
+func TestDesktopFocusCancelsInflightPhonePush(t *testing.T) {
+	s, provider, h, p, _ := newFixture(t)
+	complete(s, h, p)
+	provider.started = make(chan struct{})
+	provider.resume = make(chan struct{})
+	done := make(chan struct{})
+	go func() { s.deliver(context.Background(), time.Now().Add(4*time.Second)); close(done) }()
+	<-provider.started
+	s.desktopActivity(DesktopActivity{ID: "gui", Sequence: 1, Active: true}, time.Now())
+	<-done
+	if len(s.state.Pending) != 0 || s.status().Sent != 0 {
+		t.Fatal("desktop focus did not cancel pending send")
+	}
+}
+
+func TestInstallationMigrationPreservesPendingDelivery(t *testing.T) {
+	s, provider, h, p, r := newFixture(t)
+	complete(s, h, p)
+	oldID := r.ID
+	r.ID = strings.Repeat("b", 32)
+	r.Token = strings.ToUpper(r.Token)
+	if err := s.register(r); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := s.state.Devices[oldID]; exists {
+		t.Fatal("old installation subscription retained")
+	}
+	if len(s.state.Pending) != 1 {
+		t.Fatal("migration lost pending event")
+	}
+	s.deliver(context.Background(), time.Now().Add(4*time.Second))
+	if len(provider.sent) != 1 || provider.sent[0].DeviceToken != strings.ToLower(r.Token) {
+		t.Fatal("migrated event not delivered exactly once")
+	}
+}
