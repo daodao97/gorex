@@ -43,7 +43,7 @@ jobs:
             thin="$RUNNER_TEMP/GoRex-$arch"
             lipo "$binary" -thin "$arch" -output "$thin"
             info=$(go version -m "$thin")
-            rg -F mygo_noinspector <<< "$info"
+            grep -F mygo_noinspector <<< "$info"
           done
           codesign --verify --deep --strict "$app"
           images=(build/darwin-universal/*.dmg)
