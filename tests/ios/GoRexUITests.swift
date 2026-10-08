@@ -33,9 +33,10 @@ final class GoRexUITests: XCTestCase {
         waitForExpectations(timeout: 10)
         screenshot("connect")
 
-        addUIInterruptionMonitor(withDescription: "Camera permission") { alert in
-            let allow = alert.buttons["Allow"]
-            if allow.exists { allow.tap(); return true }
+        addUIInterruptionMonitor(withDescription: "System permissions") { alert in
+            for label in ["Allow", "允许", "无线局域网与蜂窝网络", "WLAN & Cellular"] {
+                if alert.buttons[label].exists { alert.buttons[label].tap(); return true }
+            }
             let ok = alert.buttons["OK"]
             if ok.exists { ok.tap(); return true }
             return false
@@ -54,6 +55,12 @@ final class GoRexUITests: XCTestCase {
 
         if #available(iOS 16.4, *) { app.open(URL(string: Fixture.link)!) }
         else { throw XCTSkip("URL opening requires iOS 16.4") }
+        let permission = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.firstMatch
+        if permission.waitForExistence(timeout: 2) {
+            for label in ["Allow", "允许", "无线局域网与蜂窝网络", "WLAN & Cellular"] {
+                if permission.buttons[label].exists { permission.buttons[label].tap(); break }
+            }
+        }
         let existing = app.buttons["打开会话 " + Fixture.existing]
         XCTAssertTrue(existing.waitForExistence(timeout: 45), app.debugDescription)
         screenshot("sessions")
@@ -217,7 +224,7 @@ final class GoRexUITests: XCTestCase {
         edgeBack(app, y: terminal.frame.midY)
         XCTAssertTrue(existing.waitForExistence(timeout: 10))
         edgeBack(app, y: app.frame.height * 0.5)
-        let recent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "重新连接 ")).firstMatch
+        let recent = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "重新连接 ", "打开桌面 ")).firstMatch
         XCTAssertTrue(recent.waitForExistence(timeout: 10), "Sessions edge gesture did not return to connection history")
         screenshot("sessions-edge-back")
         app.terminate()
