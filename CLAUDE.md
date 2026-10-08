@@ -6,17 +6,20 @@ GoRex is a replica of Superlogical's Rex terminal (tabs, split panes, persistent
 
 ## Commands
 
+Read [docs/development.md](docs/development.md) before deployment or device tests;
+it is the command reference for production builds, preserving live sessions and
+using each phone's existing signing setup.
+
 MyGo's CLI is pinned as a Go tool in `go.mod` (Go 1.27+):
 
 ```sh
-go tool mygo dev              # "GoRex Dev": rebuilt and restarted on code changes
-go tool mygo build            # build/darwin-arm64/GoRex.app and a .dmg
-go test ./...                 # server + window-less view tests
-go test -run TestName .       # single test in the app package
-go test -run TestName ./internal/rex
-go run . -server              # session server alone, in the foreground
-go run ./tools/mkicon         # redraw resources/icon.png
-go get -tool github.com/egoist/mygo/cmd/mygo@latest   # update MyGo + CLI together
+GOREX_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev # isolated development
+GOWORK=off go tool mygo build  # production .app and .dmg
+GOWORK=off go test ./...       # server + window-less view tests
+GOWORK=off go test -run '^TestName$' .
+GOWORK=off go test -run '^TestName$' ./internal/rex
+GOREX_DIR="$PWD/.mygo/server-debug" GOWORK=off go run . -server # separate debug server
+GOWORK=off go run ./tools/mkicon # redraw resources/icon.png
 ```
 
 `MYGO_TEST_IMAGES=<dir>` makes view tests (e.g. `settings_test.go`) write PNG renders of the UI there.
@@ -30,7 +33,7 @@ go get -tool github.com/egoist/mygo/cmd/mygo@latest   # update MyGo + CLI togeth
 
 **Session server / client (`internal/rex`)**: a Unix socket in the data dir. One control connection of JSON lines (`Request`/`Response` in `proto.go`, ops dispatched in `server.go` `do`), plus one connection per attached session carrying raw terminal bytes. Each session keeps a headless libghostty-vt screen and sends a snapshot on attach, so full-screen programs restore exactly. The server also tracks foreground process/cwd (`proc_darwin.go`: `tcgetpgrp`, `sysctl`, `proc_pidinfo`), titles, bells, output activity, and `AgentState` (agent status lives in the server so it survives window reconnects). The saved window layout is stored by the server too (`Layout`/`SetLayout`).
 - Bump `ProtocolVersion` in `proto.go` whenever the wire protocol changes. Additive fields can remain compatible with older servers; raise `MinProtocolVersion` for incompatible changes. The app accepts versions in that supported range.
-- Under `mygo dev`, the app restarts a server started by an older build (`staleServer` compares executable path + mtime), which ends its sessions.
+- `staleServer` compares executable path + mtime. Automatic replacement is guarded by development mode and the explicit hot-reload environment. Ordinary production GUI updates must attach to the existing compatible daemon. Never replace a live daemon to activate new code while tasks are running; server replacement ends its sessions.
 
 **App state (`state.go`)**: `App` → `Tab` → binary tree of `Node` splits → `Pane` (a `terminal.Terminal` attached to a server session via `rex.Stream`). `poll` asks the server for `SessionInfo` every 500 ms and `apply`s it (program names, dots, attention, notifications). Tree mutations made while a frame is being built go through `a.later`/`a.post` and run in `runPosted` before the next frame, never inline.
 
@@ -40,7 +43,7 @@ go get -tool github.com/egoist/mygo/cmd/mygo@latest   # update MyGo + CLI togeth
 
 ## Data directory and debugging
 
-- State (socket, server log, `layout.json`, `settings.json`) lives in `$GOREX_DIR`, defaulting to `~/Library/Application Support/GoRex` for the built app and `.../GoRex Dev` under `mygo dev`, so development never touches the installed app's sessions.
+- State (socket, server log, `layout.json`, `settings.json`) lives in `$GOREX_DIR`, defaulting to `~/Library/Application Support/GoRex` for the built app and `.../GoRex Dev` under `mygo dev`. An inherited `GOREX_DIR` overrides that separation; use an explicit isolated development directory.
 - Tests use `newTestApp` (`app_test.go`): a temp `GOREX_DIR`, an in-process `rex.Serve()`, `SHELL=/bin/sh`, and a `ui.Tester` rendering the view at 1000×620 without a window.
 - `GOREX_DEBUG=<dir>` lets a script drive the running app: write commands to `<dir>/do` (`shot`, `sleep`, `type`, `size`, `tab`, `focus`, `name`, `close`, `zoom` — see `debug.go`); `shot` writes `<dir>/shot.png`.
 

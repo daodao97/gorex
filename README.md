@@ -343,27 +343,33 @@ pending question, and delayed events from previous conversations/turns are ignor
 
 ## Develop and build
 
+See [开发、构建与设备测试命令](docs/development.md) for production flags,
+session-preserving desktop updates, iOS signing/installation and isolated tests.
+
 GoRex needs [Go](https://go.dev/dl/) 1.27+ and MyGo 0.2.11, whose CLI
 `go.mod` pins as a tool:
 
 ```sh
-go tool mygo dev     # GoRex Dev, rebuilt and restarted as the code changes
-go test ./...        # the server, and the view without a window
-go tool mygo build   # build/darwin-arm64/GoRex.app and a .dmg
-go run ./tools/mkicon  # redraw resources/icon.png
+GOREX_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev # isolated development
+GOWORK=off go test ./...       # the server, and the view without a window
+GOWORK=off go tool mygo build  # production .app and .dmg
+GOWORK=off go run ./tools/mkicon # redraw resources/icon.png
 ```
 
-`go get -tool github.com/egoist/mygo/cmd/mygo@latest` updates MyGo and its
-CLI together.
+MyGo and its CLI are pinned to the iOS-capable fork in `go.mod`. Update that
+replacement deliberately and validate both platforms; use `GOWORK=off` to
+check the pinned SDK rather than an ignored local workspace.
 
 The app keeps its state in its data directory: the server's socket and
 log, `layout.json` and `settings.json`, in `~/Library/Application
-Support/GoRex` for the built app and `GoRex Dev` for `mygo dev`'s, so
-that developing never touches the sessions of the app you use
-(`GOREX_DIR` names another directory). The sessions outlive the app, but
-not a rebuild: a development build replaces a server that an older build
-started, ending its sessions, which then start again in the same
-directories.
+Support/GoRex` for the built app and `GoRex Dev` for `mygo dev`'s unless
+`GOREX_DIR` overrides it. Keep that override separate from real sessions.
+Normal production GUI updates attach to a compatible existing server; its
+terminal processes keep running the existing server's code. Service replacement
+ends those processes and must wait until real tasks have finished. Manual
+desktop production builds need `-tags mygo_noinspector` and
+`-ldflags '-X github.com/egoist/mygo.production=1'`; plain `go build` is a
+MyGo development build even when copied into an installed `.app`.
 
 Slow synchronized redraws and incomplete-update watchdog releases are
 recorded in `render.log` in the same data directory. This contains only
