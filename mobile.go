@@ -732,10 +732,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 	m.header(c, "GoRex", nil, false)
 	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().HideScrollbars().Padding(16).Gap(16).Children(func() {
 		ui.Row(c).FillWidth().Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, "连接").FontSize(20).Bold()
-				ui.Text(c, "电脑上的 GoRex · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted)
-			})
+			ui.Text(c, "电脑上的 GoRex · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
 			if m.client != nil && mobileTextAction(c, "断开桌面连接", "断开").Disabled(m.busy || m.reconnecting).Clicked() {
 				m.disconnect(false)
 			}
