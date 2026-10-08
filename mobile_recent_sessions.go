@@ -17,6 +17,7 @@ type mobileRecentSession struct {
 	Desktop string `json:"desktop"`
 	Session string `json:"session"`
 	Title   string `json:"title"`
+	Program string `json:"program,omitempty"`
 }
 
 func mergeRecentSessions(first, second []mobileRecentSession) []mobileRecentSession {
@@ -61,7 +62,7 @@ func (m *mobileApp) rememberSession(s rex.SessionInfo) {
 	if s.Exited {
 		return
 	}
-	entry := mobileRecentSession{Desktop: m.desktopKey(), Session: s.ID, Title: mobileSessionTitle(s)}
+	entry := mobileRecentSession{Desktop: m.desktopKey(), Session: s.ID, Title: mobileSessionTitle(s), Program: sessionProgramName(s)}
 	m.recentSessions = mergeRecentSessions([]mobileRecentSession{entry}, m.recentSessions)
 	m.persistRecentSessions()
 }
@@ -122,7 +123,7 @@ func (m *mobileApp) applyLoadedConnectionHistory(history []desktopRecent, sessio
 	m.applyLoadedRecentSessions(sessions, epoch)
 }
 
-// Refresh titles and discard ended sessions only for the connected desktop.
+// Refresh display metadata and discard ended sessions only for the connected desktop.
 // An unreachable desktop keeps its shortcuts so the user can retry later.
 func (m *mobileApp) refreshRecentSessions() {
 	var next []mobileRecentSession
@@ -135,6 +136,7 @@ func (m *mobileApp) refreshRecentSessions() {
 			for _, session := range m.sessions {
 				if session.ID == entry.Session && !session.Exited {
 					entry.Title = mobileSessionTitle(session)
+					entry.Program = sessionProgramName(session)
 					found = true
 					break
 				}
@@ -219,7 +221,8 @@ func (m *mobileApp) recentSessionsView(c *ui.Context) {
 				}
 				row := mobileListRow(c, "recent-session-"+entry.Desktop+"-"+entry.Session, "进入最近会话 "+entry.Desktop+" "+entry.Session, 64).Disabled(m.busy || m.scanning || m.reconnecting).Value(m.recentSessionTitle(entry) + " · " + desktop.Name)
 				row.Children(func() {
-					mobileListIcon(c, "terminal")
+					prog := programOf(entry.Program)
+					mobileListIcon(c, prog.Glyph).Role(ui.RoleImage).Label(prog.Name + " icon")
 					ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 						ui.Text(c, m.recentSessionTitle(entry)).FontSize(15).SingleLine().Ellipsis("…")
 						ui.Text(c, desktop.Name).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…")

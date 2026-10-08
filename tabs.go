@@ -8,7 +8,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
 )
 
 // tabStrip divides the title bar evenly between tabs and lets its gaps drag the window.
@@ -154,13 +153,7 @@ func (a *App) tabMenu(m *ui.Menu, t *Tab) {
 }
 
 func paneProgram(p *Pane) program {
-	if p.info.Idle || p.info.Program == "" {
-		return programOf(p.info.Shell)
-	}
-	if agent, ok := agents.Detect(p.info.Program, p.info.Args); ok {
-		return programOf(agent.ID)
-	}
-	return programOf(p.info.Program)
+	return programOf(sessionProgramName(p.info))
 }
 
 // fadeText draws spans on a line, fading the end out when they do not

@@ -14,7 +14,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
 	"gorex/internal/mobile"
 	"gorex/internal/remote"
 	"gorex/internal/rex"
@@ -85,6 +84,7 @@ type desktopRecent struct {
 	Link string
 	Name string
 	ID   string `json:",omitempty"`
+	OS   string `json:",omitempty"`
 }
 
 func sameDesktop(a, b desktopRecent) bool {
@@ -107,10 +107,9 @@ func sameDesktop(a, b desktopRecent) bool {
 
 func mergeDesktopHistory(first, second []desktopRecent) []desktopRecent {
 	var history []desktopRecent
-	seen := make(map[string]bool)
 	for _, entries := range [][]desktopRecent{first, second} {
 		for _, entry := range entries {
-			if _, err := remote.ParseLink(entry.Link); err != nil || seen[entry.Link] {
+			if _, err := remote.ParseLink(entry.Link); err != nil {
 				continue
 			}
 			if strings.TrimSpace(entry.Name) == "" {
@@ -118,10 +117,13 @@ func mergeDesktopHistory(first, second []desktopRecent) []desktopRecent {
 			}
 			duplicate := false
 			for i, kept := range history {
-				if sameDesktop(entry, kept) {
+				if entry.Link == kept.Link || sameDesktop(entry, kept) {
 					// Migrate older records without IDs while keeping the newest URL.
 					if kept.ID == "" || strings.HasPrefix(entry.ID, "machine:") && !strings.HasPrefix(kept.ID, "legacy:") {
 						history[i].ID = entry.ID
+					}
+					if kept.OS == "" {
+						history[i].OS = entry.OS
 					}
 					duplicate = true
 					break
@@ -130,7 +132,6 @@ func mergeDesktopHistory(first, second []desktopRecent) []desktopRecent {
 			if duplicate {
 				continue
 			}
-			seen[entry.Link] = true
 			history = append(history, entry)
 			if len(history) == 6 {
 				return history
@@ -365,7 +366,7 @@ func (m *mobileApp) startConnection(recovering bool) {
 			m.client, m.closeTunnel, m.hello = client, closeTunnel, hello
 			m.reconnecting, m.retryAttempt = false, 0
 			m.connectionIssue, m.connectionDetailsOpen = nil, false
-			currentDesktop := desktopRecent{Link: m.link, Name: m.hello.Host.Name, ID: m.hello.Host.ID}
+			currentDesktop := desktopRecent{Link: m.link, Name: m.hello.Host.Name, ID: m.hello.Host.ID, OS: desktopPlatform(m.hello.Host)}
 			m.migrateRecentDesktop(currentDesktop)
 			m.history = mergeDesktopHistory([]desktopRecent{currentDesktop}, m.history)
 			m.updateSessions(sessions, !recovering)
@@ -774,7 +775,8 @@ func (m *mobileApp) connectView(c *ui.Context) {
 					}
 					row := mobileListRow(c, "desktop-"+entry.Link, label, 56).Value(status).Disabled(m.busy || m.scanning || m.reconnecting)
 					row.Children(func() {
-						mobileListIcon(c, "monitor")
+						platform := desktopPlatformProgram(entry.OS)
+						mobileListIcon(c, platform.Glyph).Role(ui.RoleImage).Label(platform.Name + " icon")
 						ui.Text(c, entry.Name).FontSize(15).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 						ui.Row(c).Gap(5).Shrink(0).AlignItems(ui.Center).Children(func() {
 							color := c.Theme().TextMuted
@@ -814,8 +816,8 @@ func mobileListRow(c *ui.Context, key, label string, height float32) *ui.Element
 	return row
 }
 
-func mobileListIcon(c *ui.Context, name string) {
-	ui.Box(c).Size(32, 32).Shrink(0).Center().Children(func() {
+func mobileListIcon(c *ui.Context, name string) *ui.Element {
+	return ui.Box(c).Size(32, 32).Shrink(0).Center().Children(func() {
 		ui.Icon(c, icon(name)).Size(21, 21).TextColor(colorsOf(c).iconMuted)
 	})
 }
@@ -881,11 +883,8 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 					return false
 				})
 				row.Children(func() {
-					glyph := "terminal"
-					if agent, ok := agents.Detect(s.Program, s.Args); ok {
-						glyph = programOf(agent.ID).Glyph
-					}
-					mobileListIcon(c, glyph)
+					prog := programOf(sessionProgramName(s))
+					mobileListIcon(c, prog.Glyph).Role(ui.RoleImage).Label(prog.Name + " icon")
 					ui.Column(c).Grow(1).MinWidth(0).Gap(5).Children(func() {
 						ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 							ui.Text(c, m.sessionTitle(s)).FontSize(16).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")

@@ -7,9 +7,10 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"gorex/internal/agents"
+	"gorex/internal/rex"
 )
 
-//go:embed assets/icons/*.svg assets/brands/*.svg assets/agents/*
+//go:embed assets/icons/*.svg assets/brands/*.svg assets/agents/* assets/platforms/*
 var assets embed.FS
 
 var svgs = map[string]*ui.SVG{}
@@ -26,6 +27,9 @@ func icon(name string) *ui.SVG {
 	}
 	if b, ok := strings.CutPrefix(name, "agent:"); ok {
 		file = "assets/agents/" + b + ".svg"
+	}
+	if b, ok := strings.CutPrefix(name, "platform:"); ok {
+		file = "assets/platforms/" + b + ".svg"
 	}
 	data, err := assets.ReadFile(file)
 	if err != nil {
@@ -117,6 +121,18 @@ func init() {
 	programs["vi"] = programs["vim"]
 	programs["less"] = program{Name: "Pager", Glyph: "file-code", IconColor: ui.Hex("#ffffff")}
 	programs["man"] = programs["less"]
+}
+
+// sessionProgramName shares foreground process and launcher detection between
+// desktop tabs and mobile lists, and is safe to persist without command arguments.
+func sessionProgramName(info rex.SessionInfo) string {
+	if info.Idle || info.Program == "" {
+		return info.Shell
+	}
+	if agent, ok := agents.Detect(info.Program, info.Args); ok {
+		return agent.ID
+	}
+	return info.Program
 }
 
 // programOf returns how a program shows, by the name of its process.
