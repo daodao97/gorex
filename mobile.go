@@ -981,7 +981,7 @@ var mobileKeyboardActions = []ui.InputAction{
 		{ID: "eof", Label: "Ctrl+D"}, {ID: "search", Label: "Ctrl+R"}, {ID: "paste", Label: "粘贴"},
 		{ID: "/", Label: "/"}, {ID: "-", Label: "-"}, {ID: "|", Label: "|"}, {ID: "~", Label: "~"}, {ID: "\\", Label: "\\"},
 	}},
-	{ID: "dismiss", Label: "收起", Symbol: "keyboard.chevron.compact.down"},
+	{ID: "dismiss", Label: "收起", Symbol: "chevron.down"},
 }
 
 func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
