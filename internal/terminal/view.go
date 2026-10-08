@@ -635,7 +635,10 @@ func (v *view) pointerEvent(ev ui.InputEvent) bool {
 		v.touchSelecting = true
 	}
 	tracking := !v.touchSelecting && !v.reflow && v.screen().MouseTracking() && ev.Mods&ui.Shift == 0
-	preferDrag := t.opts.SelectOnDrag && ev.Mods&ui.Alt == 0 && ev.Kind == ui.InputPointerDown && ev.Button == 0
+	// Alternate-screen programs own history outside the terminal grid. Honor
+	// their mouse protocol so selection can scroll that application history.
+	localDrag := t.opts.SelectOnDrag && !v.screen().AltScreen()
+	preferDrag := localDrag && ev.Mods&ui.Alt == 0 && ev.Kind == ui.InputPointerDown && ev.Button == 0
 	if tracking && !v.selecting && !preferDrag || v.reporting {
 		return v.report(ev)
 	}
@@ -682,6 +685,7 @@ func (v *view) pointerEvent(ev ui.InputEvent) bool {
 		if !ok {
 			return true
 		}
+		px, py = v.selectionPosition(ev.X, ev.Y)
 		if s, ok := v.gesture.Drag(v.screen(), ref, px, py, v.geometry(), ev.Mods&ui.Alt != 0); ok {
 			v.screen().SetSelection(&s)
 		}
@@ -731,6 +735,22 @@ func (v *view) geometry() vt.Geometry {
 	return vt.Geometry{Columns: v.cols, CellWidth: v.cellW, PadLeft: v.ox, Height: v.oy + v.rows*v.cellH}
 }
 
+// Reaching a visible viewport edge should scroll a drag even when the window
+// prevents the pointer from leaving the grid. Only the gesture position is
+// projected outside; hit testing and the selection anchor use the real point.
+func (v *view) selectionPosition(x, y float32) (float64, float64) {
+	px, py := float64(x*v.scale), float64(y*v.scale)
+	top := max(v.oy, 0)
+	bottom := min(v.oy+v.rows*v.cellH, int(math.Round(padY*float64(v.scale)))+v.viewportH)
+	edge := min(int(math.Ceil(8*float64(v.scale))), max((bottom-top)/3, 1))
+	if py < float64(top+edge) {
+		py = -1
+	} else if py > float64(bottom-edge) {
+		py = float64(v.geometry().Height + 1)
+	}
+	return px, py
+}
+
 // autoscroll scrolls a selection dragged past the top or the bottom; t.mu
 // is held.
 func (v *view) autoscroll() {
@@ -741,7 +761,8 @@ func (v *view) autoscroll() {
 	}
 	v.screen().ScrollBy(dir)
 	col, row := v.cellAt(v.pointer[0], v.pointer[1])
-	if s, ok := v.gesture.Tick(v.screen(), col, row, float64(v.pointer[0]*v.scale), float64(v.pointer[1]*v.scale), v.geometry(), false); ok {
+	px, py := v.selectionPosition(v.pointer[0], v.pointer[1])
+	if s, ok := v.gesture.Tick(v.screen(), col, row, px, py, v.geometry(), false); ok {
 		v.screen().SetSelection(&s)
 	}
 }

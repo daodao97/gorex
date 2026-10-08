@@ -98,9 +98,10 @@ type Options struct {
 	// CopyRawText retains concealed characters when copying a selection.
 	// The default copies visible text; neither mode interprets Markdown.
 	CopyRawText bool
-	// SelectOnDrag lets the terminal select text when a program tracks the
-	// mouse. Plain clicks and the wheel still reach the program; Alt bypasses
-	// this override for gestures the program should handle itself.
+	// SelectOnDrag lets the terminal select text when a primary-screen program
+	// tracks the mouse. Alternate-screen programs retain their mouse protocol
+	// and application-owned history. Plain clicks and the wheel still reach
+	// the program; Alt bypasses this override, and Shift forces local selection.
 	SelectOnDrag bool
 	// AdaptiveColors keeps neutral RGB/extended-palette panels and text
 	// readable when a program caches its startup palette across theme changes.

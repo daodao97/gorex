@@ -10,11 +10,11 @@ copy paths share the same formatter. The visible-text binding uses the pinned
 Ghostty selection snapshot/formatter APIs and keeps wrap, scrollback and block
 selection semantics; it never parses Markdown or strips visible punctuation.
 
-Options.SelectOnDrag / SetSelectOnDrag allow native text drags while a program
-tracks the mouse, deferring plain clicks until release and preserving mouse
-scrolling. GoRex enables this for recognized Agent panes so their generated
-Markdown markers remain selectable. Option bypasses it; Shift still forces
-selection for other mouse-aware programs.
+Options.SelectOnDrag / SetSelectOnDrag allow native text drags while a
+primary-screen program tracks the mouse, deferring plain clicks until release
+and preserving mouse scrolling. GoRex enables this for recognized Agent panes
+so their generated Markdown markers remain selectable. Option bypasses it;
+Shift still forces selection for other mouse-aware programs.
 
 Theme.MinimumContrast optionally adjusts text foregrounds against their final
 cell background, including RGB, extended-palette and faint text. GoRex enables
@@ -40,3 +40,14 @@ for ASCII input and control keys, including Kitty event reporting and release
 events. Terminal.SendKey gives native accessory buttons the same cursor/key
 protocol behavior. Software Cmd+C/V/A invoke local selection/clipboard actions;
 hardware app shortcuts retain their existing routing.
+
+Selection drags auto-scroll within an 8-DIP band of the visible top/bottom
+edge, so a maximized window does not require the pointer to leave its grid.
+Ticks preserve the edge trigger and extend the selection across scrollback;
+moving back inside or releasing the pointer stops scrolling.
+
+Mouse-aware alternate-screen applications handle selection and their own
+history scrolling automatically, based on terminal modes rather than program
+identity. Their off-screen history is not in the terminal's scrollback.
+Primary-screen drags keep SelectOnDrag behavior; Shift always forces local
+terminal selection, and alternate screens without mouse tracking select locally.

@@ -6,13 +6,13 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func TestAgentPaneNativeDragIncludesListMarker(t *testing.T) {
+func TestAgentPaneSelectionOwnershipAndListMarkers(t *testing.T) {
 	previous := prefs
 	prefs = settings{FontSize: defaultFontSize}
 	t.Cleanup(func() { prefs = previous })
 	a, tt := newStaticTestApp(t)
 	p := a.tab().Focus
-	for _, agent := range []string{"codex", "claude"} {
+	for _, agent := range []string{"codex", "claude", "opencode"} {
 		p.info.Program, p.info.Idle, p.info.Args = agent, false, nil
 		p.term.Feed([]byte("\x1b[?1049h\x1b[?1002h\x1b[?1006h\x1b[H\x1b[2J4. example"))
 		tt.Frame()
@@ -24,6 +24,16 @@ func TestAgentPaneNativeDragIncludesListMarker(t *testing.T) {
 		cw, ch := r.W/float32(cols), r.H/float32(rows)
 		y, left, right := r.Y+ch/2, r.X+cw/4, r.X+9.75*cw
 		tt.SetClipboard("previous")
+		// Tracked alternate-screen programs own their selection regardless of
+		// Agent identity. Primary-screen drags still select complete cells.
+		tt.Press(right, y)
+		tt.Move(left, y)
+		tt.Release(left, y)
+		if tt.Clipboard() != "previous" {
+			t.Fatalf("%s full-screen drag was intercepted by the terminal", agent)
+		}
+		p.term.Feed([]byte("\x1b[?1049l\x1b[H\x1b[2J4. example"))
+		tt.Frame()
 		tt.Press(right, y)
 		tt.Move(left, y)
 		tt.Release(left, y)
@@ -40,6 +50,7 @@ func TestAgentPaneNativeDragIncludesListMarker(t *testing.T) {
 	// Editors keep their existing mouse protocol instead of acquiring the
 	// Agent-specific drag override.
 	p.info.Program = "vim"
+	p.term.Feed([]byte("\x1b[?1049h"))
 	tt.Frame()
 	r, _ := tt.Find("Terminal")
 	tt.SetClipboard("keep")
