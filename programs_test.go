@@ -21,68 +21,65 @@ func TestAgentTabs(t *testing.T) {
 	a := &App{tabs: []*Tab{tab}}
 	tt := ui.NewTester(a.view, 1000, 620)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
-	for _, compact := range []bool{false, true} {
-		prefs.CompactMode = compact
-		for _, agent := range agents.All {
-			p.info.Program, p.info.Args, p.info.Idle = agent.Aliases[0], nil, false
-			p.title, tab.Name = "", ""
-			tt.Frame()
-			if name, _ := tab.label(); name != agent.Name {
-				t.Fatalf("compact %v: %s title %q", compact, agent.ID, name)
-			}
-			if _, ok := tt.Find(agent.Name + " icon"); !ok {
-				t.Fatalf("compact %v: missing %s tab icon", compact, agent.ID)
-			}
-			// All SVGs are parsed and painted in both title bar styles.
-			if prog := paneProgram(p); !prog.Agent || prog.Glyph == "square-terminal" {
-				t.Fatalf("%s has a generic program icon", agent.ID)
-			}
-		}
-		p.info.Program, p.info.Args = "claude", nil
-		for title, want := range map[string]string{
-			"✳ Claude Code":         "Claude Code",
-			" ✳\ufe0e Claude Code ": "Claude Code",
-			"✳\ufe0f Review login":  "Review login",
-			"Review ✳ login":        "Review ✳ login",
-			"✳":                     "Claude Code",
-		} {
-			p.title = title
-			tt.Frame()
-			if name, _ := tab.label(); name != want {
-				t.Fatalf("Claude title %q: got %q, want %q", title, name, want)
-			}
-			if _, ok := tt.Find("Claude Code icon"); !ok {
-				t.Fatal("cleaning the Claude title hid its brand icon")
-			}
-		}
-		p.title = ""
-		p.info.Program = "node"
-		p.info.Args = []string{"node", "/opt/node_modules/@google/gemini-cli/dist/index.js"}
+	for _, agent := range agents.All {
+		p.info.Program, p.info.Args, p.info.Idle = agent.Aliases[0], nil, false
+		p.title, tab.Name = "", ""
 		tt.Frame()
-		if name, _ := tab.label(); name != "Gemini CLI" {
-			t.Fatalf("wrapped agent title %q", name)
+		if name, _ := tab.label(); name != agent.Name {
+			t.Fatalf("%s title %q", agent.ID, name)
 		}
-		p.title = "Review the login flow"
-		if name, _ := tab.label(); name != p.title {
-			t.Fatal("agent's meaningful terminal title was lost")
+		if _, ok := tt.Find(agent.Name + " icon"); !ok {
+			t.Fatalf("missing %s tab icon", agent.ID)
 		}
-		tab.Name = "my project"
+		// All SVGs are parsed and painted in both title bar styles.
+		if prog := paneProgram(p); !prog.Agent || prog.Glyph == "square-terminal" {
+			t.Fatalf("%s has a generic program icon", agent.ID)
+		}
+	}
+	p.info.Program, p.info.Args = "claude", nil
+	for title, want := range map[string]string{
+		"✳ Claude Code":         "Claude Code",
+		" ✳\ufe0e Claude Code ": "Claude Code",
+		"✳\ufe0f Review login":  "Review login",
+		"Review ✳ login":        "Review ✳ login",
+		"✳":                     "Claude Code",
+	} {
+		p.title = title
 		tt.Frame()
-		if name, _ := tab.label(); name != tab.Name {
-			t.Fatal("manual tab name was overwritten")
+		if name, _ := tab.label(); name != want {
+			t.Fatalf("Claude title %q: got %q, want %q", title, name, want)
 		}
-		if _, ok := tt.Find("Gemini CLI icon"); !ok {
-			t.Fatal("manual name hid the agent icon")
+		if _, ok := tt.Find("Claude Code icon"); !ok {
+			t.Fatal("cleaning the Claude title hid its brand icon")
 		}
-		p.info = rex.SessionInfo{Shell: "zsh", Program: "zsh", Dir: "/work/repo", Idle: true}
-		tab.Name = ""
-		tt.Frame()
-		if name, _ := tab.label(); name != "zsh" {
-			t.Fatal("exiting the agent did not restore shell title")
-		}
-		if _, ok := tt.Find("Gemini CLI icon"); ok {
-			t.Fatal("exiting the agent left its icon behind")
-		}
+	}
+	p.title = ""
+	p.info.Program = "node"
+	p.info.Args = []string{"node", "/opt/node_modules/@google/gemini-cli/dist/index.js"}
+	tt.Frame()
+	if name, _ := tab.label(); name != "Gemini CLI" {
+		t.Fatalf("wrapped agent title %q", name)
+	}
+	p.title = "Review the login flow"
+	if name, _ := tab.label(); name != p.title {
+		t.Fatal("agent's meaningful terminal title was lost")
+	}
+	tab.Name = "my project"
+	tt.Frame()
+	if name, _ := tab.label(); name != tab.Name {
+		t.Fatal("manual tab name was overwritten")
+	}
+	if _, ok := tt.Find("Gemini CLI icon"); !ok {
+		t.Fatal("manual name hid the agent icon")
+	}
+	p.info = rex.SessionInfo{Shell: "zsh", Program: "zsh", Dir: "/work/repo", Idle: true}
+	tab.Name = ""
+	tt.Frame()
+	if name, _ := tab.label(); name != "zsh" {
+		t.Fatal("exiting the agent did not restore shell title")
+	}
+	if _, ok := tt.Find("Gemini CLI icon"); ok {
+		t.Fatal("exiting the agent left its icon behind")
 	}
 
 	// Optional screenshots show the real embedded icons without launching
@@ -102,7 +99,7 @@ func TestAgentTabs(t *testing.T) {
 		tt.SetScale(2)
 		for _, dark := range []bool{false, true} {
 			tt.SetDark(dark)
-			prefs.CompactMode = true
+
 			tt.Frame()
 			name := "agent-tabs-light.png"
 			if dark {

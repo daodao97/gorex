@@ -11,94 +11,35 @@ import (
 	"gorex/internal/agents"
 )
 
-const (
-	tabH     = 28
-	tabMaxW  = 214
-	tabMinW  = 120
-	tileW    = 21
-	tileH    = 16
-	tileStep = 5 // how far each tile behind peeks out
-)
-
-// tabStrip draws the tabs, in a track as wide as they are, which shrinks
-// with them when the title bar has no room for them all. The track is part
-// of the title bar: its edges and the gaps between tabs drag the window.
+// tabStrip divides the title bar evenly between tabs and lets its gaps drag the window.
 func (a *App) tabStrip(c *ui.Context, k *colors) {
-	widths := make([]float32, len(a.tabs))
-	total := float32(4 + max(len(a.tabs)-1, 0)) // the padding and separators
-	for i, t := range a.tabs {
-		widths[i] = tabWidth(c, t)
-		total += widths[i]
-	}
-	track := ui.Row(c).Key("tabs").Basis(total).Shrink(1).MinWidth(0).Height(tabH+4).Padding(2).Radius((tabH+4)/2).
-		Background(k.track).Border(0.5, k.trackBorder).AlignItems(ui.Center).ClipX().
-		DragWindow().Role(ui.RoleTabList).Label("Tabs")
-	if prefs.CompactMode {
-		track.Grow(1).Basis(0).Height(compactTitleH).Padding(0).Radius(0).Border(0, ui.Color{}).Background(k.track)
-	}
-	tabs := slices.Clone(a.tabs)
+	track := ui.Row(c).Key("tabs").Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
+		Background(k.track).AlignItems(ui.Center).ClipX().DragWindow().Role(ui.RoleTabList).Label("Tabs")
 	track.Children(func() {
-		for i, t := range tabs {
-			if i > 0 && !prefs.CompactMode {
-				sep := ui.Box(c).Size(1, 16).Shrink(0)
-				if i != a.active && i-1 != a.active {
-					sep.Background(k.tabSep)
-				}
-			}
-			a.tabItem(c, k, i, t, widths[i])
+		for i, t := range slices.Clone(a.tabs) {
+			a.tabItem(c, k, i, t)
 		}
 	})
 }
 
-// tabWidth returns the width a tab takes when the title bar has room: its
-// tiles and its label, the label faded out past tabMaxW, and room for its
-// close button or its dot.
-func tabWidth(c *ui.Context, t *Tab) float32 {
-	name, detail := t.label()
-	w, _ := c.MeasureText(0, tabLabel(name, detail, ui.Color{}, ui.Color{})...)
-	tiles := float32(tileW + tileStep*min(len(t.panes())-1, 2) + 2)
-	return min(max(6+tiles+9+w+9+18+10, tabMinW), tabMaxW)
-}
-
-// tabLabel is the label of a tab: the name and, fainter, the detail.
-func tabLabel(name, detail string, nameColor, detailColor ui.Color) []ui.Span {
-	return []ui.Span{
-		{Text: name, Size: 13.5, Weight: 500, Color: nameColor},
-		{Text: " " + detail, Size: 13.5, Weight: 400, Color: detailColor},
-	}
-}
-
-// titleFree is how much of the title bar the tabs leave free, after
-// them, to drag the window by.
-const titleFree = 56
-
-// tabItem draws a tab: the tiles of its panes' programs and its label.
-func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab, width float32) {
+// tabItem draws a flat tab with its label, agent status and shortcut.
+func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab) {
 	active := i == a.active
-	e := ui.Row(c).Key(t.ID).Height(tabH).Basis(width).Shrink(1).MinWidth(64).
-		Padding(0, 10, 0, 6).Gap(9).AlignItems(ui.Center).Radius(tabH / 2).Role(ui.RoleTab).Selected(active)
+	bottom := float32(1)
+	bg := k.track
+	e := ui.Row(c).Key(t.ID).Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
+		Padding(0, 8).Gap(6).AlignItems(ui.Center).Role(ui.RoleTab).Selected(active)
 	name, detail := t.label()
 	e.Label(name + " " + detail)
-	agentPane, agentState := tabAgentState(t)
-	if agentPane != nil {
+	if agentPane, agentState := tabAgentState(t); agentPane != nil {
 		e.Tooltip(programOf(agentState.ID).Name + " · " + agentStateLabel(agentState))
 	}
-	if active && !prefs.CompactMode {
-		e.Background(k.tabActive).Shadow(0, 1, 2, 0, k.shadow).Shadow(0, 2, 8, 0, k.shadow)
-	} else if e.Hovered() && !prefs.CompactMode {
-		e.Background(k.hover)
+	if active {
+		bottom, bg = 0, terminalBackground(c)
+	} else if e.Hovered() {
+		bg = k.hover
 	}
-	if prefs.CompactMode {
-		bottom := float32(1)
-		bg := k.track
-		if active {
-			bottom, bg = 0, terminalBackground(c)
-		} else if e.Hovered() {
-			bg = k.hover
-		}
-		e.Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).Padding(0, 8).
-			Gap(6).Radius(0).Background(bg).BorderWidth(0, 1, bottom, 0).BorderColor(k.headerBorder)
-	}
+	e.Background(bg).BorderWidth(0, 1, bottom, 0).BorderColor(k.headerBorder)
 	e.Transition(ui.ElementTransition{Colors: true, Position: true, Duration: 160 * time.Millisecond})
 	e.Drag(t)
 	if dragged, ok := ui.Drop[*Tab](e); ok && dragged != t {
@@ -118,43 +59,8 @@ func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab, width float32) {
 		a.startRename()
 	}
 	e.ContextMenu(func(m *ui.Menu) { a.tabMenu(m, t) })
-	// The tab stays hovered while its close button is pressed, which it
-	// shows then.
 	hovered := e.Hovered()
-	e.Children(func() {
-		if prefs.CompactMode {
-			a.compactTabLabel(c, k, i, t, name, detail, hovered)
-			return
-		}
-		a.tiles(c, k, t)
-		if a.renaming == t {
-			a.renameField(c, t, name)
-			return
-		}
-		nameColor, detailColor := k.text, k.textFaint
-		if !active {
-			nameColor = k.textMuted
-		}
-		label := ui.Box(c).Grow(1).MinWidth(0).Height(18)
-		label.Draw(func(p *ui.Painter, r ui.Rect) {
-			fadeText(p, r, tabLabel(name, detail, nameColor, detailColor))
-		})
-		if agentPane != nil {
-			a.agentIndicator(c, k, agentPane, agentState)
-		}
-		if hovered && len(a.tabs) > 1 {
-			x := iconButton(c, k, "x", "Close Tab", 18, 12).Tooltip("Close Tab")
-			if x.Clicked() {
-				a.later(c, func() { a.closeTab(t) })
-			}
-		} else if agentPane != nil {
-			// The hook status above already represents this tab.
-		} else if t.attention() {
-			ui.Box(c).Size(7, 7).Radius(4).Background(k.attention).Margin(0, 5, 0, 0)
-		} else if a.tabBusy(c, t) {
-			activityDot(c, k.busy, 5.5)
-		}
-	})
+	e.Children(func() { a.compactTabLabel(c, k, i, t, name, detail, hovered) })
 }
 
 // renameField edits the name of a tab in place: Enter or moving the focus
@@ -247,40 +153,6 @@ func (a *App) tabMenu(m *ui.Menu, t *Tab) {
 	}
 }
 
-// tiles draws the tiles of a tab's programs: the focused pane's in front,
-// the others peeking out behind it.
-func (a *App) tiles(c *ui.Context, k *colors, t *Tab) {
-	panes := t.panes()
-	front := t.Focus
-	var back []*Pane
-	for _, p := range panes {
-		if p != front {
-			back = append(back, p)
-		}
-	}
-	if len(back) > 2 {
-		back = back[:2]
-	}
-	w := float32(tileW + tileStep*len(back) + 2)
-	tiles := ui.Box(c).Size(w, tileH+4).Shrink(0)
-	if front != nil {
-		if prog := paneProgram(front); prog.Agent {
-			tiles.Role(ui.RoleImage).Label(prog.Name + " icon").Tooltip(prog.Name)
-		}
-	}
-	tiles.Draw(func(p *ui.Painter, r ui.Rect) {
-		y := r.Y + 2
-		for i := len(back) - 1; i >= 0; i-- {
-			x := r.X + 1 + float32(tileStep*(i+1))
-			inset := float32(i+1) * 0.8
-			drawTile(p, k, ui.Rect{X: x, Y: y + inset, W: tileW, H: tileH - 2*inset}, paneProgram(back[i]), false)
-		}
-		if front != nil {
-			drawTile(p, k, ui.Rect{X: r.X + 1, Y: y, W: tileW, H: tileH}, paneProgram(front), true)
-		}
-	})
-}
-
 func paneProgram(p *Pane) program {
 	if p.info.Idle || p.info.Program == "" {
 		return programOf(p.info.Shell)
@@ -289,30 +161,6 @@ func paneProgram(p *Pane) program {
 		return programOf(agent.ID)
 	}
 	return programOf(p.info.Program)
-}
-
-// drawTile draws a program's tile: a rounded card of its color with a
-// light rim, and its glyph when it is in front.
-func drawTile(p *ui.Painter, k *colors, r ui.Rect, prog program, glyph bool) {
-	const rad = 4.5
-	p.Shadow(r, rad, 0, 0.5, 1.5, 0, ui.RGBA(0, 0, 0, 0.18))
-	rim := ui.Rect{X: r.X - 1, Y: r.Y - 1, W: r.W + 2, H: r.H + 2}
-	p.Fill(rim, k.tileRim, rad+1)
-	p.Fill(r, prog.TileBg, rad)
-	if prog.TileBorder {
-		p.Stroke(r, ui.RGBA(0, 0, 0, 0.12), rad, 0.5)
-	}
-	// A sheen along the top, as on the app icons of macOS.
-	p.FillGradient(r, ui.LinearGradient{From: ui.RGBA(255, 255, 255, 0.18), To: ui.RGBA(255, 255, 255, 0), Angle: 180, End: 0.6}, rad)
-	if !glyph {
-		return
-	}
-	g := prog.TileGlyph
-	if g == "" {
-		g = prog.Glyph
-	}
-	s := float32(11)
-	p.Icon(icon(g), ui.Rect{X: r.X + (r.W-s)/2, Y: r.Y + (r.H-s)/2, W: s, H: s}, prog.TileFg)
 }
 
 // fadeText draws spans on a line, fading the end out when they do not

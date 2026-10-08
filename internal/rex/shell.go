@@ -70,6 +70,8 @@ _gorex_command_start() {
 }
 _gorex_install_marks() {
   emulate -L zsh
+  # Login startup files can rebuild PATH. Keep the pane's Codex launcher first.
+  [[ -z $GOREX_CODEX_BIN ]] || path=($GOREX_CODEX_BIN ${path:#$GOREX_CODEX_BIN})
   autoload -Uz add-zsh-hook
   add-zsh-hook -d precmd _gorex_install_marks
   add-zsh-hook precmd _gorex_mark_prompt

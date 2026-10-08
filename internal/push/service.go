@@ -1,0 +1,390 @@
+package push
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/egoist/mygo/push/apns"
+	"gorex/internal/rex"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+type sender interface {
+	Send(context.Context, apns.Notification) (apns.Response, error)
+}
+type device struct {
+	Token    string               `json:"token"`
+	Updated  time.Time            `json:"updated"`
+	Receipts map[string]time.Time `json:"receipts,omitempty"`
+}
+type pendingNotice struct {
+	ID, Device, Desktop, Session, Kind string
+	Title, Body                        string
+	Created, Next                      time.Time
+	Attempts                           int
+}
+type savedSession struct {
+	ID        string
+	Agent     rex.AgentState
+	LastInput time.Time
+}
+
+func (s savedSession) info() rex.SessionInfo {
+	return rex.SessionInfo{ID: s.ID, Agent: s.Agent, LastInput: s.LastInput}
+}
+
+type database struct {
+	Devices  map[string]device        `json:"devices"`
+	Previous map[string]savedSession  `json:"previous"`
+	Pending  map[string]pendingNotice `json:"pending"`
+	Sent     uint64                   `json:"sent"`
+	LastSent time.Time                `json:"lastSent,omitzero"`
+}
+
+type service struct {
+	mu             sync.Mutex
+	dir            string
+	state          database
+	provider       sender
+	topic          string
+	lastError      string
+	loadedConfig   []byte
+	loadedKey      [32]byte
+	current        map[string]rex.SessionInfo
+	initialized    bool
+	inflightKey    string
+	inflightCancel context.CancelFunc
+}
+
+func newService(dir string) (*service, error) {
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	s := &service{dir: dir, state: database{Devices: map[string]device{}, Previous: map[string]savedSession{}, Pending: map[string]pendingNotice{}}, current: map[string]rex.SessionInfo{}}
+	data, err := os.ReadFile(filepath.Join(dir, "push-devices.json"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if len(data) > 0 {
+		if len(data) > 2<<20 || json.Unmarshal(data, &s.state) != nil {
+			return nil, errors.New("invalid push database")
+		}
+		if s.state.Devices == nil {
+			s.state.Devices = map[string]device{}
+		}
+		if s.state.Previous == nil {
+			s.state.Previous = map[string]savedSession{}
+		}
+		if s.state.Pending == nil {
+			s.state.Pending = map[string]pendingNotice{}
+		}
+	}
+	return s, nil
+}
+func (s *service) saveLocked() error {
+	data, err := json.Marshal(s.state)
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(s.dir, ".push-state-")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	defer os.Remove(name)
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, filepath.Join(s.dir, "push-devices.json"))
+}
+func (s *service) register(r Registration) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r.Disabled {
+		_, changed := s.state.Devices[r.ID]
+		delete(s.state.Devices, r.ID)
+		for key, p := range s.state.Pending {
+			if p.Device == r.ID {
+				s.removeLocked(key)
+				changed = true
+			}
+		}
+		if changed {
+			return s.saveLocked()
+		}
+		return nil
+	}
+	if len(s.state.Devices) >= 32 {
+		if _, ok := s.state.Devices[r.ID]; !ok {
+			return errors.New("notification device limit reached")
+		}
+	}
+	now := time.Now()
+	d := s.state.Devices[r.ID]
+	changed := false
+	if d.Token != r.Token {
+		d.Token = r.Token
+		d.Updated = now
+		changed = true
+	}
+	if d.Receipts == nil {
+		d.Receipts = map[string]time.Time{}
+	}
+	for id, at := range d.Receipts {
+		if now.Sub(at) > time.Hour {
+			delete(d.Receipts, id)
+			changed = true
+		}
+	}
+	for _, id := range r.Receipts {
+		if _, seen := d.Receipts[id]; !seen {
+			d.Receipts[id] = now
+			changed = true
+		}
+		if _, pending := s.state.Pending[r.ID+":"+id]; pending {
+			changed = true
+		}
+		s.removeLocked(r.ID + ":" + id)
+	}
+	if len(d.Receipts) > 256 {
+		// Preserve newest receipts. They are acknowledgements, never credentials.
+		for len(d.Receipts) > 256 {
+			oldest := ""
+			var at time.Time
+			for id, t := range d.Receipts {
+				if oldest == "" || t.Before(at) {
+					oldest, at = id, t
+				}
+			}
+			delete(d.Receipts, oldest)
+		}
+	}
+	s.state.Devices[r.ID] = d
+	if changed {
+		return s.saveLocked()
+	}
+	return nil
+}
+func (s *service) status() Status {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return Status{Configured: s.provider != nil, Devices: len(s.state.Devices), Sent: s.state.Sent, LastSent: s.state.LastSent, LastError: s.lastError}
+}
+func (s *service) removeLocked(key string) {
+	delete(s.state.Pending, key)
+	if key == s.inflightKey && s.inflightCancel != nil {
+		s.inflightCancel()
+	}
+}
+func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	desktop := hello.Host.ID
+	if desktop == "" {
+		return
+	} // never persist a Tailcat access URL as identity
+	next := make(map[string]rex.SessionInfo, len(sessions))
+	saved := make(map[string]savedSession, len(sessions))
+	changed := false
+	for _, ss := range sessions {
+		next[ss.ID] = ss
+		saved[ss.ID] = savedSession{ID: ss.ID, Agent: ss.Agent, LastInput: ss.LastInput}
+		previous, seen := s.state.Previous[ss.ID]
+		if !seen || !rex.AgentNoticeTransition(previous.info(), ss) || ss.Agent.Updated.IsZero() || now.Sub(ss.Agent.Updated) > 15*time.Minute {
+			continue
+		}
+		id := rex.AgentNoticeID(desktop, ss)
+		for deviceID, d := range s.state.Devices {
+			if _, ack := d.Receipts[id]; ack {
+				continue
+			}
+			key := deviceID + ":" + id
+			if _, exists := s.state.Pending[key]; exists {
+				continue
+			}
+			title := ss.Agent.ID + " · " + stateLabel(ss.Agent.State)
+			s.state.Pending[key] = pendingNotice{ID: id, Device: deviceID, Desktop: desktop, Session: ss.ID, Kind: ss.Agent.State, Title: title, Body: hello.Host.Name + " · " + filepath.Base(ss.Dir), Created: now, Next: now.Add(3 * time.Second)}
+			changed = true
+		}
+	}
+	s.current = next
+	s.initialized = true
+	for key, p := range s.state.Pending {
+		ss, exists := next[p.Session]
+		if !exists || now.Sub(p.Created) > 15*time.Minute || rex.AgentNoticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
+			s.removeLocked(key)
+			changed = true
+		}
+	}
+	for id, ss := range saved {
+		prev, ok := s.state.Previous[id]
+		if !ok || prev.Agent != ss.Agent || !prev.LastInput.Equal(ss.LastInput) {
+			changed = true
+			break
+		}
+	}
+	if len(saved) != len(s.state.Previous) {
+		changed = true
+	}
+	s.state.Previous = saved
+	if changed {
+		if s.saveLocked() != nil {
+			s.lastError = "无法保存通知状态"
+		}
+	}
+}
+func stateLabel(state string) string {
+	switch state {
+	case "completed":
+		return "已完成"
+	case "failed":
+		return "执行失败"
+	case "waiting":
+		return "等待确认"
+	}
+	return "任务提醒"
+}
+func (s *service) deliver(ctx context.Context, now time.Time) {
+	s.mu.Lock()
+	if !s.initialized || s.provider == nil {
+		s.mu.Unlock()
+		return
+	}
+	var chosen pendingNotice
+	key := ""
+	for k, p := range s.state.Pending {
+		if !now.Before(p.Next) && (key == "" || p.Created.Before(chosen.Created)) {
+			key, chosen = k, p
+		}
+	}
+	if key == "" {
+		s.mu.Unlock()
+		return
+	}
+	d, exists := s.state.Devices[chosen.Device]
+	provider, topic := s.provider, s.topic
+	if !exists {
+		s.removeLocked(key)
+		s.mu.Unlock()
+		return
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, 40*time.Second)
+	defer cancel()
+	s.inflightKey, s.inflightCancel = key, cancel
+	s.mu.Unlock()
+	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, Topic: topic, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body + " · 点击进入会话", Group: "gorex-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inflightKey = ""
+	s.inflightCancel = nil
+	current, exists := s.state.Pending[key]
+	if !exists {
+		return
+	} // a receipt or new task cancelled it while in flight
+	if err == nil {
+		delete(s.state.Pending, key)
+		s.state.Sent++
+		s.state.LastSent = time.Now()
+		s.lastError = ""
+	} else {
+		var response *apns.Error
+		if errors.As(err, &response) && response.Unregistered() {
+			// A late response must not remove a freshly rotated token.
+			fresh := s.state.Devices[chosen.Device]
+			if fresh.Token == d.Token && (response.Timestamp.IsZero() || !fresh.Updated.After(response.Timestamp)) {
+				delete(s.state.Devices, chosen.Device)
+				for k, p := range s.state.Pending {
+					if p.Device == chosen.Device {
+						delete(s.state.Pending, k)
+					}
+				}
+			} else {
+				// Retry this event with the refreshed registration, rather than
+				// losing it because the old token became invalid in flight.
+				current.Next = time.Now()
+				s.state.Pending[key] = current
+			}
+		} else if errors.As(err, &response) && !response.Retryable() {
+			s.lastError = err.Error()
+			delete(s.state.Pending, key)
+		} else {
+			current.Attempts++
+			current.Next = time.Now().Add(time.Duration(1<<min(current.Attempts, 5)) * 15 * time.Second)
+			s.state.Pending[key] = current
+			s.lastError = "推送暂未送达，正在重试"
+		}
+	}
+	if s.saveLocked() != nil {
+		s.lastError = "无法保存通知状态"
+	}
+}
+
+func (s *service) configure() {
+	cfg, raw, key, err := loadConfig(s.dir)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		s.provider = nil
+		s.lastError = err.Error()
+		return
+	}
+	fingerprint := sha256.Sum256(key)
+	if bytes.Equal(raw, s.loadedConfig) && fingerprint == s.loadedKey && s.provider != nil {
+		return
+	}
+	client, err := apns.New(apns.Config{TeamID: cfg.TeamID, KeyID: cfg.KeyID, PrivateKey: key, Environment: apns.Environment(cfg.Environment)})
+	if err != nil {
+		s.provider = nil
+		s.lastError = err.Error()
+		return
+	}
+	s.provider, s.topic, s.loadedConfig = client, cfg.Topic, raw
+	s.loadedKey = fingerprint
+	s.lastError = ""
+}
+func loadConfig(dir string) (Config, []byte, []byte, error) {
+	var cfg Config
+	raw, err := os.ReadFile(filepath.Join(dir, "push-config.json"))
+	if err != nil {
+		return cfg, nil, nil, errors.New("后台通知尚未配置")
+	}
+	if len(raw) > 8192 || json.Unmarshal(raw, &cfg) != nil || cfg.Topic != "dev.gorex.app" || cfg.Environment != "sandbox" && cfg.Environment != "production" {
+		return cfg, nil, nil, errors.New("APNs 配置无效")
+	}
+	var key []byte
+	if cfg.KeychainService != "" {
+		key, err = readKeychain(cfg.KeychainService, cfg.KeyID)
+		if err == nil {
+			key, err = base64.StdEncoding.DecodeString(string(bytes.TrimSpace(key)))
+		}
+	} else {
+		st, e := os.Stat(cfg.KeyFile)
+		if e != nil || !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 {
+			return cfg, nil, nil, errors.New("APNs 密钥必须是仅当前用户可读的文件")
+		}
+		key, err = os.ReadFile(cfg.KeyFile)
+	}
+	if err != nil || len(key) > 8192 {
+		return cfg, nil, nil, errors.New("无法读取 APNs 密钥")
+	}
+	return cfg, raw, key, nil
+}
+
+func (s *service) String() string {
+	status := s.status()
+	return fmt.Sprintf("push configured=%t devices=%d sent=%d", status.Configured, status.Devices, status.Sent)
+}

@@ -84,25 +84,18 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 	tt.Key(0, ui.KeyEscape)
 	var opened []string
 	a.openLinkURL = func(target string) error { opened = append(opened, target); return nil }
-	for _, compact := range []bool{false, true} {
-		a.setCompactMode(compact)
-		tt.Frame()
-		p.term.Feed([]byte("\x1b[H\x1b[2Jmain.go:42:5: example compiler error\r\nhttps://example.com/documentation\r\n"))
-		tt.Frame()
-		r, ok := tt.Find("Terminal")
-		if !ok {
-			t.Fatal("terminal not visible")
-		}
-		tt.ClickAtWith(ui.Cmd, r.X+3, r.Y+7)
-		if len(opened) == 0 || opened[len(opened)-1] != (&url.URL{Scheme: "cursor", Host: "file", Path: filepath.Join(dir, "main.go") + ":42:5"}).String() {
-			t.Fatalf("app Command click failed: %v (%s)", opened, a.err)
-		}
-		name := "file-links-normal"
-		if compact {
-			name = "file-links-compact"
-		}
-		saveSettingsImage(t, tt, name)
+	tt.Frame()
+	p.term.Feed([]byte("\x1b[H\x1b[2Jmain.go:42:5: example compiler error\r\nhttps://example.com/documentation\r\n"))
+	tt.Frame()
+	r, ok := tt.Find("Terminal")
+	if !ok {
+		t.Fatal("terminal not visible")
 	}
+	tt.ClickAtWith(ui.Cmd, r.X+3, r.Y+7)
+	if len(opened) == 0 || opened[len(opened)-1] != (&url.URL{Scheme: "cursor", Host: "file", Path: filepath.Join(dir, "main.go") + ":42:5"}).String() {
+		t.Fatalf("app Command click failed: %v (%s)", opened, a.err)
+	}
+	saveSettingsImage(t, tt, "file-links-compact")
 }
 
 func TestPaneLinkOpeningAndPreference(t *testing.T) {

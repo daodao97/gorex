@@ -28,6 +28,8 @@ func HookPath(agent string) (string, error) {
 		if dir == "" {
 			dir = filepath.Join(home, ".claude")
 		}
+	case "gemini", "qwen":
+		dir, file = filepath.Join(home, "."+agent), "settings.json"
 	case "codex":
 		dir, file = os.Getenv("CODEX_HOME"), "hooks.json"
 		if dir == "" {
@@ -162,9 +164,13 @@ func MergeHooks(agent string, b []byte, install bool) ([]byte, error) {
 		}
 	}
 	if install {
+		timeout := 2
+		if agent == "gemini" {
+			timeout = 2000
+		} // Gemini uses milliseconds.
 		for _, event := range events {
 			groups, _ := hooks[event].([]any)
-			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": HookCommand(agent), "timeout": 2}}}
+			group := map[string]any{"hooks": []any{map[string]any{"type": "command", "command": HookCommand(agent), "timeout": timeout}}}
 			hooks[event] = append(groups, group)
 		}
 	}

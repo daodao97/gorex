@@ -1,7 +1,6 @@
 package terminal
 
 import (
-	_ "embed"
 	"fmt"
 	"runtime"
 	"sync"
@@ -9,13 +8,6 @@ import (
 	"gorex/internal/terminal/internal/library"
 	"gorex/internal/terminal/internal/vt"
 )
-
-// natives describes the builds of libghostty-vt this package binds, one
-// per platform, which `mygo build` and `mygo dev` put into apps: the CLI
-// reads this file from the package's directory.
-//
-//go:embed mygo-plugin.json
-var natives []byte
 
 var load struct {
 	once sync.Once
@@ -29,6 +21,10 @@ func Load() error {
 	load.once.Do(func() {
 		if !vt.Supported {
 			load.err = fmt.Errorf("terminal: not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
+			return
+		}
+		if runtime.GOOS == "ios" {
+			load.err = vt.Load("linked")
 			return
 		}
 		load.path, load.err = LibraryPath()

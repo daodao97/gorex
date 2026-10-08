@@ -63,26 +63,64 @@ func (v *view) layout(r ui.Rect, scale float32) {
 	t := v.t
 	t.mu.Lock()
 	fk := t.opts.Font.key(scale)
+	cols, rows, fit := t.opts.FixedCols, t.opts.FixedRows, t.opts.FitToView
+	reflow := t.opts.ReflowView && !fit && t.term != nil
+	v.reflow = reflow
 	t.mu.Unlock()
+	v.ox, v.oy = int(math.Round(padX*float64(scale))), int(math.Round(padY*float64(scale)))
+	w, h := max(int(math.Round(float64(r.W*scale)))-2*v.ox, 1), max(int(math.Round(float64(r.H*scale)))-2*v.oy, 1)
+	if cols > 0 && rows > 0 && fit {
+		// Whole-pixel cells must fit too; rounding each cell after scaling
+		// the font can otherwise clip the final columns on a Retina screen.
+		cw, ch := max(w/cols, 1), max(h/rows, 1)
+		for range 4 {
+			mw, mh, _ := fontGeometry(fk, scale)
+			factor := min(float32(cw)/float32(mw), float32(ch)/float32(mh))
+			if factor >= 1 {
+				break
+			}
+			fk.size *= factor * 0.99
+		}
+	}
 	if fk != v.font {
+		v.followCursor = true
 		v.font, v.scale = fk, scale
 		for i := range v.fonts {
 			v.fonts[i] = fk.variant(i)
 		}
-		m := v.fonts[0].Metrics()
-		adv := float32(0)
-		for _, g := range ui.Shape(asciiPrintable, v.fonts[0]) {
-			adv = max(adv, g.Advance)
-		}
-		v.cellW = max(int(math.Ceil(float64(adv*scale-0.05))), 1)
-		v.cellH = max(int(math.Ceil(float64((m.Ascent+m.Descent+m.LineGap)*fk.lineHeight*scale-0.05))), 1)
-		v.baseline = int(math.Round(float64((float32(v.cellH)-(m.Ascent+m.Descent)*scale)/2 + m.Ascent*scale)))
+		v.cellW, v.cellH, v.baseline = fontGeometry(fk, scale)
 		v.shaped.clear()
 		v.lines = v.lines[:0]
 	}
-	v.ox, v.oy = int(math.Round(padX*float64(scale))), int(math.Round(padY*float64(scale)))
-	w, h := int(math.Round(float64(r.W*scale)))-2*v.ox, int(math.Round(float64(r.H*scale)))-2*v.oy
 	v.cols, v.rows = max(w/v.cellW, 1), max(h/v.cellH, 1)
+	if v.viewportW != w || v.viewportH != h {
+		v.followCursor = true
+	}
+	v.viewportW, v.viewportH = w, h
+	v.fixedGrid = cols > 0 && rows > 0 && !reflow
+	if v.fixedGrid {
+		v.cols, v.rows = cols, rows
+		if fit {
+			v.panX, v.panY = 0, 0
+		}
+		v.panX = min(max(v.panX, 0), max(cols*v.cellW-w, 0))
+		v.panY = min(max(v.panY, 0), max(rows*v.cellH-h, 0))
+		v.ox -= v.panX
+		v.oy -= v.panY
+	}
+}
+
+func fontGeometry(fk fontKey, scale float32) (cw, ch, baseline int) {
+	font := fk.variant(0)
+	m := font.Metrics()
+	adv := float32(0)
+	for _, g := range ui.Shape(asciiPrintable, font) {
+		adv = max(adv, g.Advance)
+	}
+	cw = max(int(math.Ceil(float64(adv*scale-0.05))), 1)
+	ch = max(int(math.Ceil(float64((m.Ascent+m.Descent+m.LineGap)*fk.lineHeight*scale-0.05))), 1)
+	baseline = int(math.Round(float64((float32(ch)-(m.Ascent+m.Descent)*scale)/2 + m.Ascent*scale)))
+	return
 }
 
 const asciiPrintable = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
@@ -106,7 +144,11 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		}
 		return
 	}
-	t.resize(gridSize{v.cols, v.rows, v.cellW, v.cellH})
+	if t.opts.FixedCols > 0 && t.opts.FixedRows > 0 {
+		t.resize(gridSize{t.opts.FixedCols, t.opts.FixedRows, v.cellW, v.cellH})
+	} else {
+		t.resize(gridSize{v.cols, v.rows, v.cellW, v.cellH})
+	}
 	t.advanceSearch()
 	v.searchRects = v.searchRects[:0]
 	if t.search != nil {
@@ -125,10 +167,14 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 		t.held = false
 	}
 	held := t.held
-	if !held {
-		t.rs.BeginUpdate(t.term)
+	screen := t.term
+	if !held && v.reflow {
+		screen = v.presentation()
 	}
-	v.scrollbar = t.term.Scrollbar()
+	if !held {
+		t.rs.BeginUpdate(screen)
+	}
+	v.scrollbar = screen.Scrollbar()
 	t.mu.Unlock()
 	rs := t.rs
 	if !held {
@@ -136,7 +182,22 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 	}
 	colors := rs.Colors()
 	full := rs.Dirty() == vt.Full || colors != v.colors
+	oldCursor := v.cursor
 	v.colors, v.cursor = colors, rs.Cursor()
+	v.caretCell = [2]int{v.cursor.X, v.cursor.Y}
+	if v.cursor.WideTail && v.caretCell[0] > 0 {
+		v.caretCell[0]--
+	}
+	if v.fixedGrid && (v.followCursor || oldCursor.X != v.cursor.X || oldCursor.Y != v.cursor.Y) {
+		oldX, oldY := v.panX, v.panY
+		v.panX = min(max(v.panX, (int(v.cursor.X)+1)*v.cellW-v.viewportW), int(v.cursor.X)*v.cellW)
+		v.panY = min(max(v.panY, (int(v.cursor.Y)+1)*v.cellH-v.viewportH), int(v.cursor.Y)*v.cellH)
+		v.panX = min(max(v.panX, 0), max(v.cols*v.cellW-v.viewportW, 0))
+		v.panY = min(max(v.panY, 0), max(v.rows*v.cellH-v.viewportH, 0))
+		v.ox += oldX - v.panX
+		v.oy += oldY - v.panY
+	}
+	v.followCursor = false
 	cols, rows := rs.Size()
 	if len(v.lines) != rows {
 		v.lines = append(v.lines[:0], make([]rowCache, rows)...)
@@ -545,7 +606,8 @@ func (v *view) cursorRect(ox, oy, cw, ch float32) (r ui.Rect, c, text ui.Color, 
 	if !cu.InView || !cu.Visible || v.preedit != "" {
 		return
 	}
-	if v.focused && cu.Blinking && time.Since(v.blinkStart)%(2*blinkPeriod) >= blinkPeriod {
+	active := v.focused || v.t.opts.ActiveCursor
+	if active && cu.Blinking && time.Since(v.blinkStart)%(2*blinkPeriod) >= blinkPeriod {
 		return
 	}
 	c = color(v.colors.Foreground)
@@ -569,7 +631,7 @@ func (v *view) cursorRect(ox, oy, cw, ch float32) (r ui.Rect, c, text ui.Color, 
 	r = ui.Rect{X: ox + float32(x)*cw, Y: oy + float32(cu.Y)*ch, W: w, H: ch}
 	px := 1 / v.scale
 	style := cu.Style
-	if !v.focused && style == vt.CursorBlock {
+	if !active && style == vt.CursorBlock {
 		style = vt.CursorBlockHollow
 	}
 	switch style {

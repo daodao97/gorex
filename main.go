@@ -18,14 +18,67 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"gorex/internal/push"
 	"gorex/internal/rex"
 )
 
 func main() {
+	if runtime.GOOS == "ios" {
+		mobileMain()
+		return
+	}
+	if len(os.Args) == 4 && os.Args[1] == "-push-service" {
+		if err := push.Run(os.Args[2], os.Args[3]); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 6 && os.Args[1] == "-push-import" {
+		if err := push.Import(rex.Dir(), os.Args[2], os.Args[3], os.Args[4], os.Args[5]); err != nil {
+			log.Print(err)
+			os.Exit(1)
+		}
+		fmt.Println("APNs 配置已保存")
+		return
+	}
+	if len(os.Args) == 2 && os.Args[1] == "-push-status" {
+		status, err := push.Query(rex.Dir())
+		if err != nil {
+			log.Print("无法读取任务通知服务状态")
+			os.Exit(1)
+		}
+		json.NewEncoder(os.Stdout).Encode(status)
+		return
+	}
 	// Hooks are silent, bounded CLI calls and never initialize AppKit or
 	// spawn a server when run in another terminal.
 	if len(os.Args) == 3 && os.Args[1] == "-agent-hook" {
 		rex.RunAgentHook(os.Args[2], os.Stdin)
+		return
+	}
+	if len(os.Args) == 5 && (os.Args[1] == "-codex-bridge" || os.Args[1] == "-codex-proxy") {
+		pid, err := rex.ParseBridgePID(os.Args[3])
+		if err == nil {
+			if os.Args[1] == "-codex-bridge" {
+				err = rex.StartCodexBridge(os.Args[2], pid, os.Args[4])
+			} else {
+				err = rex.RunCodexProxy(os.Args[2], pid, os.Args[4])
+			}
+		}
+		if err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+	if len(os.Args) == 4 && os.Args[1] == "-codex-watch" {
+		pid, err := rex.ParseBridgePID(os.Args[3])
+		if err == nil {
+			err = rex.WatchCodexThread(os.Args[2], pid)
+		}
+		if err != nil {
+			os.Exit(1)
+		}
 		return
 	}
 	// -server runs the session server; other arguments are AppKit's, as
@@ -62,6 +115,7 @@ func main() {
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
 		a.saveNow()
+		a.stopPhonePair()
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
@@ -78,6 +132,11 @@ func (a *App) open() {
 		return
 	}
 	a.client = client
+	go func() {
+		if err := push.Ensure(rex.Dir(), rex.SocketPath()); err != nil {
+			log.Print("无法启动任务通知服务")
+		}
+	}()
 	a.hello, err = client.Hello()
 	if err == nil && mygo.IsDev() && staleServer(a.hello) {
 		// A server a build before this one started runs that build's
@@ -117,6 +176,7 @@ func (a *App) open() {
 	go a.poll(win, client)
 	a.debugHook()
 	win.OnClosed(func() {
+		a.stopPhonePair()
 		a.saveNow()
 		a.quitting = true
 		for _, t := range a.tabs {
@@ -163,7 +223,7 @@ func (a *App) saveNow() {
 // connection, for the next window.
 func (a *App) reset() {
 	a.tabs, a.active, a.focusReq = nil, 0, nil
-	a.paletteOpen, a.hostOpen, a.renaming = false, false, nil
+	a.paletteOpen, a.renaming = false, nil
 	a.settingsOpen = false
 	a.saveDue, a.quitting, a.lastSnapshot, a.title = false, false, "", ""
 }

@@ -70,6 +70,10 @@ func Serve() error {
 	if err != nil {
 		return err
 	}
+	deviceID, err := loadDeviceID(dir)
+	if err != nil {
+		return err
+	}
 	sock := SocketPath()
 	os.Remove(sock)
 	ln, err := net.Listen("unix", sock)
@@ -88,6 +92,9 @@ func Serve() error {
 	s.exe, s.exeTime = Executable()
 	go func() {
 		s.host = hostInfo()
+		if s.host.ID == "" {
+			s.host.ID = "installation:" + deviceID
+		}
 		close(s.hostDone)
 	}()
 	go s.watchIdle()
@@ -162,13 +169,17 @@ func (s *Server) handle(conn net.Conn) {
 			conn.Close()
 			return
 		}
-		conn.Write([]byte(`{"ok":true}` + "\n"))
+		if a.ScreenFrames {
+			conn.Write([]byte(`{"ok":true,"screen_frames":true}` + "\n"))
+		} else {
+			conn.Write([]byte(`{"ok":true}` + "\n"))
+		}
 		// What the reader buffered past the first line is input.
 		if n := r.Buffered(); n > 0 {
 			b, _ := r.Peek(n)
 			ss.input(b)
 		}
-		ss.attach(conn, a.Cols, a.Rows)
+		ss.attachScreen(conn, a.Cols, a.Rows, a.ScreenFrames)
 		return
 	}
 	s.control(conn, r, first)
@@ -350,6 +361,12 @@ func hostInfo() HostInfo {
 		return strings.TrimSpace(string(b))
 	}
 	if runtime.GOOS == "darwin" {
+		for _, line := range strings.Split(out("ioreg", "-rd1", "-c", "IOPlatformExpertDevice"), "\n") {
+			if _, value, ok := strings.Cut(line, `"IOPlatformUUID" = `); ok {
+				h.ID = deviceFingerprint(strings.Trim(value, `"`))
+				break
+			}
+		}
 		h.Name = out("scutil", "--get", "ComputerName")
 		h.OS = "macOS " + out("sw_vers", "-productVersion")
 		h.Chip = sysctlString("machdep.cpu.brand_string")
@@ -370,6 +387,9 @@ func hostInfo() HostInfo {
 			h.Model = sysctlString("hw.model")
 		}
 	} else {
+		if data, err := os.ReadFile("/etc/machine-id"); err == nil {
+			h.ID = deviceFingerprint(string(data))
+		}
 		h.Name, _ = os.Hostname()
 		h.OS = runtime.GOOS
 		if b, err := os.ReadFile("/etc/os-release"); err == nil {

@@ -16,7 +16,7 @@ func loadLib(t *testing.T) {
 	if testing.Short() && os.Getenv("MYGO_GHOSTTY_VT") == "" {
 		t.Skip("downloads libghostty-vt")
 	}
-	manifest, err := os.ReadFile("../../mygo-plugin.json")
+	manifest, err := os.ReadFile("../library/desktop/mygo-plugin.json")
 	if err != nil {
 		t.Fatal(err)
 	}

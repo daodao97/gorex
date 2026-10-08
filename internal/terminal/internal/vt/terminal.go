@@ -506,13 +506,33 @@ const formatVT = 1
 // stops, the working directory, the keyboard's flags and the cursor. The
 // palette is left out, as the terminal it restores in has colors of its
 // own.
-func (t *Terminal) VT() []byte {
+func (t *Terminal) VT() []byte { return t.vtRecent(0) }
+
+// VTRecent serializes the active screen and at most historyRows preceding
+// rows. A presentation can request more as the user scrolls, without copying
+// megabytes of old output on every frame.
+func (t *Terminal) VTRecent(historyRows int) []byte { return t.vtRecent(historyRows) }
+
+func (t *Terminal) vtRecent(historyRows int) []byte {
 	opts := formatterOptions{size: unsafe.Sizeof(formatterOptions{}), emit: formatVT}
 	x := &opts.extra
 	x.size = unsafe.Sizeof(opts.extra)
 	x.modes, x.scrollingRegion, x.tabstops, x.pwd, x.keyboard = true, true, true, true, true
 	x.screen.size = unsafe.Sizeof(opts.extra.screen)
 	x.screen.cursor, x.screen.style, x.screen.hyperlink, x.screen.protection, x.screen.kittyKeyboard, x.screen.charsets = true, true, true, true, true, true
+	var selection Selection
+	defer runtime.KeepAlive(&selection)
+	if historyRows > 0 && !t.AltScreen() {
+		cols, rows := t.Size()
+		total := int(t.Scrollbar().Total)
+		start := max(total-rows-historyRows, 0)
+		var a, b GridRef
+		a.size, b.size = unsafe.Sizeof(a), unsafe.Sizeof(b)
+		if terminalGridRef(t.h, point{tag: 2, y: uint32(start)}, &a) == 0 && terminalGridRef(t.h, point{tag: 2, x: uint16(cols - 1), y: uint32(total - 1)}, &b) == 0 {
+			selection = Selection{size: unsafe.Sizeof(selection), start: a, end: b}
+			opts.selection = uintptr(unsafe.Pointer(&selection))
+		}
+	}
 	var f uintptr
 	if formatterTerminalNew(0, &f, t.h, opts) != 0 {
 		return nil

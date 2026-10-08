@@ -245,7 +245,7 @@ func TestBackgroundLongCommandCompletionNotice(t *testing.T) {
 	}
 }
 
-func TestAgentStateMarkersInBothTabStyles(t *testing.T) {
+func TestAgentStateMarkersInTabs(t *testing.T) {
 	previous := prefs
 	t.Cleanup(func() { prefs = previous })
 	registerFonts()
@@ -255,37 +255,34 @@ func TestAgentStateMarkersInBothTabStyles(t *testing.T) {
 	a := &App{tabs: []*Tab{tab}}
 	tt := ui.NewTester(a.view, 1000, 620)
 	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
-	for _, compact := range []bool{false, true} {
-		prefs.CompactMode = compact
-		for _, state := range []string{agents.Ready, agents.Running, agents.Waiting, agents.Completed, agents.Failed} {
-			p.info = withAgentState(p, "claude", state, 1)
-			p.attention = true // old bell attention must not hide hook state
-			tt.Frame()
-			label := "Agent " + state
-			if state == agents.Waiting {
-				label = "Agent waiting for input"
-			}
-			if _, ok := tt.Find(label); !ok {
-				t.Fatalf("compact=%v missing %s", compact, label)
-			}
-			if _, ok := tt.Find("Claude Code icon"); !ok {
-				t.Fatal("state marker replaced the brand icon")
-			}
-		}
-		p.info = withAgentState(p, "claude", agents.Waiting, 1)
+	for _, state := range []string{agents.Ready, agents.Running, agents.Waiting, agents.Completed, agents.Failed} {
+		p.info = withAgentState(p, "claude", state, 1)
+		p.attention = true // old bell attention must not hide hook state
 		tt.Frame()
-		if err := tt.Click("Agent waiting for input"); err != nil {
-			t.Fatal(err)
+		label := "Agent " + state
+		if state == agents.Waiting {
+			label = "Agent waiting for input"
 		}
-		tt.Frame()
-		if a.focusReq != p {
-			t.Fatal("status click did not focus pane")
+		if _, ok := tt.Find(label); !ok {
+			t.Fatalf("missing %s", label)
 		}
-		p.info.Program, p.info.Idle = "zsh", true
-		tt.Frame()
-		if _, ok := tt.Find("Agent waiting for input"); ok {
-			t.Fatal("exited agent left a stale marker")
+		if _, ok := tt.Find("Claude Code icon"); !ok {
+			t.Fatal("state marker replaced the brand icon")
 		}
+	}
+	p.info = withAgentState(p, "claude", agents.Waiting, 1)
+	tt.Frame()
+	if err := tt.Click("Agent waiting for input"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.focusReq != p {
+		t.Fatal("status click did not focus pane")
+	}
+	p.info.Program, p.info.Idle = "zsh", true
+	tt.Frame()
+	if _, ok := tt.Find("Agent waiting for input"); ok {
+		t.Fatal("exited agent left a stale marker")
 	}
 	if dir := os.Getenv("MYGO_TEST_IMAGES"); dir != "" {
 		os.MkdirAll(dir, 0o755)
@@ -300,14 +297,7 @@ func TestAgentStateMarkersInBothTabStyles(t *testing.T) {
 		tt.SetSize(1512, 240)
 		tt.SetScale(2)
 		tt.SetDark(true)
-		for _, compact := range []bool{false, true} {
-			prefs.CompactMode = compact
-			name := "agent-status-normal-dark"
-			if compact {
-				name = "agent-status-compact-dark"
-			}
-			saveSettingsImage(t, tt, name)
-		}
+		saveSettingsImage(t, tt, "agent-status-compact-dark")
 	}
 }
 

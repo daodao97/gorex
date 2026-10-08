@@ -9,10 +9,6 @@ import (
 )
 
 const (
-	gap           = 8  // between panes, and around them
-	titleH        = 44 // the title bar
-	cardR         = 12 // the panes' corners
-	headerH       = 33 // the panes' headers
 	compactTitleH = 32
 	compactGap    = 1.0 // visible separator; its pointer target is wider
 	compactHit    = 4
@@ -24,14 +20,10 @@ func (a *App) view(c *ui.Context) {
 	a.runPosted()
 	k := colorsOf(c)
 	a.focusedWin = a.win == nil || a.win.IsFocused()
-	c.Root().Background(k.bgBottom)
-	ui.Column(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) { paintBackground(p, r, k) }).Children(func() {
-		a.titleBar(c, k)
-		inset := float32(gap)
-		if prefs.CompactMode {
-			inset = 0
-		}
-		ui.Column(c).Grow(1).MinHeight(0).Padding(0, inset, inset, inset).Children(func() {
+	c.Root().Background(terminalBackground(c))
+	ui.Column(c).Fill().Children(func() {
+		a.compactTitleBar(c, k, c.TitleBar())
+		ui.Column(c).Grow(1).MinHeight(0).Children(func() {
 			if t := a.tab(); t != nil {
 				a.tabContent(c, k, t)
 			}
@@ -43,6 +35,7 @@ func (a *App) view(c *ui.Context) {
 	a.shortcuts(c)
 	a.palette(c, k)
 	a.settingsPage(c, k)
+	a.phonePairDialog(c, k)
 	if a.saveDue && time.Since(a.lastSave) > time.Second {
 		a.save()
 	}
@@ -55,62 +48,6 @@ func (a *App) view(c *ui.Context) {
 			a.win.SetTitle(title)
 		}
 	}
-}
-
-// titleBar draws the title bar under the window's controls: the host,
-// the tabs, and the buttons of the command palette and a new tab.
-func (a *App) titleBar(c *ui.Context, k *colors) {
-	bar := c.TitleBar()
-	if prefs.CompactMode {
-		a.compactTitleBar(c, k, bar)
-		return
-	}
-	left := bar.Left
-	if left == 0 {
-		left = 12 // in full screen
-	} else {
-		left += 14
-	}
-	ui.Row(c).Height(titleH).Padding(0, max(bar.Right, 10), 0, left).Gap(14).AlignItems(ui.Center).DragWindow().Children(func() {
-		if !prefs.HideHost {
-			a.hostChip(c, k)
-		}
-		a.tabStrip(c, k)
-		// The title bar between the tabs and the buttons, which drags the
-		// window, and a double click on which zooms it.
-		ui.Spacer(c).Key("title-space").MinWidth(titleFree - 14)
-		ui.Row(c).Key("title-actions").Gap(2).AlignItems(ui.Center).Shrink(0).Children(func() {
-			a.appearanceButton(c, k)
-			if iconButton(c, k, "command", "Command Palette", 30, 17).Tooltip("Command Palette  ⇧⌘P").Clicked() {
-				a.openPalette()
-			}
-			if iconButton(c, k, "plus", "New Tab", 30, 19).Tooltip("New Tab  ⌘T").Clicked() {
-				a.newTab(a.currentDir())
-			}
-		})
-	})
-}
-
-// appearanceButton makes the theme easy to switch without opening the
-// menu bar. Its context menu also offers following the system.
-func (a *App) appearanceButton(c *ui.Context, k *colors) {
-	glyph, label, next := "moon", "Switch to Dark Mode", "dark"
-	if c.Theme().Dark {
-		glyph, label, next = "sun", "Switch to Light Mode", "light"
-	}
-	b := iconButton(c, k, glyph, label, 30, 17).Tooltip(label)
-	if b.Clicked() {
-		a.setAppearance(next)
-	}
-	b.ContextMenu(func(m *ui.Menu) {
-		for _, option := range []struct{ label, value string }{
-			{"System", ""}, {"Light", "light"}, {"Dark", "dark"},
-		} {
-			if m.Item(option.label).Checked(prefs.Appearance == option.value).Chosen() {
-				a.setAppearance(option.value)
-			}
-		}
-	})
 }
 
 // iconButton is a borderless button of an icon, with a face on hover;
@@ -140,7 +77,7 @@ func (a *App) tabContent(c *ui.Context, k *colors, t *Tab) {
 		return
 	}
 	content := a.node(c, k, t, t.Root).Grow(1)
-	if prefs.CompactMode && t.Root.Pane == nil {
+	if t.Root.Pane == nil {
 		// Paint after every pane has recorded its current bounds, outside
 		// the cards' clips, so the outline reaches the divider centerlines.
 		content.DrawOver(func(p *ui.Painter, r ui.Rect) {
@@ -165,42 +102,30 @@ func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) *ui.Element {
 	// The tree may change as its panes build, as a split: build the
 	// children it has now.
 	first, second, ratio := n.A, n.B, n.Ratio
-	spacing := float32(gap)
-	if prefs.CompactMode {
-		spacing = compactGap
-	}
 	box.Children(func() {
 		a.node(c, k, t, first).Grow(ratio).Basis(0).MinWidth(0).MinHeight(0)
-		if prefs.CompactMode {
-			space := ui.Box(c).Key("divider-space").Shrink(0)
-			if n.Vertical {
-				space.Height(spacing)
-			} else {
-				space.Width(spacing)
-			}
+		space := ui.Box(c).Key("divider-space").Shrink(0)
+		if n.Vertical {
+			space.Height(compactGap)
+		} else {
+			space.Width(compactGap)
 		}
 		div := ui.Box(c).Key("divider").Role(ui.RoleSplitter).Label("Divider")
-		if prefs.CompactMode {
-			// Only one point takes layout space. The absolute pointer
-			// target spans both panes and stays centered on that line.
-			offset := spacing*(0.5-ratio) - compactHit/2
-			if n.Vertical {
-				div.Absolute().Height(compactHit).Left(0).Right(0).
-					TopPercent(100 * ratio).MarginY(offset).Cursor(ui.CursorResizeRow)
-			} else {
-				div.Absolute().Width(compactHit).Top(0).Bottom(0).
-					LeftPercent(100 * ratio).MarginX(offset).Cursor(ui.CursorResizeColumn)
-			}
-		} else if n.Vertical {
-			div.Height(spacing).Cursor(ui.CursorResizeRow)
+		// Only one point takes layout space. The absolute pointer
+		// target spans both panes and stays centered on that line.
+		offset := compactGap*(0.5-ratio) - compactHit/2
+		if n.Vertical {
+			div.Absolute().Height(compactHit).Left(0).Right(0).
+				TopPercent(100 * ratio).MarginY(offset).Cursor(ui.CursorResizeRow)
 		} else {
-			div.Width(spacing).Cursor(ui.CursorResizeColumn)
+			div.Absolute().Width(compactHit).Top(0).Bottom(0).
+				LeftPercent(100 * ratio).MarginX(offset).Cursor(ui.CursorResizeColumn)
 		}
 		if dx, dy, ok := div.Dragged(); ok {
-			total := bounds.W - spacing
+			total := bounds.W - compactGap
 			d := dx
 			if n.Vertical {
-				total, d = bounds.H-spacing, dy
+				total, d = bounds.H-compactGap, dy
 			}
 			if total > 0 {
 				n.Ratio = min(max(n.Ratio+d/total, 0.08), 0.92)
@@ -211,64 +136,40 @@ func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) *ui.Element {
 			n.Ratio = 0.5
 			a.changed()
 		}
-		compact := prefs.CompactMode
 		showGrip := div.Hovered() || div.Dragging() || div.Pressed()
-		if compact || showGrip {
-			width, height := c.Size()
-			div.Draw(func(p *ui.Painter, r ui.Rect) {
-				if compact {
-					// Reach the center of adjoining gaps at nested split
-					// junctions, without drawing into the title bar.
-					if n.Vertical {
-						x0, x1 := max(0, r.X-compactGap/2), min(width, r.X+r.W+compactGap/2)
-						p.Fill(ui.Rect{X: x0, Y: r.Y + r.H/2 - 0.5, W: x1 - x0, H: 1}, k.headerBorder, 0)
-					} else {
-						y0, y1 := max(compactTitleH, r.Y-compactGap/2), min(height, r.Y+r.H+compactGap/2)
-						p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: y0, W: 1, H: y1 - y0}, k.headerBorder, 0)
-					}
+		width, height := c.Size()
+		div.Draw(func(p *ui.Painter, r ui.Rect) {
+			// Reach the center of adjoining gaps at nested split
+			// junctions, without drawing into the title bar.
+			if n.Vertical {
+				x0, x1 := max(0, r.X-compactGap/2), min(width, r.X+r.W+compactGap/2)
+				p.Fill(ui.Rect{X: x0, Y: r.Y + r.H/2 - 0.5, W: x1 - x0, H: 1}, k.headerBorder, 0)
+			} else {
+				y0, y1 := max(compactTitleH, r.Y-compactGap/2), min(height, r.Y+r.H+compactGap/2)
+				p.Fill(ui.Rect{X: r.X + r.W/2 - 0.5, Y: y0, W: 1, H: y1 - y0}, k.headerBorder, 0)
+			}
+			if showGrip {
+				if n.Vertical {
+					p.Fill(ui.Rect{X: r.X + r.W/2 - 18, Y: r.Y + r.H/2 - 1.5, W: 36, H: 3}, k.iconMuted.Alpha(0.6), 1.5)
+				} else {
+					p.Fill(ui.Rect{X: r.X + r.W/2 - 1.5, Y: r.Y + r.H/2 - 18, W: 3, H: 36}, k.iconMuted.Alpha(0.6), 1.5)
 				}
-				if showGrip {
-					if n.Vertical {
-						p.Fill(ui.Rect{X: r.X + r.W/2 - 18, Y: r.Y + r.H/2 - 1.5, W: 36, H: 3}, k.iconMuted.Alpha(0.6), 1.5)
-					} else {
-						p.Fill(ui.Rect{X: r.X + r.W/2 - 1.5, Y: r.Y + r.H/2 - 18, W: 3, H: 36}, k.iconMuted.Alpha(0.6), 1.5)
-					}
-				}
-			})
-		}
+			}
+		})
 		a.node(c, k, t, second).Grow(1 - ratio).Basis(0).MinWidth(0).MinHeight(0)
 	})
 	return box
 }
 
-// paneCard draws a pane: a card with a header over its terminal.
+// paneCard draws a pane with its optional search field and terminal.
 func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) *ui.Element {
-	focused := t.Focus == p
-	card := ui.Column(c).Key(p.ID).Radius(cardR).Clip().MinWidth(0).MinHeight(0)
-	bg, border, shadow := k.card, k.cardBorder, k.shadow
-	if focused {
-		bg, border, shadow = k.cardFocused, k.cardBorderFocused, k.shadowFocused
-	}
-	if prefs.CompactMode {
-		card.Radius(0).Background(terminalBackground(c))
-	} else {
-		card.Background(bg).Border(1, border).
-			Shadow(0, 1, 2, 0, shadow).
-			Shadow(0, 6, 22, -2, shadow)
-	}
+	card := ui.Column(c).Key(p.ID).Clip().MinWidth(0).MinHeight(0).Background(terminalBackground(c))
 	card.Transition(ui.ElementTransition{Colors: true, Duration: 160 * time.Millisecond})
-	hovered := card.Hovered()
 	card.Children(func() {
-		if !prefs.HideSessionHeader && !prefs.CompactMode {
-			a.paneHeader(c, k, t, p, focused, hovered)
-		}
 		if p.find.open {
 			a.findBar(c, k, t, p)
 		}
-		body := ui.Box(c).Key("terminal-body").Grow(1).MinHeight(0).Padding(0, 5, 6, 5)
-		if prefs.CompactMode {
-			body.Padding(0)
-		}
+		body := ui.Box(c).Key("terminal-body").Grow(1).MinHeight(0)
 		body.Children(func() {
 			if p.term == nil {
 				return
@@ -301,64 +202,6 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) *ui.Element {
 		a.focusReq = p
 	}
 	return card
-}
-
-// paneHeader draws a pane's program, title and directory, its activity,
-// and its buttons.
-func (a *App) paneHeader(c *ui.Context, k *colors, t *Tab, p *Pane, focused, hovered bool) {
-	name, detail := p.label()
-	prog := paneProgram(p)
-	h := ui.Row(c).Key("session-header").Height(headerH).Padding(0, 8, 0, 12).Gap(7).AlignItems(ui.Center).MinWidth(0)
-	if c.Theme().Dark {
-		bg := k.header
-		if focused {
-			bg = k.headerFocused
-		}
-		h.Background(bg).BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder)
-	}
-	if h.DoubleClicked() {
-		t.setFocus(p)
-		a.toggleZoom()
-	}
-	if h.Clicked() {
-		t.setFocus(p)
-		a.focusReq = p
-	}
-	h.Children(func() {
-		ui.Icon(c, icon(prog.Glyph)).Size(14.5, 14.5).TextColor(k.text)
-		ui.Row(c).Grow(1).MinWidth(0).Gap(5).AlignItems(ui.Center).ClipX().Children(func() {
-			ui.Text(c, name).FontSize(12.5).FontWeight(600).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(0).MaxWidthPercent(80)
-			if detail != "" {
-				ui.Text(c, detail).FontSize(12.5).FontWeight(500).TextColor(k.text.Alpha(0.86)).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-			}
-			a.activityBadge(c, k, p)
-		})
-		show := focused || hovered
-		ui.Row(c).Gap(1).AlignItems(ui.Center).Opacity(map[bool]float32{true: 1, false: 0}[show]).Children(func() {
-			if !show {
-				return
-			}
-			if iconButton(c, k, "columns-2", "Split Right", 26, 16).Tooltip("Split Right  ⌘D").Clicked() {
-				t.setFocus(p)
-				a.split(false)
-			}
-			if iconButton(c, k, "rows-2", "Split Down", 26, 16).Tooltip("Split Down  ⇧⌘D").Clicked() {
-				t.setFocus(p)
-				a.split(true)
-			}
-			zoom, tip := "maximize-2", "Zoom  ⇧⌘↩"
-			if t.Zoom == p {
-				zoom, tip = "minimize-2", "Unzoom  ⇧⌘↩"
-			}
-			if iconButton(c, k, zoom, "Zoom", 26, 16).Tooltip(tip).Clicked() {
-				t.setFocus(p)
-				a.toggleZoom()
-			}
-			if iconButton(c, k, "x", "Close Pane", 26, 17).Tooltip("Close Pane  ⌘W").Clicked() {
-				a.later(c, func() { a.closePane(p) })
-			}
-		})
-	})
 }
 
 // status is what a pane is doing.
@@ -394,21 +237,6 @@ func (a *App) statusOf(c *ui.Context, p *Pane) status {
 		return statusRunning
 	}
 	return statusQuiet
-}
-
-// activityBadge shows what a pane does: a pulse while its program
-// prints, a dot when it asks for attention.
-func (a *App) activityBadge(c *ui.Context, k *colors, p *Pane) {
-	if s := paneAgentState(p); s.State != "" {
-		a.agentIndicator(c, k, p, s)
-		return
-	}
-	switch a.statusOf(c, p) {
-	case statusRunning:
-		activityDot(c, k.busy, 6)
-	case statusAttention:
-		ui.Box(c).Size(7, 7).Radius(4).Background(k.attention).Margin(0, 0, 0, 2).Tooltip("Needs attention")
-	}
 }
 
 // activityDot is the dot of a program printing: a solid dot in a soft

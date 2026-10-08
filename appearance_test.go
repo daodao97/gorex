@@ -33,39 +33,36 @@ func TestCodexInputPanelFollowsAppearance(t *testing.T) {
 	p := a.tab().Focus
 	p.info.Program, p.info.Idle, p.info.Args = "codex", false, nil
 	tt.SetScale(2)
-	for _, compact := range []bool{false, true} {
-		prefs.CompactMode = compact
-		for _, cachedDark := range []bool{false, true} {
-			tt.SetDark(cachedDark)
+	for _, cachedDark := range []bool{false, true} {
+		tt.SetDark(cachedDark)
+		tt.Frame()
+		bg, fg := 240, 225
+		if cachedDark {
+			bg, fg = 42, 70
+		}
+		p.term.Feed([]byte(fmt.Sprintf("\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J"+
+			"OpenAI Codex\r\n\r\n"+
+			"\x1b[48;2;%d;%d;%d;38;2;%d;%d;%dm\x1b[2KAsk Codex to do anything\x1b[0m", bg, bg, bg, fg, fg, fg)))
+		for _, dark := range []bool{cachedDark, !cachedDark, cachedDark} {
+			tt.SetDark(dark)
 			tt.Frame()
-			bg, fg := 240, 225
-			if cachedDark {
-				bg, fg = 42, 70
+			// Capture the settled chrome rather than the transition between
+			// themes; terminal cell colors update on the first frame.
+			time.Sleep(180 * time.Millisecond)
+			tt.Frame()
+			r, ok := tt.Find("Terminal")
+			if !ok {
+				t.Fatal("missing terminal")
 			}
-			p.term.Feed([]byte(fmt.Sprintf("\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J"+
-				"OpenAI Codex\r\n\r\n"+
-				"\x1b[48;2;%d;%d;%d;38;2;%d;%d;%dm\x1b[2KAsk Codex to do anything\x1b[0m", bg, bg, bg, fg, fg, fg)))
-			for _, dark := range []bool{cachedDark, !cachedDark, cachedDark} {
-				tt.SetDark(dark)
-				tt.Frame()
-				// Capture the settled chrome rather than the transition between
-				// themes; terminal cell colors update on the first frame.
-				time.Sleep(180 * time.Millisecond)
-				tt.Frame()
-				r, ok := tt.Find("Terminal")
-				if !ok {
-					t.Fatal("missing terminal")
+			_, rows := p.term.Size()
+			saveSettingsImage(t, tt, fmt.Sprintf("codex-input-cached-%t-dark-%t", cachedDark, dark))
+			pixel := tt.Image().RGBAAt(int((r.X+r.W-2)*2), int((r.Y+r.H/float32(rows)*2.5)*2))
+			if dark == cachedDark {
+				if pixel.R != uint8(bg) || pixel.G != uint8(bg) || pixel.B != uint8(bg) {
+					t.Fatalf("matching appearance changed input panel: %v", pixel)
 				}
-				_, rows := p.term.Size()
-				saveSettingsImage(t, tt, fmt.Sprintf("codex-input-compact-%t-cached-%t-dark-%t", compact, cachedDark, dark))
-				pixel := tt.Image().RGBAAt(int((r.X+r.W-2)*2), int((r.Y+r.H/float32(rows)*2.5)*2))
-				if dark == cachedDark {
-					if pixel.R != uint8(bg) || pixel.G != uint8(bg) || pixel.B != uint8(bg) {
-						t.Fatalf("matching appearance changed input panel: %v", pixel)
-					}
-				} else if (pixel.R < 128) != dark {
-					t.Fatalf("compact=%v dark=%v: cached panel %v", compact, dark, pixel)
-				}
+			} else if (pixel.R < 128) != dark {
+				t.Fatalf("dark=%v: cached panel %v", dark, pixel)
 			}
 		}
 	}
@@ -87,7 +84,7 @@ func TestLightAppearanceReadability(t *testing.T) {
 			t.Errorf("ANSI color %d has contrast %.2f", i, ratio)
 		}
 	}
-	for _, bg := range []ui.Color{lightColors.bgTop, lightColors.bgMid, lightColors.bgLow, lightColors.bgBottom, ui.RGB(255, 255, 255)} {
+	for _, bg := range []ui.Color{lightColors.track, lightTerm.Background, lightColors.panel, ui.RGB(255, 255, 255)} {
 		for _, fg := range []ui.Color{lightColors.text, lightColors.textMuted, lightColors.textFaint} {
 			if ratio := colorContrast(fg, bg); ratio < 4.5 {
 				t.Errorf("UI text %v on %v has contrast %.2f", fg, bg, ratio)
@@ -121,10 +118,7 @@ func TestLightAppearanceReadability(t *testing.T) {
 	tt.SetScale(2)
 	for _, dark := range []bool{false, true} {
 		tt.SetDark(dark)
-		for _, compact := range []bool{false, true} {
-			prefs.CompactMode = compact
-			tt.Frame()
-			saveSettingsImage(t, tt, fmt.Sprintf("terminal-appearance-dark-%t-compact-%t", dark, compact))
-		}
+		tt.Frame()
+		saveSettingsImage(t, tt, fmt.Sprintf("terminal-appearance-dark-%t", dark))
 	}
 }

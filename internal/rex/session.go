@@ -4,15 +4,18 @@ package rex
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"gorex/internal/agents"
 	"gorex/internal/terminal"
 )
 
@@ -52,12 +55,23 @@ type session struct {
 // attached is a connection attached to a session, whose output a
 // goroutine writes so that a slow client never holds up the others.
 type attached struct {
-	conn net.Conn
-	out  chan []byte
-	once sync.Once
+	conn         net.Conn
+	out          chan []byte
+	once         sync.Once
+	screenFrames bool
 }
 
-func (a *attached) send(p []byte) bool {
+func (a *attached) send(p []byte) bool { return a.sendScreen(p, 0, 0) }
+
+func (a *attached) sendScreen(p []byte, cols, rows int) bool {
+	if a.screenFrames {
+		frame := make([]byte, 8+len(p))
+		binary.BigEndian.PutUint32(frame[:4], uint32(len(p)))
+		binary.BigEndian.PutUint16(frame[4:6], uint16(cols))
+		binary.BigEndian.PutUint16(frame[6:8], uint16(rows))
+		copy(frame[8:], p)
+		p = frame
+	}
 	select {
 	case a.out <- p:
 		return true
@@ -101,11 +115,21 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 	exe, _ := os.Executable()
 	env = append(env, "GOREX_SESSION="+id, "GOREX_AGENT_TOKEN="+token, "GOREX_AGENT_SOCKET="+SocketPath(), "GOREX_HOOK="+exe)
 	env = append(env, "GOREX_AGENT_SERVER_TOKEN="+serverToken)
-	env, shellDir, err := zshEnv(path, env)
+	env, codexDir, err := codexEnv(env, agents.InspectHooks("codex").Installed)
 	if err != nil {
 		return nil, err
 	}
+	if name == "codex" {
+		env = append(env, "GOREX_CODEX_EXE="+path)
+		path = filepath.Join(codexDir, "codex")
+	}
+	env, shellDir, err := zshEnv(path, env)
+	if err != nil {
+		os.RemoveAll(codexDir)
+		return nil, err
+	}
 	cleanupShell := func() {
+		os.RemoveAll(codexDir)
 		if shellDir != "" {
 			os.RemoveAll(shellDir)
 		}
@@ -209,7 +233,7 @@ func (s *session) read() {
 			s.output += uint64(n)
 			s.lastOutput = time.Now()
 			for a := range s.clients {
-				if !a.send(data) {
+				if !a.sendScreen(data, s.cols, s.rows) {
 					a.finish()
 					delete(s.clients, a)
 				}
@@ -225,8 +249,10 @@ func (s *session) read() {
 // attach attaches a connection: it gets a snapshot of the session's
 // screen and scrollback at its size, then what the session prints, and
 // what it sends is typed.
-func (s *session) attach(conn net.Conn, cols, rows int) {
-	a := &attached{conn: conn, out: make(chan []byte, 2048)}
+func (s *session) attach(conn net.Conn, cols, rows int) { s.attachScreen(conn, cols, rows, false) }
+
+func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool) {
+	a := &attached{conn: conn, out: make(chan []byte, 2048), screenFrames: frames}
 	s.mu.Lock()
 	if cols > 0 && rows > 0 {
 		// Resize both the screen and PTY before queuing the snapshot.
@@ -239,7 +265,7 @@ func (s *session) attach(conn net.Conn, cols, rows int) {
 	if title := s.vt.Title(); title != "" {
 		snap = append([]byte("\x1b]2;"+title+"\x07"), snap...)
 	}
-	a.out <- snap
+	a.sendScreen(snap, s.cols, s.rows)
 	exited := s.exited
 	if exited {
 		a.finish()
@@ -358,7 +384,7 @@ func (s *session) resyncScreen() {
 	// arrives, rather than briefly drawing an empty or partial screen.
 	msg = append(append([]byte("\x1b[?2026h"), msg...), []byte("\x1b[?2026l")...)
 	for a := range s.clients {
-		if !a.send(msg) {
+		if !a.sendScreen(msg, s.cols, s.rows) {
 			a.finish()
 			delete(s.clients, a)
 		}
@@ -372,7 +398,7 @@ func (s *session) clear() {
 	data := []byte("\x1b[H\x1b[2J\x1b[3J")
 	s.vt.Feed(data)
 	for a := range s.clients {
-		if !a.send(data) {
+		if !a.sendScreen(data, s.cols, s.rows) {
 			a.finish()
 			delete(s.clients, a)
 		}

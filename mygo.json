@@ -4,5 +4,26 @@
   "version": "0.1.0",
   "copyright": "A replica of Superlogical's Rex, built with MyGo",
   "out": "build",
-  "macos": { "minimumSystemVersion": "13.0" }
+  "macos": {
+    "minimumSystemVersion": "13.0"
+  },
+  "urlSchemes": [
+    "gorex"
+  ],
+  "ios": {
+    "minimumSystemVersion": "15.0",
+    "infoPlist": {
+      "NSCameraUsageDescription": "扫描 GoRex 桌面端的二维码以连接终端会话。"
+    },
+    "launchScreen": {
+      "title": "GoRex",
+      "backgroundColor": "#111315",
+      "foregroundColor": "#ffffff"
+    },
+    "buildNumber": "1",
+    "entitlements": {
+      "aps-environment": "development"
+    },
+    "developmentTeam": "XNDA84PBM3"
+  }
 }

@@ -13,9 +13,6 @@ import (
 // Check the rendered separator pixels, including nested splits and a
 // resize, so a second outline beside the separator cannot regress.
 func TestCompactFocusSharesSeparatorPixels(t *testing.T) {
-	previous := prefs
-	prefs.CompactMode = true
-	t.Cleanup(func() { prefs = previous })
 	left, top, bottom := &Pane{ID: 1}, &Pane{ID: 2}, &Pane{ID: 3}
 	right := &Node{ID: 4, Vertical: true, Ratio: 0.61,
 		A: &Node{ID: 5, Pane: top}, B: &Node{ID: 6, Pane: bottom}}
@@ -60,9 +57,6 @@ func TestCompactFocusSharesSeparatorPixels(t *testing.T) {
 }
 
 func TestCompactBackgroundTouchesDivider(t *testing.T) {
-	previous := prefs
-	prefs.CompactMode = true
-	t.Cleanup(func() { prefs = previous })
 	if err := terminal.Load(); err != nil {
 		t.Fatal(err)
 	}

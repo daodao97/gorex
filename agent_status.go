@@ -12,11 +12,15 @@ import (
 // An old hook must not put an agent badge on the shell or another program
 // after the agent exited. Unintegrated agents keep the ordinary activity dot.
 func paneAgentState(p *Pane) rex.AgentState {
-	s := p.info.Agent
-	if s.State == "" || p.info.Idle || p.info.Exited {
+	return sessionAgentState(p.info)
+}
+
+func sessionAgentState(info rex.SessionInfo) rex.AgentState {
+	s := info.Agent
+	if s.State == "" || info.Idle || info.Exited {
 		return rex.AgentState{}
 	}
-	if agent, ok := agents.Detect(p.info.Program, p.info.Args); !ok || agent.ID != s.ID {
+	if agent, ok := agents.Detect(info.Program, info.Args); !ok || agent.ID != s.ID {
 		return rex.AgentState{}
 	}
 	return s
@@ -218,7 +222,7 @@ func (a *App) focusAgentPane(sid string) bool {
 			if p.SID != sid || p.closed {
 				continue
 			}
-			a.settingsOpen, a.paletteOpen, a.hostOpen, a.renaming = false, false, false, nil
+			a.settingsOpen, a.paletteOpen, a.renaming = false, false, nil
 			p.find.open, p.find.focus = false, false
 			if t.Zoom != nil && t.Zoom != p {
 				t.Zoom = nil

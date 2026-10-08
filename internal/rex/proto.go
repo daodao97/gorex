@@ -40,6 +40,7 @@ type Request struct {
 	Layout     json.RawMessage `json:"layout,omitempty"`
 	AgentEvent *AgentEvent     `json:"agentEvent,omitempty"`
 	Token      string          `json:"token,omitempty"`
+	Device     *DeviceInfo     `json:"device,omitempty"`
 }
 
 // Response answers the Request with the same ID.
@@ -101,6 +102,7 @@ type Hello struct {
 
 // HostInfo describes the machine the server runs on.
 type HostInfo struct {
+	ID     string `json:"id,omitempty"`
 	Name   string `json:"name"`
 	Model  string `json:"model"`
 	Chip   string `json:"chip"`
@@ -110,12 +112,31 @@ type HostInfo struct {
 	Home   string `json:"home"`
 }
 
+// DeviceInfo identifies the connected mobile client for the desktop UI.
+type DeviceInfo struct {
+	Name string            `json:"name"`
+	OS   string            `json:"os,omitempty"`
+	Push *PushRegistration `json:"push,omitempty"`
+}
+
+// PushRegistration travels only through an authenticated mobile control connection.
+// Tokens are private and must never be rendered, logged or returned in Hello.
+type PushRegistration struct {
+	ID       string   `json:"id"`
+	Token    string   `json:"token,omitempty"`
+	Disabled bool     `json:"disabled,omitempty"`
+	Receipts []string `json:"receipts,omitempty"`
+}
+
 // Attach is the first line of a connection attaching to a session.
 type Attach struct {
 	Op   string `json:"op"` // "attach"
 	SID  string `json:"sid"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+	// ScreenFrames asks for output framed with the authoritative grid size.
+	// Older servers ignore this field and continue to send raw ANSI.
+	ScreenFrames bool `json:"screen_frames,omitempty"`
 }
 
 // Dir returns the directory of the server's socket, log and state.

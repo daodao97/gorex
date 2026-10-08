@@ -1,12 +1,95 @@
 package rex
 
 import (
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestViewStreamNeverResizesDesktop(t *testing.T) {
+	s, requests := resizeStream(t)
+	s.preserveSize = true
+	for _, size := range [][2]int{{48, 24}, {90, 16}, {48, 9}} {
+		if err := s.Resize(size[0], size[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.sync(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case req := <-requests:
+		t.Fatalf("phone resized desktop PTY: %+v", req)
+	case <-time.After(2 * resizeDelay):
+	}
+
+	data, peer := net.Pipe()
+	c := &Client{dial: func(context.Context) (net.Conn, error) { return data, nil }}
+	attached := make(chan Attach, 1)
+	go func() {
+		var req Attach
+		json.NewDecoder(peer).Decode(&req)
+		attached <- req
+		peer.Write([]byte("{\"ok\":true}\n"))
+	}()
+	viewer := c.ViewStream("existing")
+	defer viewer.Close()
+	defer peer.Close()
+	if err := viewer.Resize(48, 12); err != nil {
+		t.Fatal(err)
+	}
+	req := <-attached
+	if req.Cols != 0 || req.Rows != 0 || req.SID != "existing" {
+		t.Fatalf("viewer attach changed desktop dimensions: %+v", req)
+	}
+}
+
+func TestLegacyHelloIdentityMatchesNotificationWorker(t *testing.T) {
+	client, server := net.Pipe()
+	c := NewClient(client, nil)
+	t.Cleanup(func() { c.Close(); server.Close() })
+	host := HostInfo{Name: "MacBook", User: "owner", Home: "/Users/owner", Model: "MacBook Pro", Chip: "Apple M4"}
+	go func() {
+		decoder, encoder := json.NewDecoder(server), json.NewEncoder(server)
+		for i := 0; i < 3; i++ {
+			var request Request
+			if decoder.Decode(&request) != nil {
+				return
+			}
+			wire := host
+			if i == 2 {
+				wire.ID = "machine:existing"
+			}
+			data, _ := json.Marshal(Hello{Version: 4, Host: wire})
+			encoder.Encode(Response{ID: request.ID, Data: data})
+		}
+	}()
+	worker, err := c.Hello()
+	if err != nil || !strings.HasPrefix(worker.Host.ID, "legacy:") {
+		t.Fatalf("legacy worker identity missing: %v", err)
+	}
+	phone, err := c.HelloFrom(DeviceInfo{Name: "iPhone"})
+	if err != nil || phone.Host.ID != worker.Host.ID {
+		t.Fatalf("phone and worker cannot match notification identities: %v", err)
+	}
+	existing, err := c.Hello()
+	if err != nil || existing.Host.ID != "machine:existing" {
+		t.Fatal("server identity overwritten")
+	}
+	host.OS = "macOS updated"
+	if legacyHostID(host) != worker.Host.ID {
+		t.Fatal("OS update rotated legacy identity")
+	}
+	host.Name = "Different desktop"
+	if legacyHostID(host) == worker.Host.ID || legacyHostID(HostInfo{}) != "" {
+		t.Fatal("unrelated or unknown desktop shares an identity")
+	}
+}
 
 func resizeStream(t *testing.T) (*Stream, <-chan Request) {
 	t.Helper()
@@ -65,5 +148,58 @@ func TestStreamCloseCancelsResize(t *testing.T) {
 	case req := <-requests:
 		t.Fatalf("resize sent after close: %+v", req)
 	case <-time.After(2 * resizeDelay):
+	}
+}
+
+func TestViewStreamReadsGeometryBeforeFragmentedANSI(t *testing.T) {
+	data, peer := net.Pipe()
+	c := &Client{dial: func(context.Context) (net.Conn, error) { return data, nil }}
+	go func() {
+		defer peer.Close()
+		var req Attach
+		json.NewDecoder(peer).Decode(&req)
+		peer.Write([]byte("{\"ok\":true,\"screen_frames\":true}\n"))
+		for _, f := range []struct {
+			cols, rows int
+			text       string
+		}{{100, 32, "\x1b[2;70H中文🙂⣿"}, {70, 20, "\x1b[18;60Hupdated"}} {
+			frame := make([]byte, 8+len(f.text))
+			binary.BigEndian.PutUint32(frame[:4], uint32(len(f.text)))
+			binary.BigEndian.PutUint16(frame[4:6], uint16(f.cols))
+			binary.BigEndian.PutUint16(frame[6:8], uint16(f.rows))
+			copy(frame[8:], f.text)
+			// Fragment inside the header, UTF-8 characters and ANSI sequence.
+			for _, b := range frame {
+				peer.Write([]byte{b})
+			}
+		}
+	}()
+	viewer := c.ViewStream("screen")
+	defer viewer.Close()
+	if err := viewer.Resize(39, 10); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []struct {
+		cols, rows int
+		text       string
+	}{{100, 32, "\x1b[2;70H中文🙂⣿"}, {70, 20, "\x1b[18;60Hupdated"}} {
+		var text strings.Builder
+		buf := make([]byte, 3)
+		for text.Len() < len(want.text) {
+			n, cols, rows, err := viewer.ReadScreen(buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cols != want.cols || rows != want.rows {
+				t.Fatalf("geometry arrived after its output: %dx%d, want %dx%d", cols, rows, want.cols, want.rows)
+			}
+			text.Write(buf[:n])
+		}
+		if text.String() != want.text {
+			t.Fatalf("fragmented payload changed: %q", text.String())
+		}
+	}
+	if !viewer.HasScreenSize() {
+		t.Fatal("framing negotiation missing")
 	}
 }

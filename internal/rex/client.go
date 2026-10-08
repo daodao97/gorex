@@ -2,6 +2,8 @@ package rex
 
 import (
 	"bufio"
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 // Client is a control connection to the server.
 type Client struct {
 	conn net.Conn
+	dial func(context.Context) (net.Conn, error)
 
 	wmu     sync.Mutex
 	mu      sync.Mutex
@@ -45,9 +48,27 @@ func Connect() (*Client, error) {
 			}
 		}
 	}
-	c := &Client{conn: conn, pending: map[int64]chan Response{}, closed: make(chan struct{})}
+	return NewClient(conn, localDial), nil
+}
+
+func localDial(ctx context.Context) (net.Conn, error) {
+	return (&net.Dialer{}).DialContext(ctx, "unix", SocketPath())
+}
+
+// ConnectDial uses the same transport for control requests and session streams.
+func ConnectDial(ctx context.Context, dial func(context.Context) (net.Conn, error)) (*Client, error) {
+	conn, err := dial(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(conn, dial), nil
+}
+
+// NewClient takes ownership of conn; dial opens independent session streams.
+func NewClient(conn net.Conn, dial func(context.Context) (net.Conn, error)) *Client {
+	c := &Client{conn: conn, dial: dial, pending: map[int64]chan Response{}, closed: make(chan struct{})}
 	go c.read()
-	return c, nil
+	return c
 }
 
 // Executable returns the path of the running executable and when it was
@@ -150,11 +171,27 @@ func (c *Client) call(req Request, out any) error {
 
 func (c *Client) Hello() (h Hello, err error) {
 	err = c.call(Request{Op: "hello"}, &h)
+	if err == nil && h.Version == 4 && h.Host.ID == "" {
+		h.Host.ID = legacyHostID(h.Host)
+	}
+	return
+}
+
+func (c *Client) HelloFrom(device DeviceInfo) (h Hello, err error) {
+	err = c.call(Request{Op: "hello", Device: &device}, &h)
+	if err == nil && h.Version == 4 && h.Host.ID == "" {
+		h.Host.ID = legacyHostID(h.Host)
+	}
 	return
 }
 
 func (c *Client) List() (s []SessionInfo, err error) {
 	err = c.call(Request{Op: "list"}, &s)
+	return
+}
+
+func (c *Client) ListFrom(device DeviceInfo) (s []SessionInfo, err error) {
+	err = c.call(Request{Op: "list", Device: &device}, &s)
 	return
 }
 
@@ -191,15 +228,19 @@ func (c *Client) Close() error { return c.conn.Close() }
 // once it knows the size of the screen, from the first Resize, or after
 // a moment at the size it had last.
 type Stream struct {
-	c        *Client
-	sid      string
-	attachMu sync.Mutex // one attach at a time
-	syncMu   sync.Mutex // preserve the order of resize requests
-	mu       sync.Mutex
-	cond     *sync.Cond
-	conn     net.Conn
-	err      error
-	closed   bool
+	// preserveSize keeps this viewer's local layout from resizing the PTY.
+	preserveSize                    bool
+	screenFrames                    bool
+	frameLeft, frameCols, frameRows int
+	c                               *Client
+	sid                             string
+	attachMu                        sync.Mutex // one attach at a time
+	syncMu                          sync.Mutex // preserve the order of resize requests
+	mu                              sync.Mutex
+	cond                            *sync.Cond
+	conn                            net.Conn
+	err                             error
+	closed                          bool
 	// cols and rows are the terminal's size; sentCols and sentRows the
 	// size the server was told last.
 	cols, rows         int
@@ -214,7 +255,18 @@ type Stream struct {
 
 // Stream returns a stream of the session sid, which attaches lazily.
 func (c *Client) Stream(sid string, cols, rows int) *Stream {
-	s := &Stream{c: c, sid: sid, cols: cols, rows: rows}
+	return c.stream(sid, cols, rows, false)
+}
+
+// ViewStream attaches an independent viewer without changing the session's
+// PTY size. ReadScreen supplies the source grid with each output chunk on
+// supporting servers; the viewer scales that grid instead of reflowing ANSI.
+func (c *Client) ViewStream(sid string) *Stream {
+	return c.stream(sid, 0, 0, true)
+}
+
+func (c *Client) stream(sid string, cols, rows int, preserveSize bool) *Stream {
+	s := &Stream{c: c, sid: sid, cols: cols, rows: rows, preserveSize: preserveSize}
 	s.cond = sync.NewCond(&s.mu)
 	time.AfterFunc(400*time.Millisecond, func() {
 		s.attach()
@@ -234,12 +286,21 @@ func (s *Stream) attach() {
 	}
 	cols, rows := s.cols, s.rows
 	s.mu.Unlock()
-	conn, err := net.Dial("unix", SocketPath())
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	dial := s.c.dial
+	if dial == nil {
+		dial = localDial
+	}
+	conn, err := dial(ctx)
+	var frames bool
 	if err == nil {
-		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows})
+		conn.SetDeadline(time.Now().Add(15 * time.Second))
+		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: s.preserveSize})
 		if _, err = conn.Write(append(b, '\n')); err == nil {
-			err = readOK(conn)
+			frames, err = readAttachOK(conn)
 		}
+		conn.SetDeadline(time.Time{})
 		if err != nil {
 			conn.Close()
 		}
@@ -255,7 +316,7 @@ func (s *Stream) attach() {
 	if err != nil {
 		s.err = err
 	} else {
-		s.conn, s.sentCols, s.sentRows = conn, cols, rows
+		s.conn, s.sentCols, s.sentRows, s.screenFrames = conn, cols, rows, frames
 	}
 	s.cond.Broadcast()
 }
@@ -266,7 +327,7 @@ func (s *Stream) sync() error {
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
 	s.mu.Lock()
-	if s.closed || s.conn == nil || s.cols == s.sentCols && s.rows == s.sentRows {
+	if s.closed || s.preserveSize || s.conn == nil || s.cols == s.sentCols && s.rows == s.sentRows {
 		s.mu.Unlock()
 		return nil
 	}
@@ -283,32 +344,33 @@ func (s *Stream) sync() error {
 
 // readOK reads the server's answer to an attach, a byte at a time so as
 // to read nothing past it.
-func readOK(conn net.Conn) error {
+func readAttachOK(conn net.Conn) (bool, error) {
 	var line []byte
 	b := make([]byte, 1)
 	for {
 		if _, err := conn.Read(b); err != nil {
-			return err
+			return false, err
 		}
 		if b[0] == '\n' {
 			break
 		}
 		line = append(line, b[0])
 		if len(line) > 4096 {
-			return errors.New("rex: bad answer")
+			return false, errors.New("rex: bad answer")
 		}
 	}
 	var res struct {
-		OK    bool   `json:"ok"`
-		Error string `json:"error"`
+		ScreenFrames bool   `json:"screen_frames"`
+		OK           bool   `json:"ok"`
+		Error        string `json:"error"`
 	}
 	if err := json.Unmarshal(line, &res); err != nil {
-		return err
+		return false, err
 	}
 	if !res.OK {
-		return errors.New(res.Error)
+		return false, errors.New(res.Error)
 	}
-	return nil
+	return res.ScreenFrames, nil
 }
 
 func (s *Stream) wait() (net.Conn, error) {
@@ -323,16 +385,55 @@ func (s *Stream) wait() (net.Conn, error) {
 	return s.conn, s.err
 }
 
+// HasScreenSize reports whether this server supplies output geometry.
+func (s *Stream) HasScreenSize() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.screenFrames
+}
+
 func (s *Stream) Read(p []byte) (int, error) {
+	n, _, _, err := s.ReadScreen(p)
+	return n, err
+}
+
+// ReadScreen reads ANSI at its source size. Each frame carries geometry
+// before its payload, so an in-flight resize cannot decode at another size.
+// A legacy server returns zero geometry; callers use the session list size.
+// Like Read, it must be called by a single reader.
+func (s *Stream) ReadScreen(p []byte) (int, int, int, error) {
+	if len(p) == 0 {
+		return 0, 0, 0, nil
+	}
 	conn, err := s.wait()
 	if err != nil {
-		return 0, err
+		return 0, 0, 0, err
+	}
+	cols, rows := 0, 0
+	if s.HasScreenSize() {
+		if s.frameLeft == 0 {
+			var header [8]byte
+			if _, err := io.ReadFull(conn, header[:]); err != nil {
+				return 0, 0, 0, err
+			}
+			length := binary.BigEndian.Uint32(header[:4])
+			cols, rows = int(binary.BigEndian.Uint16(header[4:6])), int(binary.BigEndian.Uint16(header[6:8]))
+			if length == 0 || length > 64<<20 || cols == 0 || rows == 0 {
+				return 0, 0, 0, errors.New("rex: invalid screen frame")
+			}
+			s.frameLeft, s.frameCols, s.frameRows = int(length), cols, rows
+		}
+		cols, rows = s.frameCols, s.frameRows
+		p = p[:min(len(p), s.frameLeft)]
 	}
 	n, err := conn.Read(p)
+	if s.HasScreenSize() {
+		s.frameLeft -= n
+	}
 	if n > 0 && s.OnData != nil {
 		s.OnData(n)
 	}
-	return n, err
+	return n, cols, rows, err
 }
 
 func (s *Stream) Write(p []byte) (int, error) {
@@ -354,6 +455,11 @@ func (s *Stream) Resize(cols, rows int) error {
 	if s.closed {
 		s.mu.Unlock()
 		return io.ErrClosedPipe
+	}
+	if s.preserveSize {
+		s.mu.Unlock()
+		s.attach()
+		return nil
 	}
 	cols, rows = max(cols, 1), max(rows, 1)
 	attached := s.conn != nil

@@ -36,6 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/egoist/mygo/ui"
+
 	"gorex/internal/terminal/internal/pty"
 	"gorex/internal/terminal/internal/vt"
 )
@@ -60,6 +62,15 @@ type Options struct {
 	// Conn with a method Resize(cols, rows int) error is told the size.
 	Conn io.ReadWriteCloser
 
+	// FixedCols and FixedRows decode a shared remote screen at its source
+	// size, independently of the view. Both must be positive. FitToView
+	// scales that grid to fit the view without reflowing ANSI output.
+	FixedCols, FixedRows int
+	FitToView            bool
+	// ReflowView lays out the decoded primary screen at the local font size.
+	// The canonical remote emulator keeps its original geometry.
+	ReflowView bool
+
 	// Font is the font of the text: the system's monospaced font at 13
 	// DIPs when zero.
 	Font Font
@@ -72,6 +83,9 @@ type Options struct {
 	// NoBlink keeps it from blinking unless a program asks it to.
 	Cursor  CursorStyle
 	NoBlink bool
+	// ActiveCursor keeps the cursor active when the software keyboard is
+	// hidden, so a mobile terminal still blinks without taking input focus.
+	ActiveCursor bool
 	// Scrollback is about how many bytes of output the terminal keeps above
 	// the screen: 10 MB when zero, none when negative.
 	Scrollback int
@@ -134,14 +148,18 @@ type Terminal struct {
 	in   inputQueue
 
 	// mu guards the emulator, which the reader changes and frames read.
-	mu          sync.Mutex
-	term        *vt.Terminal
-	search      *vt.Search
-	searchMoves int
-	size        gridSize
-	events      events
-	closed      bool
-	clipOut     []string // what programs copied, for the view to write
+	mu                             sync.Mutex
+	term                           *vt.Terminal
+	presentation                   *vt.Terminal
+	revision, presentationRevision uint64
+	presentationSize               gridSize
+	presentationHistory            int
+	search                         *vt.Search
+	searchMoves                    int
+	size                           gridSize
+	events                         events
+	closed                         bool
+	clipOut                        []string // what programs copied, for the view to write
 	// src is the program's pseudo-terminal, or Conn: nil until the
 	// program starts, from launch, its options.
 	src    io.ReadWriteCloser
@@ -206,8 +224,11 @@ func New(opts Options) (*Terminal, error) {
 	opts.Font.Features = append([]string(nil), opts.Font.Features...)
 	t := &Terminal{opts: opts, done: make(chan struct{})}
 	t.size = gridSize{80, 24, 8, 16}
+	if opts.FixedCols > 0 && opts.FixedRows > 0 {
+		t.size.cols, t.size.rows = opts.FixedCols, opts.FixedRows
+	}
 	var err error
-	t.term, err = vt.NewTerminal(80, 24, vt.Effects{
+	t.term, err = vt.NewTerminal(t.size.cols, t.size.rows, vt.Effects{
 		WritePTY:     func(p []byte) { t.in.push(append([]byte(nil), p...)) },
 		Bell:         func() { t.events.bells++ },
 		TitleChanged: func() { t.events.title = true },
@@ -388,7 +409,25 @@ func environment(extra []string) []string {
 func (t *Terminal) read() {
 	buf := make([]byte, 64<<10)
 	for {
-		n, err := t.src.Read(buf)
+		var n, cols, rows int
+		var err error
+		if src, ok := t.src.(interface {
+			ReadScreen([]byte) (int, int, int, error)
+		}); ok {
+			n, cols, rows, err = src.ReadScreen(buf)
+		} else {
+			n, err = t.src.Read(buf)
+		}
+		if cols > 0 && rows > 0 {
+			t.mu.Lock()
+			if t.opts.FixedCols > 0 && t.opts.FixedRows > 0 {
+				t.opts.FixedCols, t.opts.FixedRows = cols, rows
+				size := t.size
+				size.cols, size.rows = cols, rows
+				t.resize(size)
+			}
+			t.mu.Unlock()
+		}
 		if n > 0 {
 			t.write(buf[:n])
 		}
@@ -406,6 +445,7 @@ func (t *Terminal) write(p []byte) {
 	var title string
 	if t.term != nil {
 		t.term.Write(p)
+		t.revision++
 		if t.held && len(p) != 0 {
 			// A slow but active redraw is not a stalled program. Only release
 			// an unfinished update after incoming data has stopped.
@@ -546,6 +586,50 @@ func (t *Terminal) Text() string {
 	return t.term.Text()
 }
 
+// SelectedText returns the selection in the grid currently shown to the user.
+func (t *Terminal) SelectedText() (string, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	screen := t.term
+	if t.opts.ReflowView && !t.opts.FitToView && t.presentation != nil {
+		screen = t.presentation
+	}
+	if screen == nil {
+		return "", false
+	}
+	if t.opts.CopyRawText {
+		return screen.SelectionText()
+	}
+	return screen.VisibleSelectionText()
+}
+
+// SelectionAnchor locates the last selection gesture in view DIPs. It is
+// unavailable while the finger is dragging, so contextual actions do not
+// obstruct selection. The caller places it relative to the view's bounds.
+func (t *Terminal) SelectionAnchor() (ui.Rect, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.v == nil || t.v.selecting || t.v.screen() == nil {
+		return ui.Rect{}, false
+	}
+	if _, selected := t.v.screen().SelectionText(); !selected {
+		return ui.Rect{}, false
+	}
+	return ui.Rect{X: t.v.pointer[0], Y: t.v.pointer[1], W: 1, H: float32(t.v.cellH) / t.v.scale}, true
+}
+
+// SelectAll selects the displayed screen and its available scrollback.
+func (t *Terminal) SelectAll() {
+	t.mu.Lock()
+	if t.v != nil && t.v.screen() != nil {
+		if selection, ok := t.v.screen().SelectAll(); ok {
+			t.v.screen().SetSelection(&selection)
+		}
+	}
+	t.mu.Unlock()
+	t.redraw()
+}
+
 // SetCopyRawText changes selection copying without restarting the session.
 func (t *Terminal) SetCopyRawText(raw bool) {
 	t.mu.Lock()
@@ -615,6 +699,15 @@ func (t *Terminal) Paste(text string) {
 	t.redraw()
 }
 
+// SetFitToView switches a fixed remote grid between fitting the view and
+// its configured font size. Neither mode changes the remote program's size.
+func (t *Terminal) SetFitToView(fit bool) {
+	t.mu.Lock()
+	t.opts.FitToView = fit
+	t.mu.Unlock()
+	t.redraw()
+}
+
 // Feed shows data as if the program wrote it: text and escape sequences.
 func (t *Terminal) Feed(data []byte) { t.write(data) }
 
@@ -661,6 +754,10 @@ func (t *Terminal) Close() error {
 	if t.search != nil {
 		t.search.Free()
 		t.search = nil
+	}
+	if t.presentation != nil {
+		t.presentation.Free()
+		t.presentation = nil
 	}
 	t.term.Free()
 	t.term = nil
@@ -719,6 +816,7 @@ func (t *Terminal) resize(s gridSize) {
 		return
 	}
 	t.size = s
+	t.revision++
 	t.term.Resize(s.cols, s.rows, s.cellW, s.cellH)
 	switch src := t.src.(type) {
 	case *pty.PTY:
@@ -735,7 +833,13 @@ func (t *Terminal) renderHold(held bool) {
 	if held {
 		if !t.held {
 			if t.rs != nil {
-				t.rs.Update(t.term)
+				if t.opts.ReflowView && !t.opts.FitToView {
+					if t.presentation != nil {
+						t.rs.Update(t.presentation)
+					}
+				} else {
+					t.rs.Update(t.term)
+				}
 			}
 			t.holdStarted = time.Now()
 		}

@@ -89,6 +89,15 @@ func (g *Gesture) Press(t *Terminal, ref GridRef, x, y float64, ns uint64) (Sele
 	return g.apply(t, g.press)
 }
 
+// Word begins a word selection with the same anchor and drag expansion as
+// a double click, independently of earlier taps.
+func (g *Gesture) Word(t *Terminal, ref GridRef, x, y float64, ns uint64) (Selection, bool) {
+	g.Reset(t)
+	g.Press(t, ref, x, y, ns)
+	g.Release(t, &ref)
+	return g.Press(t, ref, x, y, ns+1)
+}
+
 // Drag moves the pressed pointer to cell ref at x, y pixels, selecting a
 // rectangle when rect is set.
 func (g *Gesture) Drag(t *Terminal, ref GridRef, x, y float64, geo Geometry, rect bool) (Selection, bool) {

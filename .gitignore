@@ -1,3 +1,8 @@
 /build/
 /.mygo/
 mygo_windows_*.syso
+/internal/terminal/internal/vt/ios/*.a
+/internal/terminal/internal/vt/ghostty_ios_arm64.syso
+/tests/ios/Fixture.swift
+/go.work
+/go.work.sum

@@ -14,16 +14,12 @@ import (
 // server's state.
 type settings struct {
 	// Appearance is "light", "dark", or "" to follow the system.
-	Appearance string  `json:"appearance,omitempty"`
-	FontSize   float32 `json:"fontSize,omitempty"`
-	LinkEditor string  `json:"linkEditor,omitempty"`
-	// Keep omitted values compatible with older settings: headers show by default.
-	HideSessionHeader                bool `json:"hideSessionHeader,omitempty"`
-	HideHost                         bool `json:"hideHost,omitempty"`
-	CompactMode                      bool `json:"compactMode,omitempty"`
-	CopyRawText                      bool `json:"copyRawText,omitempty"`
-	HideAgentNotifications           bool `json:"hideAgentNotifications,omitempty"`
-	HideAgentCompletionNotifications bool `json:"hideAgentCompletionNotifications,omitempty"`
+	Appearance                       string  `json:"appearance,omitempty"`
+	FontSize                         float32 `json:"fontSize,omitempty"`
+	LinkEditor                       string  `json:"linkEditor,omitempty"`
+	CopyRawText                      bool    `json:"copyRawText,omitempty"`
+	HideAgentNotifications           bool    `json:"hideAgentNotifications,omitempty"`
+	HideAgentCompletionNotifications bool    `json:"hideAgentCompletionNotifications,omitempty"`
 }
 
 const defaultFontSize = 11.6
@@ -67,27 +63,6 @@ func (a *App) setCopyRawText(raw bool) {
 				pane.term.SetCopyRawText(raw)
 			}
 		}
-	}
-	saveSettings()
-}
-
-func (a *App) setSessionHeadersVisible(show bool) {
-	prefs.HideSessionHeader = !show
-	saveSettings()
-}
-
-func (a *App) setHostVisible(show bool) {
-	prefs.HideHost = !show
-	if !show {
-		a.hostOpen = false
-	}
-	saveSettings()
-}
-
-func (a *App) setCompactMode(compact bool) {
-	prefs.CompactMode = compact
-	if compact {
-		a.hostOpen = false
 	}
 	saveSettings()
 }

@@ -24,7 +24,7 @@ func (a *App) openFind() {
 	}
 	p.find.open, p.find.focus = true, true
 	a.settingsOpen = false
-	a.paletteOpen, a.hostOpen = false, false
+	a.paletteOpen = false
 	a.focusReq = nil
 }
 

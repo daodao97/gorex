@@ -74,6 +74,7 @@ type Pane struct {
 
 // App is the state of GoRex's window.
 type App struct {
+	phone           *phonePair
 	openLinkURL     func(string) error // injectable native URL opener
 	win             *mygo.Window
 	appearanceItems map[string]*mygo.MenuItem
@@ -89,11 +90,10 @@ type App struct {
 	// terminal.
 	focusReq *Pane
 
-	// The command palette, the host's popover and the tab being renamed.
+	// The command palette, settings and the tab being renamed.
 	paletteOpen           bool
 	paletteQuery          string
 	paletteSel            int
-	hostOpen              bool
 	settingsOpen          bool
 	settingsSection       int
 	settingsQuery         string

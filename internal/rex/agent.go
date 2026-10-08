@@ -66,7 +66,7 @@ func validateAgentEvent(event *AgentEvent) error {
 }
 
 func (t *agentTracker) apply(e AgentEvent) {
-	h := e.Input
+	h := agents.NormalizeHook(e.Agent, e.Input)
 	previousTurn := t.turnID
 	state, reason := agents.HookStatus(e.Agent, h)
 	if state == "" || e.At.Before(t.lastAt) {

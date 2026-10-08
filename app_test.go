@@ -110,16 +110,18 @@ func TestPanesAndTabs(t *testing.T) {
 		t.Fatal("the new pane does not have the focus")
 	}
 
-	// The header's buttons split down and zoom.
-	if err := tt.Click("Split Down"); err != nil {
-		t.Fatal(err)
-	}
+	// The palette also splits down and zooms without pane headers.
+	a.openPalette()
+	tt.Frame()
+	tt.Type("split down")
+	tt.Key(0, ui.KeyEnter)
 	if n := len(tab.panes()); n != 3 || !tab.Root.B.Vertical {
 		t.Fatalf("%d panes after Split Down", n)
 	}
-	if err := tt.Click("Zoom"); err != nil {
-		t.Fatal(err)
-	}
+	a.openPalette()
+	tt.Frame()
+	tt.Type("zoom")
+	tt.Key(0, ui.KeyEnter)
 	if tab.Zoom == nil {
 		t.Fatal("not zoomed")
 	}
@@ -136,13 +138,13 @@ func TestPanesAndTabs(t *testing.T) {
 		t.Error("focus right stayed")
 	}
 
-	// Typing reaches the shell, and the header follows its directory.
+	// Typing reaches the shell, and the pane label follows its directory.
 	a.focusReq = p
 	tab.setFocus(p)
 	tt.Frame()
 	tt.Type("cd /usr/bin && sleep 3")
 	tt.Key(0, ui.KeyEnter)
-	waitFor(t, tt, "sleep in the header", func() bool {
+	waitFor(t, tt, "sleep in the pane label", func() bool {
 		refresh(a)
 		name, detail := p.label()
 		return name == "sleep" && detail == "/usr/bin"
@@ -233,8 +235,8 @@ func TestLabels(t *testing.T) {
 	}
 }
 
-// TestCloseButtons presses and releases the close buttons that show while
-// the pointer is over a tab or a pane, with a frame between: pressing one
+// TestCloseButtons presses and releases the tab close buttons that show while
+// the pointer is over a tab, with a frame between: pressing one
 // must not hide it.
 func TestCloseButtons(t *testing.T) {
 	a, tt := newTestApp(t)
@@ -252,31 +254,14 @@ func TestCloseButtons(t *testing.T) {
 	if !ok {
 		t.Fatalf("no close button over the tab; texts %q", tt.Texts())
 	}
+	if x.X < track.X+track.W/2-32 {
+		t.Fatalf("close button is not at the right edge of the tab: %+v", x)
+	}
 	tt.Press(x.X+x.W/2, x.Y+x.H/2)
 	tt.Frame()
 	tt.Release(x.X+x.W/2, x.Y+x.H/2)
 	tt.Frame()
 	if len(a.tabs) != 1 || slices.Contains(a.tabs, first) {
 		t.Fatalf("%d tabs after clicking the first one's close button", len(a.tabs))
-	}
-
-	// A pane without the focus shows its buttons under the pointer.
-	a.split(false)
-	tt.Frame()
-	tab := a.tab()
-	left := tab.panes()[0]
-	if tab.Focus == left {
-		t.Fatal("the left pane has the focus")
-	}
-	b := left.bounds
-	tt.Move(b.X+60, b.Y+headerH/2)
-	tt.Frame()
-	cx, cy := b.X+b.W-8-13, b.Y+headerH/2 // the last button of the header
-	tt.Press(cx, cy)
-	tt.Frame()
-	tt.Release(cx, cy)
-	tt.Frame()
-	if ps := tab.panes(); len(ps) != 1 || ps[0] == left {
-		t.Fatalf("%d panes after clicking the left pane's close button", len(ps))
 	}
 }

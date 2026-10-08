@@ -213,3 +213,25 @@ func TestAgentHookSocketAuthenticationAndRouting(t *testing.T) {
 		t.Fatal("invalid hook changed state")
 	}
 }
+
+func TestGeminiNormalizedLifecycleClearsPendingPermission(t *testing.T) {
+	var tracker agentTracker
+	now := time.Now()
+	for i, input := range []agents.HookInput{
+		{SessionID: "gemini", Event: "BeforeAgent"},
+		{SessionID: "gemini", Event: "Notification", Notification: "ToolPermission"},
+		{SessionID: "gemini", Event: "AfterTool", Tool: "run_shell_command"},
+		{SessionID: "gemini", Event: "AfterAgent"},
+	} {
+		tracker.apply(AgentEvent{Agent: "gemini", Input: input, At: now.Add(time.Duration(i) * time.Millisecond)})
+		if i == 1 && tracker.state.State != agents.Waiting {
+			t.Fatal(tracker.state)
+		}
+		if i == 2 && tracker.state.State != agents.Running {
+			t.Fatal("permission not cleared", tracker.state)
+		}
+	}
+	if tracker.state.State != agents.Completed || tracker.state.WaitRevision != 1 || tracker.state.CompletionRevision != 1 {
+		t.Fatal(tracker.state)
+	}
+}

@@ -8,10 +8,10 @@ import (
 )
 
 var settingsSections = []struct{ title, label, glyph string }{
-	{"常规", "General", "settings-2"},
 	{"外观", "Appearance", "sun"},
 	{"终端", "Terminal settings", "square-terminal"},
 	{"Agent", "Agent integrations", "bot"},
+	{"连接", "Connections", "smartphone"},
 	{"关于", "About GoRex", "circle-dot"},
 }
 
@@ -28,7 +28,7 @@ func (a *App) openSettings() {
 	a.settingsOpen = true
 	a.settingsQuery = ""
 	a.settingsInitialFocus = true
-	a.paletteOpen, a.hostOpen, a.renaming = false, false, nil
+	a.paletteOpen, a.renaming = false, nil
 	a.focusReq = nil
 }
 
@@ -147,32 +147,13 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 
 func (a *App) preferenceItems() []preferenceItem {
 	items := []preferenceItem{
-		{id: "session-header", title: "显示会话标题与控制按钮", label: "Show session titles and controls", detail: "在每个终端窗格顶部显示标题、分屏和关闭按钮。", group: "会话窗格",
-			modified: prefs.HideSessionHeader, disabled: prefs.CompactMode,
-			reset: func() { a.setSessionHeadersVisible(true) },
+		{id: "phone-connection", title: "连接手机", label: "Connect phone", detail: "用 iPhone 扫描二维码，继续桌面会话或新建终端。", group: "手机连接", section: 3,
 			control: func(c *ui.Context) {
-				show := !prefs.HideSessionHeader && !prefs.CompactMode
-				if settingsSwitch(c, &show, "Show session titles and controls").Changed() {
-					a.setSessionHeadersVisible(show)
+				if ui.Button(c, "显示二维码").Label("Show phone connection QR code").Clicked() {
+					a.openPhonePair()
 				}
 			}},
-		{id: "host", title: "显示主机名", label: "Show host name", detail: "在窗口左上角显示主机名和设备型号。", group: "窗口布局",
-			modified: prefs.HideHost, disabled: prefs.CompactMode,
-			reset: func() { a.setHostVisible(true) },
-			control: func(c *ui.Context) {
-				show := !prefs.HideHost && !prefs.CompactMode
-				if settingsSwitch(c, &show, "Show host name").Changed() {
-					a.setHostVisible(show)
-				}
-			}},
-		{id: "compact", title: "紧凑模式", label: "Compact mode", detail: "使用精简标签栏，隐藏主机名和会话标题。关闭后恢复原有显示设置。", group: "窗口布局",
-			modified: prefs.CompactMode, reset: func() { a.setCompactMode(false) },
-			control: func(c *ui.Context) {
-				if settingsSwitch(c, &prefs.CompactMode, "Compact mode").Changed() {
-					a.setCompactMode(prefs.CompactMode)
-				}
-			}},
-		{id: "appearance", title: "主题", label: "Color theme", detail: "选择浅色、深色，或跟随系统的外观设置。", group: "颜色", section: 1,
+		{id: "appearance", title: "主题", label: "Color theme", detail: "选择浅色、深色，或跟随系统的外观设置。", group: "颜色", section: 0,
 			modified: prefs.Appearance != "", reset: func() { a.setAppearance("") },
 			control: func(c *ui.Context) {
 				values, selected := []string{"", "light", "dark"}, 0
@@ -185,7 +166,7 @@ func (a *App) preferenceItems() []preferenceItem {
 					a.setAppearance(values[selected])
 				}
 			}},
-		{id: "font-size", title: "字体大小", label: "Terminal font size", detail: "调整所有终端窗格的文字大小。也可使用 ⌘+、⌘− 和 ⌘0。", group: "文字", section: 2,
+		{id: "font-size", title: "字体大小", label: "Terminal font size", detail: "调整所有终端窗格的文字大小。也可使用 ⌘+、⌘− 和 ⌘0。", group: "文字", section: 1,
 			modified: prefs.FontSize != defaultFontSize, reset: func() { a.setFontSize(defaultFontSize) },
 			control: func(c *ui.Context) {
 				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -201,7 +182,7 @@ func (a *App) preferenceItems() []preferenceItem {
 					}
 				})
 			}},
-		{id: "copy-content", title: "复制内容", label: "Selection copy content", detail: "显示文字：复制选区中的可见文字，保留列表序号。原始终端文本：同时保留隐藏字符。适用于选中自动复制、⌘C 和右键复制。", group: "复制", section: 2,
+		{id: "copy-content", title: "复制内容", label: "Selection copy content", detail: "显示文字：复制选区中的可见文字，保留列表序号。原始终端文本：同时保留隐藏字符。适用于选中自动复制、⌘C 和右键复制。", group: "复制", section: 1,
 			modified: prefs.CopyRawText, reset: func() { a.setCopyRawText(false) },
 			control: func(c *ui.Context) {
 				selected := 0
@@ -212,7 +193,7 @@ func (a *App) preferenceItems() []preferenceItem {
 					a.setCopyRawText(selected == 1)
 				}
 			}},
-		{id: "link-editor", title: "打开文件的编辑器", label: "File link editor", detail: "⌘ 点击文件路径时使用的编辑器。自动优先选择 VS Code、Cursor；这两个编辑器支持行列号跳转。", group: "链接", section: 2,
+		{id: "link-editor", title: "打开文件的编辑器", label: "File link editor", detail: "⌘ 点击文件路径时使用的编辑器。自动优先选择 VS Code、Cursor；这两个编辑器支持行列号跳转。", group: "链接", section: 1,
 			modified: prefs.LinkEditor != "", reset: func() { a.setLinkEditor("") },
 			control: func(c *ui.Context) {
 				values, labels := []string{"", "vscode", "cursor", "system"}, []string{"自动", "VS Code", "Cursor", "系统默认"}
@@ -230,7 +211,7 @@ func (a *App) preferenceItems() []preferenceItem {
 					}
 				}
 			}},
-		{id: "agent-completion-notifications", title: "完成或失败时提醒", label: "Agent completion notifications", detail: "后台 Tab 或未聚焦窗格中的 Agent 完成任务或执行失败时发送桌面通知。点击通知可返回对应窗格。", group: "通知", section: 3,
+		{id: "agent-completion-notifications", title: "完成或失败时提醒", label: "Agent completion notifications", detail: "后台 Tab 或未聚焦窗格中的 Agent 完成任务或执行失败时发送桌面通知。点击通知可返回对应窗格。", group: "通知", section: 2,
 			modified: prefs.HideAgentCompletionNotifications,
 			reset:    func() { a.setAgentCompletionNotifications(true) },
 			control: func(c *ui.Context) {
@@ -239,7 +220,7 @@ func (a *App) preferenceItems() []preferenceItem {
 					a.setAgentCompletionNotifications(show)
 				}
 			}},
-		{id: "agent-notifications", title: "等待输入时提醒", label: "Agent waiting notifications", detail: "Agent 需要授权、回答或输入时发送桌面通知。正在查看的窗格不提醒，点击通知可定位窗格。", group: "通知", section: 3,
+		{id: "agent-notifications", title: "等待输入时提醒", label: "Agent waiting notifications", detail: "Agent 需要授权、回答或输入时发送桌面通知。正在查看的窗格不提醒，点击通知可定位窗格。", group: "通知", section: 2,
 			modified: prefs.HideAgentNotifications,
 			reset:    func() { a.setAgentNotifications(true) },
 			control: func(c *ui.Context) {
@@ -249,7 +230,7 @@ func (a *App) preferenceItems() []preferenceItem {
 				}
 			}},
 	}
-	for _, id := range []string{"claude", "codex"} {
+	for _, id := range agents.Integrated {
 		id := id
 		name := programOf(id).Name
 		s := a.agentHooks[id]
@@ -263,10 +244,13 @@ func (a *App) preferenceItems() []preferenceItem {
 		if id == "codex" {
 			detail += " 正常启动 codex，并在 /hooks 中信任 GoRex 新增项；已安装不代表已信任。"
 		}
+		if (id == "gemini" || id == "qwen") && a.hello.Version > 0 && a.hello.Version < 5 {
+			detail += " 当前后台服务需更新；结束现有任务后，使用 Shell → Quit and End All Sessions，再打开新版 GoRex。"
+		}
 		if s.Error != "" {
 			detail = "无法读取配置：" + s.Error
 		}
-		items = append(items, preferenceItem{id: "agent-hook-" + id, title: name, label: name + " integration", detail: detail, group: "状态接入", section: 3,
+		items = append(items, preferenceItem{id: "agent-hook-" + id, title: name, label: name + " integration", detail: detail, group: "状态接入", section: 2,
 			modified: s.Present, disabled: a.agentHookBusy != "",
 			reset: func() { a.changeAgentHooks(id, false) },
 			control: func(c *ui.Context) {
@@ -285,7 +269,7 @@ func (a *App) preferenceItems() []preferenceItem {
 
 func (a *App) refreshAgentHooks() {
 	a.agentHooks = map[string]agents.HookInstallation{}
-	for _, id := range []string{"claude", "codex"} {
+	for _, id := range agents.Integrated {
 		a.agentHooks[id] = agents.InspectHooks(id)
 	}
 }
@@ -355,7 +339,7 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 		ui.Text(c, "持久会话、标签页与分屏。使用 Go、MyGo 和 Ghostty VT 构建。").FontSize(12).TextColor(theme.TextMuted).Margin(16, 0)
 		return
 	}
-	if a.agentHookError != "" && (a.settingsSection == 3 || query != "") {
+	if a.agentHookError != "" && (a.settingsSection == 2 || query != "") {
 		ui.Text(c, a.agentHookError).FontSize(12).TextColor(ui.Hex("#e56c6c")).Margin(8, 0)
 	}
 	group, count := "", 0
@@ -385,9 +369,6 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
 				ui.Text(c, item.title).FontSize(13).FontWeight(500).TextColor(theme.Text)
 				ui.Text(c, item.detail).FontSize(11.5).TextColor(theme.TextMuted)
-				if item.disabled && (item.id == "session-header" || item.id == "host") {
-					ui.Text(c, "紧凑模式开启时隐藏此项，原有设置会保留。").FontSize(11).TextColor(theme.TextMuted)
-				}
 				if item.modified {
 					ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
 						ui.Text(c, "已修改").FontSize(11).TextColor(theme.TextMuted)

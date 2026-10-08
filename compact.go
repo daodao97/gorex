@@ -34,6 +34,7 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 	ui.Row(c).Height(compactTitleH).Padding(0, bar.Right, 0, left).Gap(0).
 		Background(k.track).AlignItems(ui.Center).DragWindow().Children(func() {
 		a.tabStrip(c, k)
+		a.phonePairButton(c, k, 28)
 		b := ui.Box(c).Key("compact-new-tab").Width(28).FillHeight().Shrink(0).
 			Center().Role(ui.RoleButton).Label("New Tab").Focusable().Cursor(ui.CursorPointer).
 			BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder).Tooltip("New Tab  ⌘T")
@@ -50,7 +51,7 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, detail string, hovered bool) {
 	if t.Focus != nil {
 		if prog := paneProgram(t.Focus); prog.Agent {
-			color := prog.TileFg
+			color := prog.IconColor
 			if !c.Theme().Dark {
 				if color == ui.Hex("#d5d7db") {
 					color = k.text
@@ -65,11 +66,6 @@ func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, det
 	if a.renaming == t {
 		a.renameField(c, t, name)
 		return
-	}
-	if hovered && len(a.tabs) > 1 {
-		if iconButton(c, k, "x", "Close Tab", 16, 11).Tooltip("Close Tab").Clicked() {
-			a.later(c, func() { a.closeTab(t) })
-		}
 	}
 	col := k.textMuted
 	if i == a.active {
@@ -92,5 +88,10 @@ func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, det
 	}
 	if shortcut > 0 {
 		ui.Text(c, fmt.Sprintf("⌘%d", shortcut)).FontSize(10).TextColor(k.textFaint).Shrink(0)
+	}
+	if hovered && len(a.tabs) > 1 {
+		if iconButton(c, k, "x", "Close Tab", 16, 11).Shrink(0).Tooltip("Close Tab").Clicked() {
+			a.later(c, func() { a.closeTab(t) })
+		}
 	}
 }

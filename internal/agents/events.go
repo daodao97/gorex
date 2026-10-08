@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// HookInput is the small, common part of Claude and Codex lifecycle input.
+// HookInput retains only lifecycle metadata shared by supported agents.
 // Prompt text, transcripts and tool arguments are deliberately not retained.
 type HookInput struct {
 	Event        string `json:"hook_event_name"`
@@ -17,6 +17,29 @@ type HookInput struct {
 	Notification string `json:"notification_type"`
 	Source       string `json:"source"`
 	AgentID      string `json:"agent_id"`
+}
+
+// Integrated lists agents with verified lifecycle hook support.
+var Integrated = []string{"claude", "codex", "gemini", "qwen"}
+
+// NormalizeHook maps external event names to the tracker lifecycle.
+func NormalizeHook(agent string, h HookInput) HookInput {
+	if agent == "gemini" {
+		switch h.Event {
+		case "BeforeAgent":
+			h.Event = "UserPromptSubmit"
+		case "AfterAgent":
+			h.Event = "Stop"
+		case "BeforeTool":
+			h.Event = "PreToolUse"
+		case "AfterTool":
+			h.Event = "PostToolUse"
+		}
+		if h.Notification == "ToolPermission" {
+			h.Notification = "permission_prompt"
+		}
+	}
+	return h
 }
 
 const (
@@ -31,9 +54,10 @@ const (
 // HookStatus only recognizes actual lifecycle events, never silence or
 // arbitrary terminal output. Subagent lifecycle events cannot finish a tab.
 func HookStatus(agent string, h HookInput) (state, reason string) {
-	if (agent != "claude" && agent != "codex") || h.SessionID == "" || h.AgentID != "" {
+	if (agent != "claude" && agent != "codex" && agent != "gemini" && agent != "qwen") || h.SessionID == "" || h.AgentID != "" {
 		return "", ""
 	}
+	h = NormalizeHook(agent, h)
 	switch h.Event {
 	case "SessionStart":
 		if h.Source == "compact" {
@@ -43,7 +67,7 @@ func HookStatus(agent string, h HookInput) (state, reason string) {
 	case "UserPromptSubmit":
 		return Running, ""
 	case "PreToolUse":
-		if h.Tool == "AskUserQuestion" || h.Tool == "request_user_input" {
+		if h.Tool == "AskUserQuestion" || h.Tool == "request_user_input" || (agent == "gemini" && h.Tool == "ask_user") {
 			return Waiting, "question"
 		}
 		return Running, ""
@@ -53,6 +77,10 @@ func HookStatus(agent string, h HookInput) (state, reason string) {
 		return Running, ""
 	case "Stop":
 		return Completed, ""
+	case "StopFailure":
+		if agent == "codex" {
+			return Failed, ""
+		}
 	case "Interrupt":
 		if agent == "codex" {
 			return Ready, ""
@@ -60,7 +88,7 @@ func HookStatus(agent string, h HookInput) (state, reason string) {
 	case "SessionEnd":
 		return Ended, ""
 	}
-	if agent == "claude" {
+	if agent == "claude" || agent == "qwen" || agent == "gemini" {
 		switch h.Event {
 		case "PostToolUseFailure", "ElicitationResult":
 			return Running, ""
@@ -99,6 +127,12 @@ func ParseHook(agent string, data []byte) (HookInput, bool) {
 
 func HookEvents(agent string) []string {
 	common := []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PermissionRequest", "PostToolUse", "Stop", "SessionEnd"}
+	if agent == "gemini" {
+		return []string{"SessionStart", "BeforeAgent", "BeforeTool", "AfterTool", "AfterAgent", "SessionEnd", "Notification"}
+	}
+	if agent == "qwen" {
+		return append(common, "PostToolUseFailure", "Notification")
+	}
 	if agent == "claude" {
 		return append(common, "PostToolUseFailure", "Notification", "Elicitation", "ElicitationResult", "StopFailure")
 	}
