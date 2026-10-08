@@ -66,6 +66,12 @@ func (m *mobileApp) enterBackground() {
 		return
 	}
 	m.background = true
+	if m.releaseSizeLock() {
+		m.lockSuspended = true
+		// Keep the terminal and control connection, but stop this inactive
+		// view from resizing the PTY while the desktop takes it back.
+		m.stream.replace(nil)
+	}
 	if m.term != nil {
 		m.term.SetInputEnabled(false)
 	}
@@ -237,7 +243,7 @@ func (m *mobileApp) finishRetainedConnection(client *rex.Client, generation int,
 				m.selected = session
 				m.stream.geometry(session.Cols, session.Rows)
 				if !m.stream.hasTransport() || geometryChanged {
-					m.stream.replace(client.ViewStream(session.ID))
+					m.reattach(session)
 				}
 				found = true
 				break

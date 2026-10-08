@@ -216,6 +216,55 @@ func (c *Client) Resize(sid string, cols, rows int) error {
 	return c.call(Request{Op: "resize", SID: sid, Cols: cols, Rows: rows}, nil)
 }
 
+// ResendSize makes the next resize reach the server even at the size it
+// was told last: a window taking a session's size back after another
+// device held it.
+func (s *Stream) ResendSize() {
+	s.mu.Lock()
+	s.sentCols, s.sentRows = 0, 0
+	s.mu.Unlock()
+}
+
+// HoldsLock tells that a LockStream attached and holds the size lock, as
+// far as its own resizes know, and since when.
+func (s *Stream) HoldsLock() (bool, time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.locked && !s.lockLost, s.lockedAt
+}
+
+// LockedResize resizes a session whose size owner holds; it fails once
+// the lock was released.
+func (c *Client) LockedResize(sid, owner string, cols, rows int) error {
+	return c.call(Request{Op: "lockedResize", SID: sid, Owner: owner, Cols: cols, Rows: rows}, nil)
+}
+
+// UnlockSize gives the size back to the windows, at cols×rows if given.
+func (c *Client) UnlockSize(sid string, cols, rows int) error {
+	return c.call(Request{Op: "unlockSize", SID: sid, Cols: cols, Rows: rows}, nil)
+}
+
+// releaseSize also checks ownership for earlier version 6 servers, which
+// ignore Owner on unlockSize. Each mobile attachment uses a distinct owner.
+func (c *Client) releaseSize(sid, owner string) error {
+	sessions, err := c.List()
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		if session.ID == sid && session.SizeLock == owner {
+			return c.call(Request{Op: "unlockSize", SID: sid, Owner: owner}, nil)
+		}
+	}
+	return nil
+}
+
+// Resync sends the session's attached clients its screen again, as after
+// a resize: a window that changed how it decodes the session redraws.
+func (c *Client) Resync(sid string) error {
+	return c.call(Request{Op: "resync", SID: sid}, nil)
+}
+
 func (c *Client) Clear(sid string) error {
 	return c.call(Request{Op: "clear", SID: sid}, nil)
 }
@@ -239,7 +288,15 @@ func (c *Client) Close() error { return c.conn.Close() }
 // a moment at the size it had last.
 type Stream struct {
 	// preserveSize keeps this viewer's local layout from resizing the PTY.
-	preserveSize                    bool
+	preserveSize bool
+	// lockOwner, for a LockStream, takes the session's size as it attaches
+	// and resizes it as the device's view changes; lockLost tells that a
+	// window released the lock, after which the stream resizes nothing.
+	lockOwner, lockDevice           string
+	locked, lockLost                bool
+	lockedAt                        time.Time
+	beforeAttach                    <-chan struct{}
+	releaseDone                     chan struct{}
 	screenFrames                    bool
 	frameLeft, frameCols, frameRows int
 	c                               *Client
@@ -275,6 +332,25 @@ func (c *Client) ViewStream(sid string) *Stream {
 	return c.stream(sid, 0, 0, true)
 }
 
+// LockStream attaches a device that takes the session's size: the PTY
+// follows this device's view until the size lock is released, and windows
+// show the session at that size meanwhile. Version 6 servers only.
+// cols×rows, when known, is the size it takes as it attaches.
+func (c *Client) LockStream(sid, owner, device string, cols, rows int) *Stream {
+	return c.LockStreamAfter(sid, owner, device, cols, rows, nil)
+}
+
+// LockStreamAfter waits for the previous attachment's release before taking
+// ownership, including on earlier version 6 servers with unconditional unlock.
+func (c *Client) LockStreamAfter(sid, owner, device string, cols, rows int, released <-chan struct{}) *Stream {
+	s := c.stream(sid, cols, rows, false)
+	s.mu.Lock()
+	s.lockOwner, s.lockDevice = owner, device
+	s.beforeAttach = released
+	s.mu.Unlock()
+	return s
+}
+
 func (c *Client) stream(sid string, cols, rows int, preserveSize bool) *Stream {
 	s := &Stream{c: c, sid: sid, cols: cols, rows: rows, preserveSize: preserveSize}
 	s.cond = sync.NewCond(&s.mu)
@@ -290,11 +366,26 @@ func (s *Stream) attach() {
 	s.attachMu.Lock()
 	defer s.attachMu.Unlock()
 	s.mu.Lock()
+	before := s.beforeAttach
+	s.mu.Unlock()
+	if before != nil {
+		select {
+		case <-before:
+		case <-s.c.Closed():
+			s.mu.Lock()
+			s.err = io.ErrClosedPipe
+			s.cond.Broadcast()
+			s.mu.Unlock()
+			return
+		}
+	}
+	s.mu.Lock()
 	if s.conn != nil || s.err != nil || s.closed {
 		s.mu.Unlock()
 		return
 	}
 	cols, rows := s.cols, s.rows
+	owner, device := s.lockOwner, s.lockDevice
 	s.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -306,7 +397,11 @@ func (s *Stream) attach() {
 	var frames bool
 	if err == nil {
 		conn.SetDeadline(time.Now().Add(15 * time.Second))
-		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: s.preserveSize})
+		// Every stream asks for frames: a window decoding a locked
+		// session at the lock's size follows their geometry.
+		// The lock is taken with the attach, so its snapshot already has
+		// the device's size.
+		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: true, Owner: owner, Device: device})
 		if _, err = conn.Write(append(b, '\n')); err == nil {
 			frames, err = readAttachOK(conn)
 		}
@@ -327,6 +422,7 @@ func (s *Stream) attach() {
 		s.err = err
 	} else {
 		s.conn, s.sentCols, s.sentRows, s.screenFrames = conn, cols, rows, frames
+		s.locked, s.lockedAt = owner != "", time.Now()
 	}
 	s.cond.Broadcast()
 }
@@ -337,13 +433,23 @@ func (s *Stream) sync() error {
 	s.syncMu.Lock()
 	defer s.syncMu.Unlock()
 	s.mu.Lock()
-	if s.closed || s.preserveSize || s.conn == nil || s.cols == s.sentCols && s.rows == s.sentRows {
+	if s.closed || s.preserveSize || s.lockLost || s.conn == nil || s.cols == s.sentCols && s.rows == s.sentRows {
 		s.mu.Unlock()
 		return nil
 	}
 	cols, rows := s.cols, s.rows
+	owner, locked := s.lockOwner, s.locked
 	s.mu.Unlock()
-	if err := s.c.Resize(s.sid, cols, rows); err != nil {
+	if !locked {
+		if err := s.c.Resize(s.sid, cols, rows); err != nil {
+			return err
+		}
+	} else if err := s.c.LockedResize(s.sid, owner, cols, rows); err != nil {
+		if err.Error() == errSizeUnlocked.Error() {
+			s.mu.Lock()
+			s.lockLost = true
+			s.mu.Unlock()
+		}
 		return err
 	}
 	s.mu.Lock()
@@ -560,6 +666,35 @@ func (s *Stream) Close() error {
 		return conn.Close()
 	}
 	return nil
+}
+
+// CloseAndReleaseSize detaches immediately and releases only this attachment's
+// lock off the UI thread. Wait for completion before closing its control client.
+func (s *Stream) CloseAndReleaseSize() <-chan struct{} {
+	s.Close()
+	s.mu.Lock()
+	if s.releaseDone != nil {
+		done := s.releaseDone
+		s.mu.Unlock()
+		return done
+	}
+	done := make(chan struct{})
+	s.releaseDone = done
+	owner := s.lockOwner
+	s.mu.Unlock()
+	go func() {
+		defer close(done)
+		// An attach or resize already in flight must finish first, so it
+		// cannot retake ownership after the release.
+		s.attachMu.Lock()
+		defer s.attachMu.Unlock()
+		s.syncMu.Lock()
+		defer s.syncMu.Unlock()
+		if owner != "" {
+			s.c.releaseSize(s.sid, owner)
+		}
+	}()
+	return done
 }
 
 // Size returns the size the session was last given.

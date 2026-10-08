@@ -81,3 +81,42 @@ func TestTerminalNewlineLegacyFallback(t *testing.T) {
 		t.Fatal(text, caret)
 	}
 }
+
+func TestTerminalSoftwareTabCompletesWithoutEditingNativeContext(t *testing.T) {
+	loadLib(t)
+	for _, test := range []struct {
+		name string
+		mods ui.Modifiers
+		want string
+	}{
+		{"Tab", 0, "\t"},
+		{"ShiftTab", ui.Shift, "\x1b[Z"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			conn := newPipe()
+			term, err := New(Options{Conn: conn, InputContext: true, OptionAsAlt: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer term.Close()
+			tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill().AutoFocus() }, 400, 200)
+			tt.Type("fixture")
+			conn.take(7)
+			if !term.SendKey(ui.KeyTab, test.mods) {
+				t.Fatal("software Tab was not encoded")
+			}
+			if got := conn.take(len(test.want)); got != test.want {
+				t.Fatalf("Tab bytes = %q, want %q", got, test.want)
+			}
+			if text, caret := term.textContext(); text != "" || caret != 0 {
+				t.Fatalf("completion retained stale native context: %q, %d", text, caret)
+			}
+			// The next native keystroke must extend the shell's completed input,
+			// without moving its caret or deleting the completion.
+			term.v.input(ui.InputEvent{Kind: ui.InputTextReplace, Text: "x", Caret: 1})
+			if got := conn.take(1); got != "x" {
+				t.Fatalf("typing after completion = %q", got)
+			}
+		})
+	}
+}

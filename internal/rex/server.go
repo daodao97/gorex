@@ -168,6 +168,10 @@ func (s *Server) handle(conn net.Conn) {
 			conn.Close()
 			return
 		}
+		if a.Owner != "" {
+			// Before the answer: a client that attached holds the lock.
+			ss.lockSize(a.Owner, a.Device, a.Cols, a.Rows)
+		}
 		if a.ScreenFrames {
 			conn.Write([]byte(`{"ok":true,"screen_frames":true}` + "\n"))
 		} else {
@@ -298,6 +302,29 @@ func (s *Server) do(req Request) (any, error) {
 		}
 		ss.resize(req.Cols, req.Rows)
 		return nil, nil
+	case "lockedResize":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		if req.Owner == "" || !ss.lockedResize(req.Owner, req.Cols, req.Rows) {
+			return nil, errSizeUnlocked
+		}
+		return nil, nil
+	case "unlockSize":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		ss.unlockSizeOwned(req.Owner, req.Cols, req.Rows)
+		return nil, nil
+	case "resync":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		ss.resend(true)
+		return nil, nil
 	case "clear":
 		ss, err := s.session(req.SID)
 		if err != nil {
@@ -338,6 +365,8 @@ func (s *Server) do(req Request) (any, error) {
 	}
 	return nil, fmt.Errorf("unknown op %q", req.Op)
 }
+
+var errSizeUnlocked = errors.New("size lock released")
 
 func newID() string {
 	var b [6]byte

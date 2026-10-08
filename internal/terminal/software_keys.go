@@ -16,7 +16,7 @@ func (t *Terminal) SendKey(key ui.Key, mods ui.Modifiers) bool {
 	if ok {
 		k, r := vtKey(key)
 		text := ""
-		if r != 0 && mods&(ui.Ctrl|ui.Alt|ui.Super) == 0 {
+		if typesText(key) && mods&(ui.Ctrl|ui.Alt|ui.Super) == 0 {
 			text = string(r)
 			if mods&ui.Shift != 0 {
 				text = shiftedText(key, r)

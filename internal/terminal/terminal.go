@@ -737,6 +737,21 @@ func (t *Terminal) Paste(text string) {
 	t.redraw()
 }
 
+// SetFixedSize decodes the source at cols×rows, independently of the view,
+// following the geometry of later screen frames, as FixedCols and
+// FixedRows do; zero sizes the screen to the view again. A window showing
+// a session whose size another device holds uses it.
+func (t *Terminal) SetFixedSize(cols, rows int) {
+	t.mu.Lock()
+	if cols > 0 && rows > 0 {
+		t.opts.FixedCols, t.opts.FixedRows = cols, rows
+	} else {
+		t.opts.FixedCols, t.opts.FixedRows = 0, 0
+	}
+	t.mu.Unlock()
+	t.redraw()
+}
+
 // SetFitToView switches a fixed remote grid between fitting the view and
 // its configured font size. Neither mode changes the remote program's size.
 func (t *Terminal) SetFitToView(fit bool) {

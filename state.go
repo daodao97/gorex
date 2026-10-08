@@ -70,6 +70,10 @@ type Pane struct {
 	restored bool
 	startDir string
 	find     paneFind
+	// locked tells that a phone holds the session's size, which the pane
+	// shows at that size until unlocked; unlocking, that it is asked to.
+	locked, unlocking bool
+	unlockedAt        time.Time
 }
 
 // App is the state of GoRex's window.
@@ -930,6 +934,7 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 				in.Agent = rex.LegacyCompletionState(previous, in)
 			}
 			p.info = in
+			a.followSizeLock(p, was)
 			a.updateAgentNotice(p, was.Agent)
 			// A program that ran a while and finished out of sight
 			// asks for attention.

@@ -3,6 +3,10 @@ package main
 import (
 	"io"
 	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +14,50 @@ import (
 	"gorex/internal/rex"
 	"gorex/internal/terminal"
 )
+
+func TestMobileNewSessionTabCompletesCommand(t *testing.T) {
+	zsh, err := exec.LookPath("zsh")
+	if err != nil {
+		t.Skip("requires zsh")
+	}
+	a, _ := newTestApp(t)
+	config := t.TempDir()
+	command := "gorex-completion-fixture"
+	if err := os.WriteFile(filepath.Join(config, command), []byte("#!/bin/sh\nprintf 'COMPLETION_EXECUTED:%s\\n' \"$1\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, ".zshrc"), []byte("path=("+config+" $path)\nPROMPT='completion-fixture> '\nbindkey -e\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SHELL", zsh)
+	t.Setenv("ZDOTDIR", config)
+	session, err := a.client.Create(rex.CreateOptions{Dir: config, Cols: 48, Rows: 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.client.Kill(session.ID)
+	m := &mobileApp{client: a.client, sizeLock: true}
+	m.hello.Version = rex.ProtocolVersion
+	defer m.detach()
+	m.openSession(session)
+	tt := ui.NewTester(m.view, 390, 680)
+	waitFor(t, tt, "new mobile shell", func() bool {
+		return m.term != nil && strings.Contains(m.term.Text(), "completion-fixture>")
+	})
+	tt.Click("Terminal")
+	tt.Type("gorex-completion-f")
+	tt.Click("更多")
+	tt.Click("Tab")
+	waitFor(t, tt, "command completion", func() bool {
+		return strings.Contains(m.term.Text(), command)
+	})
+	// Keep typing after the shell has replaced the prefix with its completion.
+	tt.Type("argument")
+	tt.Key(0, ui.KeyEnter)
+	waitFor(t, tt, "completed command execution", func() bool {
+		return strings.Contains(m.term.Text(), "COMPLETION_EXECUTED:argument")
+	})
+}
 
 func TestMobileModifierArmingLockingAndSessionIsolation(t *testing.T) {
 	registerFonts()

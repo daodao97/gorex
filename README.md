@@ -165,6 +165,17 @@ orientation changes adjust only the phone's view. Tap the terminal to open
 the keyboard. Full-screen programs still generate one layout for a shared
 PTY; decoding and local reflow do not provide independent application layouts.
 
+**按手机尺寸显示** (in the sessions page's **显示与提醒** settings, on by default, needs a desktop
+server of protocol version 6) gives an opened session's PTY to the phone
+instead: full-screen programs such as OpenCode redraw for the phone, as
+they do when a desktop pane is resized. One PTY has one size, so the
+desktop pane then shows the session at the phone's size, with a bar naming
+the phone, and ignores its own resizes. Returning to the list, switching
+sessions, entering the background or disconnecting releases the lock and
+restores the desktop pane's size. Returning to the active phone session takes
+the size again. **解锁** on the desktop bar instead makes the phone reflow
+the desktop's screen until the session is opened again.
+
 The QR code contains the Tailcat capability needed to access every session
 on that desktop. Keep it private. The desktop saves its identity and relay in
 a private `remote/identity.json` file in its app data directory. Normal app

@@ -21,21 +21,16 @@ func (m *mobileApp) pauseConnection() {
 	m.busy = false
 	m.endingOpen, m.closingSession = false, ""
 	m.reconnecting = true
+	if m.releaseSizeLock() {
+		m.lockSuspended = true
+	}
 	if m.stream != nil {
 		m.stream.replace(nil)
 	}
 	if m.term != nil {
 		m.term.SetInputEnabled(false)
 	}
-	if m.client != nil {
-		m.client.Close()
-		m.client = nil
-	}
-	if m.closeTunnel != nil {
-		close := m.closeTunnel
-		m.closeTunnel = nil
-		go close()
-	}
+	m.closeConnectionAfterSizeRelease()
 	m.invalidate()
 }
 

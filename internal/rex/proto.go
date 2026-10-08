@@ -18,8 +18,11 @@ import (
 
 // ProtocolVersion identifies the server schema. Additive JSON fields can
 // remain compatible with older servers; incompatible changes raise the minimum.
-const ProtocolVersion = 5
+const ProtocolVersion = 6
 
+// Version 6 adds the mobile size lock: Attach.Owner, "lockedResize",
+// "unlockSize" and "resync" requests, and SessionInfo.SizeLock. Older clients keep resizing as before; a locked
+// session ignores their resize requests until it is unlocked.
 // Version 5 adds CompletionRevision to the version 4 protocol. Requests,
 // streaming, layout and agent events are unchanged; clients can fall back
 // to observed state/input changes for version 4 completion notifications.
@@ -41,6 +44,8 @@ type Request struct {
 	AgentEvent *AgentEvent     `json:"agentEvent,omitempty"`
 	Token      string          `json:"token,omitempty"`
 	Device     *DeviceInfo     `json:"device,omitempty"`
+	// Owner identifies the device of a size lock request.
+	Owner string `json:"owner,omitempty"`
 }
 
 // Response answers the Request with the same ID.
@@ -74,17 +79,22 @@ type SessionInfo struct {
 	// Dir is the working directory of the program in the foreground.
 	Dir string `json:"dir"`
 	// Title is the last title a program set (OSC 0, OSC 2).
-	Title      string     `json:"title,omitempty"`
-	LastOutput time.Time  `json:"lastOutput"`
-	LastInput  time.Time  `json:"lastInput"`
-	Output     uint64     `json:"output"`
-	Bells      int        `json:"bells"`
-	Exited     bool       `json:"exited"`
-	ExitCode   int        `json:"exitCode"`
-	Attached   int        `json:"attached"`
-	Cols       int        `json:"cols"`
-	Rows       int        `json:"rows"`
-	Agent      AgentState `json:"agent,omitempty"`
+	Title      string    `json:"title,omitempty"`
+	LastOutput time.Time `json:"lastOutput"`
+	LastInput  time.Time `json:"lastInput"`
+	Output     uint64    `json:"output"`
+	Bells      int       `json:"bells"`
+	Exited     bool      `json:"exited"`
+	ExitCode   int       `json:"exitCode"`
+	Attached   int       `json:"attached"`
+	Cols       int       `json:"cols"`
+	Rows       int       `json:"rows"`
+	// SizeLock names the device holding the terminal size ("" when the
+	// desktop's windows set it, as before version 6).
+	SizeLock string `json:"sizeLock,omitempty"`
+	// SizeLockDevice is the name of that device, for the windows.
+	SizeLockDevice string     `json:"sizeLockDevice,omitempty"`
+	Agent          AgentState `json:"agent,omitempty"`
 }
 
 // Hello is the server's answer to "hello".
@@ -137,6 +147,10 @@ type Attach struct {
 	// ScreenFrames asks for output framed with the authoritative grid size.
 	// Older servers ignore this field and continue to send raw ANSI.
 	ScreenFrames bool `json:"screen_frames,omitempty"`
+	// Owner, with version 6, takes the session's size lock for a device
+	// named Device, at Cols×Rows, before the snapshot is made.
+	Owner  string `json:"owner,omitempty"`
+	Device string `json:"device,omitempty"`
 }
 
 // Dir returns the directory of the server's socket, log and state.

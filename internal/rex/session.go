@@ -49,7 +49,10 @@ type session struct {
 	exited     bool
 	code       int
 	cols, rows int
-	done       chan struct{}
+	// sizeLock is the device that took the size with lockSize; while it
+	// is set, only that lock's own resizes reach the PTY.
+	sizeLock, sizeLockDevice string
+	done                     chan struct{}
 }
 
 // attached is a connection attached to a session, whose output a
@@ -254,7 +257,7 @@ func (s *session) attach(conn net.Conn, cols, rows int) { s.attachScreen(conn, c
 func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool) {
 	a := &attached{conn: conn, out: make(chan []byte, 2048), screenFrames: frames}
 	s.mu.Lock()
-	if cols > 0 && rows > 0 {
+	if cols > 0 && rows > 0 && s.sizeLock == "" {
 		// Resize both the screen and PTY before queuing the snapshot.
 		s.resizeLocked(cols, rows)
 	}
@@ -306,10 +309,57 @@ func (s *session) input(p []byte) {
 }
 
 // resize sets the size of the terminal and reports whether it changed.
+// A window's resize is ignored while a phone holds the size lock: one PTY
+// has one size, and the desktop must not take it back by redrawing.
 func (s *session) resize(cols, rows int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.sizeLock != "" {
+		return false
+	}
 	return s.resizeLocked(cols, rows)
+}
+
+// lockSize gives the terminal's size to a device until unlockSize. The
+// device's later resizes go through lockedResize.
+func (s *session) lockSize(owner, device string, cols, rows int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sizeLock, s.sizeLockDevice = owner, device
+	if cols > 0 && rows > 0 {
+		s.resizeLocked(cols, rows)
+	}
+}
+
+// lockedResize resizes for the device holding the lock, and reports
+// whether it still does.
+func (s *session) lockedResize(owner string, cols, rows int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.sizeLock != owner {
+		return false
+	}
+	s.resizeLocked(cols, rows)
+	return true
+}
+
+// unlockSize releases the lock and gives the size back to the windows,
+// at the size given (that of the window unlocking), if any.
+func (s *session) unlockSize(cols, rows int) {
+	s.unlockSizeOwned("", cols, rows)
+}
+
+// An inactive attachment must not release a newer device's lock.
+func (s *session) unlockSizeOwned(owner string, cols, rows int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if owner != "" && s.sizeLock != owner {
+		return
+	}
+	s.sizeLock, s.sizeLockDevice = "", ""
+	if cols > 0 && rows > 0 {
+		s.resizeLocked(cols, rows)
+	}
 }
 
 func (s *session) resizeLocked(cols, rows int) bool {
@@ -355,7 +405,11 @@ const promptRedraw = "\x1b]133;A;redraw=1\x07\x1b]133;C\x07"
 // another, which full-screen programs, redrawing only what changed, do
 // not mend. A shell's right prompt can likewise wrap differently while
 // the window reflows through an animation's intermediate sizes.
-func (s *session) resyncScreen() {
+func (s *session) resyncScreen() { s.resend(false) }
+
+// resend sends the windows the session's screen; force replaces a
+// primary screen too, for a window that changed the size it decodes at.
+func (s *session) resend(force bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.exited || len(s.clients) == 0 {
@@ -376,6 +430,8 @@ func (s *session) resyncScreen() {
 		// Replace the primary screen and history, rather than appending
 		// a snapshot to the window's independently reflowed scrollback.
 		msg = append([]byte("\x1b[?6l\x1b[r\x1b[H\x1b[2J\x1b[3J"+promptRedraw), snap...)
+	} else if force {
+		msg = append([]byte("\x1b[?6l\x1b[r\x1b[H\x1b[2J\x1b[3J"), snap...)
 	} else {
 		return
 	}
@@ -430,7 +486,7 @@ func (s *session) info() SessionInfo {
 		Title: s.vt.Title(), LastOutput: s.lastOutput, LastInput: s.lastInput,
 		Output: s.output, Bells: int(s.bells.Load()), Exited: s.exited, ExitCode: s.code,
 		Attached: len(s.clients), Cols: s.cols, Rows: s.rows,
-		Agent: s.agent.state,
+		SizeLock: s.sizeLock, SizeLockDevice: s.sizeLockDevice, Agent: s.agent.state,
 	}
 	s.mu.Unlock()
 	if s.p.cmd.Process != nil {

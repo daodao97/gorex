@@ -82,6 +82,14 @@ type mobileApp struct {
 	keyboardModifiers, keyboardLocked  ui.Modifiers
 	connectionIssue                    *mobileConnectionIssue
 	connectionDetailsOpen              bool
+	sessionSettingsOpen                bool
+	// sizeLock, a setting, makes an opened session take the PTY's size
+	// (and the desktop's pane show it) while the phone session is active.
+	// lockLost tells that a window did, for the open session.
+	sizeLock, lockLost, lockSeen bool
+	lockOwner                    string
+	lockSuspended                bool
+	lockRelease                  <-chan struct{}
 }
 
 type desktopRecent struct {
@@ -150,7 +158,7 @@ func mobileMain() {
 		os.Setenv("GOREX_DIR", dir)
 	}
 	registerFonts()
-	m := &mobileApp{storage: make(chan func(), 32)}
+	m := &mobileApp{storage: make(chan func(), 32), sizeLock: true}
 	go func() {
 		for task := range m.storage {
 			task()
@@ -192,6 +200,10 @@ func mobileMain() {
 			if saved, err := m.store.Get("recent-sessions"); err == nil {
 				json.Unmarshal(saved, &recentSessions)
 			}
+			sizeLock := true
+			if saved, err := m.store.Get("size-lock"); err == nil {
+				sizeLock = string(saved) == "1"
+			}
 			if saved, err := m.store.Get("history"); err == nil {
 				historySaved = json.Unmarshal(saved, &history) == nil
 			}
@@ -201,6 +213,7 @@ func mobileMain() {
 				}
 			}
 			mygo.RunOnMain(func() {
+				m.sizeLock = sizeLock
 				if m.historyEpoch == historyEpoch {
 					m.applyLoadedConnectionHistory(history, recentSessions, historyEpoch)
 					if m.pendingSession != "" {
@@ -227,6 +240,7 @@ func (m *mobileApp) invalidate() {
 }
 
 func (m *mobileApp) detach() {
+	m.releaseSizeLock()
 	m.clearKeyboardModifiers()
 	m.cancelImagePaste()
 	m.keyboardMore = false
@@ -236,6 +250,7 @@ func (m *mobileApp) detach() {
 	}
 	m.stream = nil
 	m.selected = rex.SessionInfo{}
+	m.lockOwner, m.lockSuspended, m.lockSeen = "", false, false
 	mobile.HideKeyboard()
 }
 
@@ -253,21 +268,14 @@ func (m *mobileApp) disconnect(forget bool) {
 	}
 	m.agentPrevious = nil
 	m.editingOpen = false
+	m.sessionSettingsOpen = false
 	m.endingOpen, m.closingSession = false, ""
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
 	}
 	m.detach()
-	if m.client != nil {
-		m.client.Close()
-		m.client = nil
-	}
-	if m.closeTunnel != nil {
-		close := m.closeTunnel
-		m.closeTunnel = nil
-		go close()
-	}
+	m.closeConnectionAfterSizeRelease()
 	m.busy, m.creating = false, false
 	m.sessions = nil
 	m.resumeLink, m.resumeSID = "", ""
@@ -403,7 +411,7 @@ func (m *mobileApp) startConnection(recovering bool) {
 					if session.ID == m.selected.ID {
 						m.selected = session
 						m.stream.geometry(session.Cols, session.Rows)
-						m.stream.replace(client.ViewStream(session.ID))
+						m.reattach(session)
 						found = true
 						break
 					}
@@ -466,9 +474,10 @@ func (m *mobileApp) poll(ctx context.Context, client *rex.Client, generation int
 								// fresh snapshot if their source grid changes.
 								m.selected = s
 								m.stream.geometry(s.Cols, s.Rows)
-								m.stream.replace(client.ViewStream(s.ID))
+								m.stream.replace(m.sessionStream(s.ID, false))
 							} else {
 								m.selected = s
+								m.followSizeLock(s)
 							}
 						}
 					}
@@ -508,9 +517,15 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 	if m.client == nil {
 		return
 	}
+	if m.selected.ID != s.ID {
+		// A window's unlock holds for the session it released only.
+		m.lockLost = false
+	}
 	m.detach()
 	var stream *mobileStream
-	stream = newMobileStream(m.client.ViewStream(s.ID), func() {
+	locking := m.locksSize()
+	m.lockSeen = false
+	stream = newMobileStream(m.sessionStream(s.ID, locking), func() {
 		mygo.RunOnMain(func() {
 			if m.stream == stream && !stream.hasTransport() {
 				if m.closingSession == m.selected.ID {
@@ -525,7 +540,15 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		})
 	})
 	stream.geometry(s.Cols, s.Rows)
-	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OptionAsAlt: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, InputContext: true, OnPaste: m.pasteClipboard})
+	options := terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true}
+	if locking {
+		// The program draws for this view, as in a desktop pane.
+		options = terminal.Options{Conn: stream}
+	}
+	options.Font, options.Theme, options.DarkTheme = terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, lightTerm, darkTerm
+	options.AdaptiveColors, options.OptionAsAlt, options.SelectOnDrag, options.CopyRawText = true, true, true, true
+	options.ActiveCursor, options.InputContext, options.OnPaste = true, true, m.pasteClipboard
+	term, err := terminal.New(options)
 	if err != nil {
 		stream.Close()
 		m.error = "无法打开终端：" + err.Error()
@@ -608,6 +631,7 @@ func (m *mobileApp) view(c *ui.Context) {
 		})
 	})
 	m.sessionEditor(c)
+	m.sessionSettingsDialog(c)
 	m.sessionEndDialog(c)
 	m.connectionDialog(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
@@ -846,7 +870,7 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			m.error = ""
 		}
 	})
-	ui.Row(c).FillWidth().Height(44).Padding(0, 20, 8, 20).Gap(8).AlignItems(ui.Center).Children(func() {
+	ui.Row(c).FillWidth().Height(44).Padding(0, 8, 0, 20).Gap(8).AlignItems(ui.Center).Children(func() {
 		statusColor := colorsOf(c).busy.Mix(colorsOf(c).textMuted, 0.3)
 		status := "桌面已连接"
 		if m.needsRecovery() || m.connectionIssue != nil {
@@ -854,21 +878,16 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 		}
 		ui.Box(c).Label(status).Size(6, 6).Shrink(0).Radius(3).Background(statusColor)
 		ui.Text(c, m.hello.Host.Name).FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
-		ui.Icon(c, icon("bell")).Role(ui.RoleImage).Label("任务提醒").Size(16, 16).TextColor(c.Theme().TextMuted)
-		enabled := !m.pushDisabled
-		if ui.Switch(c, &enabled).Label("后台任务提醒").Changed() {
-			m.setPushEnabled(enabled)
+		if ui.ButtonBase(c).Label("显示与提醒设置").Role(ui.RoleButton).Size(44, 44).Children(func() {
+			ui.Icon(c, icon("settings-2")).Size(17, 17).TextColor(c.Theme().TextMuted)
+			if m.pushError != "" && !m.pushDisabled {
+				ui.Box(c).Absolute().Right(9).Top(9).Size(5, 5).Radius(3).Background(colorsOf(c).attention)
+			}
+		}).Clicked() {
+			m.sessionSettingsOpen = true
 		}
 	})
-	if m.pushError != "" && !m.pushDisabled {
-		ui.Row(c).FillWidth().Padding(0, 20).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, m.pushError).FontSize(12).TextColor(c.Theme().TextMuted).Grow(1)
-			if m.notificationDenied && mobileTextAction(c, "打开通知设置", "设置").Clicked() {
-				go mygo.Permissions.OpenSettings()
-			}
-		})
-	}
-	ui.Scroll(c).Key("mobile-sessions").Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(0, 16, 16, 16).Gap(12).Children(func() {
+	ui.Scroll(c).Key("mobile-sessions").Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(8, 16, 16, 16).Gap(12).Children(func() {
 		m.connectionFeedback(c)
 		if !m.needsRecovery() && m.connectionIssue == nil {
 			m.errorView(c)
