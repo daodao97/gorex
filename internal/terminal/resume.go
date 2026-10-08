@@ -31,6 +31,7 @@ func (p *readingPosition) restore(screen *vt.Terminal) {
 // Keep the old emulator and reading viewport intact until that point, then
 // replace the screen in one critical section. No PTY resize is sent by viewers.
 func (t *Terminal) restoreSnapshot(data []byte, cols, rows int) {
+	t.clearInputContext()
 	t.mu.Lock()
 	if t.term == nil || t.closed {
 		t.mu.Unlock()

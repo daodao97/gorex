@@ -42,6 +42,9 @@ func View(c *ui.Context, t *Terminal) *ui.Element {
 	}
 	e.HandleInput(v.input).TouchSelection()
 	e.TextCaretFunc(v.caret)
+	if t.opts.InputContext {
+		e.TextContext(t.textContext)
+	}
 	e.Draw(v.paint)
 	e.ContextMenu(v.menu)
 	return e
@@ -288,7 +291,7 @@ func (v *view) input(ev ui.InputEvent) bool {
 	v.t.in.mu.Lock()
 	paused := v.t.in.paused
 	v.t.in.mu.Unlock()
-	if paused && (ev.Kind == ui.InputKeyDown || ev.Kind == ui.InputKeyUp || ev.Kind == ui.InputText || ev.Kind == ui.InputCompose || ev.Kind == ui.InputCommand && ev.Text == "paste") {
+	if paused && (ev.Kind == ui.InputKeyDown || ev.Kind == ui.InputKeyUp || ev.Kind == ui.InputText || ev.Kind == ui.InputCompose || ev.Kind == ui.InputTextReplace || ev.Kind == ui.InputSelection || ev.Kind == ui.InputCommand && ev.Text == "paste") {
 		v.pending, v.preedit = nil, ""
 		return true
 	}
@@ -306,6 +309,12 @@ func (v *view) input(ev ui.InputEvent) bool {
 		} else {
 			v.typed(ev.Text)
 		}
+		return true
+	case ui.InputTextReplace:
+		v.replaceInput(ev)
+		return true
+	case ui.InputSelection:
+		v.moveInputCaret(ev.Caret)
 		return true
 	case ui.InputCompose:
 		v.preedit, v.preeditCaret, v.pending = ev.Text, ev.Caret, nil
@@ -378,6 +387,7 @@ func (v *view) keyDown(ev ui.InputEvent) bool {
 	if ev.Repeat {
 		action = vt.KeyRepeat
 	}
+	t.contextKey(k, mods, text)
 	v.sendKey(vt.KeyEvent{Action: action, Key: k, Mods: vtMods(mods), Text: text, Unshifted: unshifted})
 	return true
 }
@@ -427,6 +437,11 @@ func (v *view) keyUp(ev ui.InputEvent) bool {
 
 // typed sends text typed or committed by an input method.
 func (v *view) typed(text string) {
+	if text == "" {
+		v.preedit = ""
+		return
+	}
+	v.t.contextText(text)
 	v.preedit = ""
 	p := v.pending
 	v.pending = nil

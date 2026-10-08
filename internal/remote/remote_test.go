@@ -262,7 +262,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 			for {
 				n, err := stream.Read(buf)
 				output.Write(buf[:n])
-				if strings.Contains(output.String(), "\r\nGOREX_IPHONE_KEYBOARD_OK\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_SELECTION_selection word\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_IME_你好\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_RECONNECTED_OK\r\n") {
+				if strings.Contains(output.String(), "\r\nGOREX_IPHONE_KEYBOARD_OK\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_EDIT_abZd") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_SELECTION_selection word\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_IME_你好\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_RECONNECTED_OK\r\n") {
 					keyboard <- true
 					return
 				}
@@ -275,7 +275,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 		select {
 		case ok := <-keyboard:
 			if !ok {
-				t.Fatal("iPhone input, backspace, selection or IME did not reach the shell correctly")
+				t.Fatal("iPhone input, caret editing, backspace, selection or IME did not reach the shell correctly")
 			}
 		case <-time.After(10 * time.Second):
 			stream.Close()

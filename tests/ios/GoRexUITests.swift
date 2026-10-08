@@ -89,7 +89,7 @@ final class GoRexUITests: XCTestCase {
             app.buttons["Next keyboard"].tap()
         }
         XCTAssertTrue(app.keys["q"].exists, "English keyboard unavailable for shell fixture")
-        for label in ["Esc", "Ctrl", "Option", "Cmd", "Tab", "更多", "收起"] {
+        for label in ["Esc", "Ctrl", "Option", "Cmd", "←", "→", "更多", "收起"] {
             let key = app.buttons[label]
             XCTAssertTrue(key.isHittable, "Accessory action hidden: " + label)
             XCTAssertGreaterThanOrEqual(key.frame.width, 44)
@@ -99,7 +99,7 @@ final class GoRexUITests: XCTestCase {
         XCTAssertTrue(app.buttons["粘贴"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["粘贴"].isHittable)
         XCTAssertGreaterThanOrEqual(app.otherElements["Input accessory"].frame.height, 132)
-        for label in ["Shift", "←", "→", "↑", "↓", "粘贴", "/", "-", "|", "\\"] {
+        for label in ["Shift", "Tab", "←", "→", "↑", "↓", "换行", "粘贴", "/", "-", "|", "\\"] {
             XCTAssertTrue(app.buttons[label].isHittable, "Expanded key hidden: " + label)
             XCTAssertGreaterThanOrEqual(app.buttons[label].frame.height, 44)
         }
@@ -113,6 +113,16 @@ final class GoRexUITests: XCTestCase {
         app.buttons["键盘"].tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
         screenshot("keyboard-accessory-compact")
+        // Edit earlier characters directly in the terminal; no composer is
+        // involved, and arrows remain available without opening More.
+        app.typeText("printf 'GOREX_IPHONE_EDIT_abcd'")
+        app.buttons["←"].tap()
+        app.buttons["←"].tap()
+        app.typeText(XCUIKeyboardKey.delete.rawValue)
+        app.typeText("Z")
+        app.buttons["→"].tap()
+        app.buttons["→"].tap()
+        app.typeText("\n")
         // The accessory must preserve the native nine-key candidate session.
         app.typeText("printf 'GOREX_IPHONE_IME_")
         for _ in 0..<8 where !nineKey(app, "MNO").exists {

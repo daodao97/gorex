@@ -516,7 +516,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		})
 	})
 	stream.geometry(s.Cols, s.Rows)
-	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OptionAsAlt: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, OnPaste: m.pasteClipboard})
+	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OptionAsAlt: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, InputContext: true, OnPaste: m.pasteClipboard})
 	if err != nil {
 		stream.Close()
 		m.error = "无法打开终端：" + err.Error()

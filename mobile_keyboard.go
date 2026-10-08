@@ -12,11 +12,13 @@ var mobileKeyboardActions = []ui.InputAction{
 	{ID: "ctrl", Label: "Ctrl", LongPressID: "lock:ctrl"},
 	{ID: "option", Label: "Option", Symbol: "option", LongPressID: "lock:option"},
 	{ID: "cmd", Label: "Cmd", Symbol: "command", LongPressID: "lock:cmd"},
-	{ID: "tab", Label: "Tab"},
+	{ID: "left", Label: "←", Symbol: "arrow.left"},
+	{ID: "right", Label: "→", Symbol: "arrow.right"},
 	{ID: "more", Label: "更多", Symbol: "ellipsis", Items: []ui.InputAction{
 		{ID: "shift", Label: "Shift", Symbol: "shift", LongPressID: "lock:shift"},
-		{ID: "left", Label: "←", Symbol: "arrow.left"}, {ID: "right", Label: "→", Symbol: "arrow.right"},
+		{ID: "tab", Label: "Tab"},
 		{ID: "up", Label: "↑", Symbol: "arrow.up"}, {ID: "down", Label: "↓", Symbol: "arrow.down"},
+		{ID: "newline", Label: "换行"},
 		{ID: "/", Label: "/"}, {ID: "-", Label: "-"}, {ID: "|", Label: "|"}, {ID: "\\", Label: "\\"}, {ID: "paste", Label: "粘贴"},
 	}},
 	{ID: "dismiss", Label: "收起", Symbol: "chevron.down"},
@@ -38,7 +40,7 @@ func keyboardModifier(id string) ui.Modifiers {
 
 func (m *mobileApp) keyboardActions() []ui.InputAction {
 	actions := append([]ui.InputAction(nil), mobileKeyboardActions...)
-	actions[5].Items = append([]ui.InputAction(nil), actions[5].Items...)
+	actions[6].Items = append([]ui.InputAction(nil), actions[6].Items...)
 	decorate := func(a *ui.InputAction) {
 		if mod := keyboardModifier(a.ID); mod != 0 {
 			a.Selected = m.keyboardModifiers&mod != 0
@@ -95,6 +97,8 @@ func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
 		return
 	}
 	switch id {
+	case "newline":
+		m.term.InsertNewline()
 	case "paste":
 		m.pasteClipboard(c)
 	case "more":
@@ -145,7 +149,7 @@ func (m *mobileApp) keyboardPreview(c *ui.Context) {
 	actions := m.keyboardActions()
 	ui.Column(c).FillWidth().Padding(0, 8).Background(c.Theme().Surface).Children(func() {
 		if m.keyboardMore {
-			items := actions[5].Items
+			items := actions[6].Items
 			for i := 0; i < len(items); i += 5 {
 				ui.Row(c).FillWidth().Gap(2).Children(func() {
 					for _, a := range items[i:min(i+5, len(items))] {

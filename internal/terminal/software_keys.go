@@ -12,6 +12,21 @@ import (
 // cursor mode. It is safe from any goroutine and includes release reporting
 // when the application requests it.
 func (t *Terminal) SendKey(key ui.Key, mods ui.Modifiers) bool {
+	ok := t.sendSoftwareKey(key, mods)
+	if ok {
+		k, r := vtKey(key)
+		text := ""
+		if r != 0 && mods&(ui.Ctrl|ui.Alt|ui.Super) == 0 {
+			text = string(r)
+			if mods&ui.Shift != 0 {
+				text = shiftedText(key, r)
+			}
+		}
+		t.contextKey(k, mods, text)
+	}
+	return ok
+}
+func (t *Terminal) sendSoftwareKey(key ui.Key, mods ui.Modifiers) bool {
 	k, unshifted := vtKey(key)
 	if k == vt.KeyUnidentified {
 		return false
@@ -65,11 +80,13 @@ func (v *view) modifiedText(text string, mods ui.Modifiers) {
 	}
 	r, size := utf8.DecodeRuneInString(text)
 	if size != len(text) || r >= 128 {
+		v.t.contextText(text)
 		v.sendText(text)
 		return
 	}
 	key, base, shift := keyOfRune(r)
 	if key == vt.KeyUnidentified {
+		v.t.contextText(text)
 		v.sendText(text)
 		return
 	}
@@ -84,6 +101,7 @@ func (v *view) modifiedText(text string, mods ui.Modifiers) {
 			}
 		}
 	}
+	v.t.contextKey(key, mods, text)
 	var consumed vt.Mods
 	if mods&ui.Shift != 0 && text != string(base) {
 		consumed = vt.ModShift

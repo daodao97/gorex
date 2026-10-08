@@ -86,6 +86,9 @@ type Options struct {
 	// ActiveCursor keeps the cursor active when the software keyboard is
 	// hidden, so a mobile terminal still blinks without taking input focus.
 	ActiveCursor bool
+	// InputContext exposes locally typed, unsubmitted text to native caret
+	// navigation. It never buffers input or changes the terminal rendering.
+	InputContext bool
 	// Scrollback is about how many bytes of output the terminal keeps above
 	// the screen: 10 MB when zero, none when negative.
 	Scrollback int
@@ -147,8 +150,9 @@ const (
 // Terminal is a terminal emulator and the program it runs. Its methods are
 // safe from any goroutine.
 type Terminal struct {
-	opts Options
-	in   inputQueue
+	opts    Options
+	in      inputQueue
+	context inputContext
 
 	// mu guards the emulator, which the reader changes and frames read.
 	mu                             sync.Mutex
@@ -704,6 +708,9 @@ func (t *Terminal) Send(data []byte) {
 // discarding queued keystrokes. Commands typed offline are never replayed.
 func (t *Terminal) SetInputEnabled(enabled bool) {
 	t.in.mu.Lock()
+	if !enabled {
+		t.clearInputContext()
+	}
 	if t.in.paused != !enabled {
 		t.in.paused = !enabled
 		if !enabled {
@@ -724,6 +731,7 @@ func (t *Terminal) Paste(text string) {
 	data := vt.EncodePaste(text, t.term.Mode(vt.ModeBracketedPaste))
 	t.term.ScrollToBottom()
 	t.mu.Unlock()
+	t.contextText(text)
 	t.Send(data)
 	t.redraw()
 }
