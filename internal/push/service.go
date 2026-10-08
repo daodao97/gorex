@@ -57,6 +57,7 @@ type service struct {
 	managed        *apns.Provider
 	current        map[string]rex.SessionInfo
 	initialized    bool
+	legacy         bool
 	inflightKey    string
 	inflightCancel context.CancelFunc
 	desktops       map[string]desktopLease
@@ -235,13 +236,22 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 	saved := make(map[string]savedSession, len(sessions))
 	changed := false
 	s.currentDesktop = desktop
+	s.legacy = hello.Version < 5
 	active := s.desktopActiveLocked(now)
 	pruneReceipts(s.state.DesktopSeen, now, 1024)
 	for _, ss := range sessions {
+		previous, seen := s.state.Previous[ss.ID]
+		if s.legacy {
+			// Existing databases stored raw version 4 snapshots. Seed their
+			// completion counter without announcing a historical result.
+			if seen && previous.Agent.CompletionRevision == 0 {
+				previous.Agent = rex.LegacyCompletionState(rex.SessionInfo{}, previous.info())
+			}
+			ss.Agent = rex.LegacyCompletionState(previous.info(), ss)
+		}
 		next[ss.ID] = ss
 		saved[ss.ID] = savedSession{ID: ss.ID, Agent: ss.Agent, LastInput: ss.LastInput}
-		previous, seen := s.state.Previous[ss.ID]
-		id := rex.AgentNoticeID(desktop, ss)
+		id := s.noticeID(desktop, ss)
 		if active && rex.AgentNoticeState(ss) {
 			if _, exists := s.state.DesktopSeen[id]; !exists {
 				s.state.DesktopSeen[id] = now
@@ -275,7 +285,7 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 	for key, p := range s.state.Pending {
 		ss, exists := next[p.Session]
 		_, viewed := s.state.DesktopSeen[p.ID]
-		if viewed || !exists || now.Sub(p.Created) > 15*time.Minute || rex.AgentNoticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
+		if viewed || !exists || now.Sub(p.Created) > 15*time.Minute || s.noticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
 			s.removeLocked(key)
 			changed = true
 		} else if body := rex.AgentNoticeBody(s.dir, ss); p.Body != body {
@@ -302,6 +312,15 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 			s.lastError = "无法保存通知状态"
 		}
 	}
+}
+
+func (s *service) noticeID(desktop string, ss rex.SessionInfo) string {
+	if s.legacy {
+		// Local counters depend on when the observer subscribed. Use the
+		// completion timestamp shared with mobile foreground receipts.
+		ss.Agent.CompletionRevision = 0
+	}
+	return rex.AgentNoticeID(desktop, ss)
 }
 func stateLabel(state string) string {
 	switch state {

@@ -23,7 +23,33 @@ func TestAgentNoticeIdentityIsStableAndSeparatesTasksAndDevices(t *testing.T) {
 	s.Agent.CompletionRevision = 0
 	id = AgentNoticeID("desktop", s)
 	s.LastInput = now.Add(time.Second)
+	if AgentNoticeID("desktop", s) != id {
+		t.Fatal("draft editing changed legacy completion identity")
+	}
+	s.Agent.Updated = now.Add(2 * time.Second)
 	if AgentNoticeID("desktop", s) == id {
-		t.Fatal("legacy new input reused identity")
+		t.Fatal("new legacy completion reused identity")
+	}
+}
+
+func TestLegacyCompletionNeedsNewCompletionAfterInput(t *testing.T) {
+	now := time.Now()
+	previous := SessionInfo{ID: "pane", LastInput: now.Add(-time.Second), Agent: AgentState{ID: "codex", SessionID: "thread", State: "completed", Updated: now}}
+	next := previous
+	next.LastInput = now.Add(9 * time.Minute)
+	if AgentNoticeTransition(previous, next) {
+		t.Fatal("editing draft replayed an old completion")
+	}
+	next.Agent.Updated = next.LastInput.Add(time.Second)
+	if !AgentNoticeTransition(previous, next) {
+		t.Fatal("fast new turn lost between polls")
+	}
+	previous.Agent = LegacyCompletionState(SessionInfo{}, previous)
+	duplicate := previous
+	duplicate.Agent.CompletionRevision = 0
+	duplicate.Agent.Updated = now.Add(time.Second)
+	duplicate.Agent = LegacyCompletionState(previous, duplicate)
+	if duplicate.Agent != previous.Agent {
+		t.Fatal("duplicate hook changed the anchored completion", duplicate.Agent)
 	}
 }

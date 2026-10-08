@@ -882,7 +882,7 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 				// Reopening a window on the same App resets pane snapshots,
 				// but retained notices must not swallow the next legacy turn.
 				previous.Agent.CompletionRevision = max(previous.Agent.CompletionRevision, a.agentFinishedNotified[p.SID])
-				in.Agent = legacyCompletionState(previous, in)
+				in.Agent = rex.LegacyCompletionState(previous, in)
 			}
 			p.info = in
 			a.updateAgentNotice(p, was.Agent)

@@ -47,13 +47,17 @@ func TestMobileRemoteAndLocalRemindersShareEventIdentity(t *testing.T) {
 		t.Fatal("disabled notifications presented")
 	}
 }
-func TestMobileLegacyReceiptsUseServerInputIdentity(t *testing.T) {
+func TestMobileLegacyReceiptsUseCompletionIdentity(t *testing.T) {
 	m := &mobileApp{hello: rex.Hello{Version: 4, Host: rex.HostInfo{ID: "desktop"}}}
-	s := rex.SessionInfo{ID: "pane", LastInput: time.Now(), Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "completed", CompletionRevision: 42}}
+	s := rex.SessionInfo{ID: "pane", LastInput: time.Now(), Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "completed", Updated: time.Now(), CompletionRevision: 42}}
 	raw := s
 	raw.Agent.CompletionRevision = 0
 	if m.taskNoticeID(s) != rex.AgentNoticeID("desktop", raw) {
 		t.Fatal("local legacy counter changed remote receipt ID")
+	}
+	s.LastInput = s.LastInput.Add(time.Minute)
+	if m.taskNoticeID(s) != m.taskNoticeID(raw) {
+		t.Fatal("draft edits changed the foreground receipt identity")
 	}
 }
 

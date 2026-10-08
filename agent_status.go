@@ -106,25 +106,6 @@ func (a *App) closeAgentNotice(sid string) {
 	}
 }
 
-// Version 4 has no completion counter. Keep a local counter across polls,
-// counting observed transitions or a finished response to newer terminal
-// input. Repeated Stop updates without new input must not notify again.
-// Version 5's server counter remains authoritative whenever supplied.
-func legacyCompletionState(previous, next rex.SessionInfo) rex.AgentState {
-	s := next.Agent
-	if s.CompletionRevision != 0 {
-		return s
-	}
-	s.CompletionRevision = previous.Agent.CompletionRevision
-	finished := s.State == agents.Completed || s.State == agents.Failed
-	wasFinished := previous.Agent.State == agents.Completed || previous.Agent.State == agents.Failed
-	newInput := next.LastInput.After(previous.Agent.Updated) && s.Updated.After(next.LastInput)
-	if finished && (!wasFinished || s.SessionID != previous.Agent.SessionID || s.ID != previous.Agent.ID || newInput) {
-		s.CompletionRevision++
-	}
-	return s
-}
-
 func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	s := paneAgentState(p)
 	// A completed one-shot agent may already have returned to the shell

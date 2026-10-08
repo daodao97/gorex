@@ -135,6 +135,80 @@ func TestHistoricalResultsForegroundReceiptsAndNewInput(t *testing.T) {
 		t.Fatal("historical completion produced a reminder")
 	}
 }
+
+func TestLegacyDraftEditingAndRestartNeverReplayCompletion(t *testing.T) {
+	s, provider, h, p, _ := newFixture(t)
+	h.Version = 4
+	now := time.Now()
+	p.Agent.State, p.Agent.Updated = "completed", now
+	s.observe(h, []rex.SessionInfo{p}, now)
+	id := rex.AgentNoticeID(h.Host.ID, p)
+	// A key press while the three-second grace period is still running must
+	// neither cancel the real completion nor create a different event.
+	p.LastInput = now.Add(time.Second)
+	s.observe(h, []rex.SessionInfo{p}, now.Add(time.Second))
+	s.deliver(context.Background(), now.Add(4*time.Second))
+	if len(provider.sent) != 1 || provider.sent[0].Payload.ID != id {
+		t.Fatal("draft edits cancelled or replaced the actual completion")
+	}
+	reloaded, err := newService(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded.provider = provider
+	// Matches the real report: same completed task, input nine minutes later.
+	p.LastInput = now.Add(9 * time.Minute)
+	reloaded.observe(h, []rex.SessionInfo{p}, now.Add(9*time.Minute))
+	reloaded.deliver(context.Background(), now.Add(9*time.Minute+4*time.Second))
+	if len(provider.sent) != 1 || len(reloaded.state.Pending) != 0 {
+		t.Fatal("typing after restart repeated the previous task")
+	}
+	// A genuine fast new turn may start and complete between worker polls.
+	p.Agent.Updated = p.LastInput.Add(time.Second)
+	reloaded.observe(h, []rex.SessionInfo{p}, p.Agent.Updated)
+	reloaded.deliver(context.Background(), p.Agent.Updated.Add(4*time.Second))
+	if len(provider.sent) != 2 || provider.sent[1].Payload.ID == id {
+		t.Fatal("a new completion was suppressed by the previous task")
+	}
+	// A duplicate Stop without new input keeps the completion timestamp and
+	// persistent receipt, even if its hook timestamp is later.
+	p.Agent.Updated = p.Agent.Updated.Add(time.Second)
+	reloaded.observe(h, []rex.SessionInfo{p}, p.Agent.Updated)
+	reloaded.deliver(context.Background(), p.Agent.Updated.Add(4*time.Second))
+	if len(provider.sent) != 2 {
+		t.Fatal("duplicate completion hook generated another push")
+	}
+}
+
+func TestLegacyDatabaseMigrationAndForegroundReceipt(t *testing.T) {
+	s, provider, h, p, r := newFixture(t)
+	h.Version = 4
+	now := time.Now()
+	p.Agent.State, p.Agent.Updated = "completed", now
+	// A pre-fix database contains raw snapshots and input-based receipts.
+	s.state.Previous[p.ID] = savedSession{ID: p.ID, Agent: p.Agent, LastInput: p.LastInput}
+	p.LastInput = now.Add(time.Minute)
+	s.observe(h, []rex.SessionInfo{p}, p.LastInput)
+	s.deliver(context.Background(), p.LastInput.Add(4*time.Second))
+	if len(provider.sent) != 0 {
+		t.Fatal("migration replayed a historical completion")
+	}
+	p.Agent.State = "running"
+	p.Agent.Updated = p.LastInput.Add(time.Second)
+	s.observe(h, []rex.SessionInfo{p}, p.Agent.Updated)
+	p.Agent.State = "completed"
+	p.Agent.Updated = p.Agent.Updated.Add(time.Second)
+	s.observe(h, []rex.SessionInfo{p}, p.Agent.Updated)
+	// Mobile has its own local counter, but acknowledges the shared timestamp.
+	r.Receipts = []string{rex.AgentNoticeID(h.Host.ID, p)}
+	if err := s.register(r); err != nil {
+		t.Fatal(err)
+	}
+	s.deliver(context.Background(), p.Agent.Updated.Add(4*time.Second))
+	if len(provider.sent) != 0 || len(s.state.Pending) != 0 {
+		t.Fatal("mobile foreground receipt did not suppress legacy APNs delivery")
+	}
+}
 func TestPendingWaitCancellationAndUnsubscribe(t *testing.T) {
 	s, provider, h, p, r := newFixture(t)
 	p.Agent.State = "waiting"

@@ -74,7 +74,7 @@ func (s *service) markDesktopSeenLocked(now time.Time) {
 		if s.currentDesktop == "" || !rex.AgentNoticeState(ss) {
 			continue
 		}
-		id := rex.AgentNoticeID(s.currentDesktop, ss)
+		id := s.noticeID(s.currentDesktop, ss)
 		if _, seen := s.state.DesktopSeen[id]; !seen {
 			s.state.DesktopSeen[id] = now
 			changed = true

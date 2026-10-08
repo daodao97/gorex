@@ -17,7 +17,7 @@ func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
 		key := m.preferenceKey(session.ID)
 		previous, seen := m.agentPrevious[key]
 		if m.hello.Version < 5 {
-			session.Agent = legacyCompletionState(previous, session)
+			session.Agent = rex.LegacyCompletionState(previous, session)
 		}
 		sessions[i] = session
 		next[key] = session
