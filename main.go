@@ -138,9 +138,10 @@ func (a *App) open() {
 		}
 	}()
 	a.hello, err = client.Hello()
-	if err == nil && mygo.IsDev() && staleServer(a.hello) {
-		// A server a build before this one started runs that build's
-		// code: start one of this build's, ending its sessions.
+	if err == nil && mygo.IsDev() && os.Getenv("MYGO_READY_SOCKET") != "" && staleServer(a.hello) {
+		// Only explicit mygo dev hot reload may replace its development
+		// server. A manually built or installed app attaches to existing
+		// sessions instead of ending them when its executable changes.
 		if client, err = client.Restart(a.hello.PID); err == nil {
 			a.client = client
 			a.hello, err = client.Hello()
