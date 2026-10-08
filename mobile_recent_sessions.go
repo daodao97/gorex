@@ -1,0 +1,233 @@
+package main
+
+import (
+	"encoding/json"
+	"slices"
+
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+	"gorex/internal/rex"
+)
+
+const mobileRecentSessionLimit = 8
+
+// Keep only identity and display metadata. Connection capabilities live in
+// desktop history so a shortcut always uses the latest link for that device.
+type mobileRecentSession struct {
+	Desktop string `json:"desktop"`
+	Session string `json:"session"`
+	Title   string `json:"title"`
+}
+
+func mergeRecentSessions(first, second []mobileRecentSession) []mobileRecentSession {
+	var result []mobileRecentSession
+	seen := map[string]bool{}
+	for _, entries := range [][]mobileRecentSession{first, second} {
+		for _, entry := range entries {
+			key := entry.Desktop + "\x00" + entry.Session
+			if entry.Desktop == "" || entry.Session == "" || seen[key] {
+				continue
+			}
+			seen[key] = true
+			result = append(result, entry)
+			if len(result) == mobileRecentSessionLimit {
+				return result
+			}
+		}
+	}
+	return result
+}
+
+func (m *mobileApp) recentDesktop(key string) (desktopRecent, bool) {
+	for _, desktop := range m.history {
+		if desktop.ID == key || desktop.Link == key {
+			return desktop, true
+		}
+	}
+	return desktopRecent{}, false
+}
+
+func (m *mobileApp) recentSessionTitle(entry mobileRecentSession) string {
+	if name := m.sessionPreferences[entry.Desktop+"\x00"+entry.Session].Name; name != "" {
+		return name
+	}
+	if entry.Title != "" {
+		return entry.Title
+	}
+	return "终端会话"
+}
+
+func (m *mobileApp) rememberSession(s rex.SessionInfo) {
+	if s.Exited {
+		return
+	}
+	entry := mobileRecentSession{Desktop: m.desktopKey(), Session: s.ID, Title: mobileSessionTitle(s)}
+	m.recentSessions = mergeRecentSessions([]mobileRecentSession{entry}, m.recentSessions)
+	m.persistRecentSessions()
+}
+
+func (m *mobileApp) persistRecentSessions() {
+	if m.store == nil || m.storage == nil {
+		return
+	}
+	saved, _ := json.Marshal(m.recentSessions)
+	epoch := m.historyEpoch
+	m.storage <- func() {
+		if err := m.store.Set("recent-sessions", saved); err != nil {
+			mygo.RunOnMain(func() {
+				if m.historyEpoch == epoch {
+					m.error = "无法保存最近会话，请重试"
+					m.invalidate()
+				}
+			})
+		}
+	}
+}
+
+func (m *mobileApp) applyLoadedRecentSessions(saved []mobileRecentSession, epoch int) {
+	if m.historyEpoch != epoch {
+		return // Clearing connection history also clears its session shortcuts.
+	}
+	m.recentSessions = mergeRecentSessions(m.recentSessions, saved)
+	m.refreshRecentSessions()
+	// A session may have been opened before the Keychain load completed.
+	// Save the merged snapshot last, preserving other desktops' history.
+	m.persistRecentSessions()
+}
+
+func (m *mobileApp) applyLoadedConnectionHistory(history []desktopRecent, sessions []mobileRecentSession, epoch int) {
+	if m.historyEpoch != epoch {
+		return
+	}
+	m.history = mergeDesktopHistory(m.history, history)
+	// Resolve old link-based identities before discarding rotated links.
+	for i, session := range sessions {
+		for _, previous := range history {
+			if previous.ID != session.Desktop && previous.Link != session.Desktop {
+				continue
+			}
+			for _, current := range m.history {
+				if current.Link == previous.Link || sameDesktop(current, previous) {
+					key := current.ID
+					if key == "" {
+						key = current.Link
+					}
+					sessions[i].Desktop = key
+					break
+				}
+			}
+			break
+		}
+	}
+	m.applyLoadedRecentSessions(sessions, epoch)
+}
+
+// Refresh titles and discard ended sessions only for the connected desktop.
+// An unreachable desktop keeps its shortcuts so the user can retry later.
+func (m *mobileApp) refreshRecentSessions() {
+	var next []mobileRecentSession
+	for _, entry := range m.recentSessions {
+		if _, ok := m.recentDesktop(entry.Desktop); !ok {
+			continue
+		}
+		if m.client != nil && entry.Desktop == m.desktopKey() {
+			found := false
+			for _, session := range m.sessions {
+				if session.ID == entry.Session && !session.Exited {
+					entry.Title = mobileSessionTitle(session)
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		next = append(next, entry)
+	}
+	if !slices.Equal(next, m.recentSessions) {
+		m.recentSessions = next
+		m.persistRecentSessions()
+	}
+}
+
+func (m *mobileApp) migrateRecentDesktop(current desktopRecent) {
+	previousSessions := slices.Clone(m.recentSessions)
+	key := current.ID
+	if key == "" {
+		key = current.Link
+	}
+	for i, entry := range m.recentSessions {
+		previous, ok := m.recentDesktop(entry.Desktop)
+		if ok && (previous.Link == current.Link || sameDesktop(previous, current)) {
+			m.recentSessions[i].Desktop = key
+		}
+	}
+	m.recentSessions = mergeRecentSessions(m.recentSessions, nil)
+	if !slices.Equal(previousSessions, m.recentSessions) {
+		m.persistRecentSessions()
+	}
+}
+
+func (m *mobileApp) openSessionID(sid string) {
+	for _, s := range m.sessions {
+		if s.ID == sid && !s.Exited {
+			m.openSession(s)
+			return
+		}
+	}
+	m.refreshRecentSessions()
+	m.error = "该会话已结束，请选择其他会话"
+	m.invalidate()
+}
+
+func (m *mobileApp) openRecentSession(entry mobileRecentSession) {
+	desktop, ok := m.recentDesktop(entry.Desktop)
+	if !ok {
+		m.refreshRecentSessions()
+		m.error = "请重新扫码连接该桌面"
+		m.invalidate()
+		return
+	}
+	if m.client != nil && entry.Desktop == m.desktopKey() {
+		m.openSessionID(entry.Session)
+		return
+	}
+	m.connect(desktop.Link)
+	if m.busy {
+		m.resumeSID = entry.Session
+	}
+}
+
+func (m *mobileApp) recentSessionsView(c *ui.Context) {
+	ui.Column(c).FillWidth().Children(func() {
+		ui.Text(c, "最近会话").FontSize(13).TextColor(c.Theme().TextMuted).Padding(12, 4)
+		ui.Column(c).FillWidth().Radius(12).Clip().Background(c.Theme().Surface).Children(func() {
+			if len(m.recentSessions) == 0 {
+				ui.Text(c, "打开过的会话会显示在这里").FontSize(14).TextColor(c.Theme().TextMuted).Padding(16)
+			}
+			for i, entry := range m.recentSessions {
+				entry := entry
+				desktop, ok := m.recentDesktop(entry.Desktop)
+				if !ok {
+					continue
+				}
+				if i > 0 {
+					mobileListDivider(c)
+				}
+				row := mobileListRow(c, "recent-session-"+entry.Desktop+"-"+entry.Session, "进入最近会话 "+entry.Desktop+" "+entry.Session, 64).Disabled(m.busy || m.scanning).Value(m.recentSessionTitle(entry) + " · " + desktop.Name)
+				row.Children(func() {
+					mobileListIcon(c, "terminal")
+					ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+						ui.Text(c, m.recentSessionTitle(entry)).FontSize(15).SingleLine().Ellipsis("…")
+						ui.Text(c, desktop.Name).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…")
+					})
+					ui.Icon(c, icon("chevron-right")).Size(16, 16).TextColor(colorsOf(c).iconMuted)
+				})
+				if row.Clicked() {
+					m.openRecentSession(entry)
+				}
+			}
+		})
+	})
+}

@@ -35,6 +35,7 @@ type mobileApp struct {
 	selected                                rex.SessionInfo
 	link, error                             string
 	history                                 []desktopRecent
+	recentSessions                          []mobileRecentSession
 	historyEpoch                            int
 	busy, scanning, creating, focusTerminal bool
 	directory                               string
@@ -175,6 +176,10 @@ func mobileMain() {
 		historyEpoch := m.historyEpoch
 		m.storage <- func() {
 			var history []desktopRecent
+			var recentSessions []mobileRecentSession
+			if saved, err := m.store.Get("recent-sessions"); err == nil {
+				json.Unmarshal(saved, &recentSessions)
+			}
 			if saved, err := m.store.Get("history"); err == nil {
 				json.Unmarshal(saved, &history)
 			}
@@ -185,7 +190,7 @@ func mobileMain() {
 			}
 			mygo.RunOnMain(func() {
 				if m.historyEpoch == historyEpoch {
-					m.history = mergeDesktopHistory(m.history, history)
+					m.applyLoadedConnectionHistory(history, recentSessions, historyEpoch)
 					if m.pendingSession != "" {
 						desktop, sid := m.pendingDesktop, m.pendingSession
 						m.pendingDesktop, m.pendingSession = "", ""
@@ -202,7 +207,9 @@ func mobileMain() {
 		m.presence = nil
 		if m.client != nil || m.busy || m.reconnecting {
 			m.resumeLink = m.link
-			m.resumeSID = m.selected.ID
+			if m.selected.ID != "" {
+				m.resumeSID = m.selected.ID
+			}
 			m.pauseConnection()
 		}
 	})
@@ -271,9 +278,10 @@ func (m *mobileApp) disconnect(forget bool) {
 		m.link, m.resumeLink, m.resumeSID = "", "", ""
 		m.historyEpoch++
 		m.history = nil
+		m.recentSessions = nil
 		m.presence = nil
-		if m.store != nil {
-			m.storage <- func() { m.store.Delete("recent"); m.store.Delete("history") }
+		if m.store != nil && m.storage != nil {
+			m.storage <- func() { m.store.Delete("recent"); m.store.Delete("history"); m.store.Delete("recent-sessions") }
 		}
 	}
 	m.invalidate()
@@ -353,6 +361,9 @@ func (m *mobileApp) startConnection(recovering bool) {
 			}
 			m.client, m.closeTunnel, m.hello = client, closeTunnel, hello
 			m.reconnecting, m.retryAttempt = false, 0
+			currentDesktop := desktopRecent{Link: m.link, Name: m.hello.Host.Name, ID: m.hello.Host.ID}
+			m.migrateRecentDesktop(currentDesktop)
+			m.history = mergeDesktopHistory([]desktopRecent{currentDesktop}, m.history)
 			m.updateSessions(sessions, !recovering)
 			m.syncPushRegistration()
 			m.busy, m.error, m.cancel = false, "", nil
@@ -360,7 +371,6 @@ func (m *mobileApp) startConnection(recovering bool) {
 				m.presence = make(map[string]desktopPresence)
 			}
 			m.presence[m.link] = desktopPresence{state: desktopOnline, checked: time.Now()}
-			m.history = mergeDesktopHistory([]desktopRecent{{Link: m.link, Name: m.hello.Host.Name, ID: m.hello.Host.ID}}, m.history)
 			if m.store != nil {
 				history, _ := json.Marshal(m.history)
 				m.storage <- func() {
@@ -394,12 +404,7 @@ func (m *mobileApp) startConnection(recovering bool) {
 			if m.resumeSID != "" {
 				sid := m.resumeSID
 				m.resumeSID = ""
-				for _, s := range sessions {
-					if s.ID == sid {
-						m.openSession(s)
-						break
-					}
-				}
+				m.openSessionID(sid)
 			}
 			m.invalidate()
 			go m.poll(client, generation)
@@ -502,6 +507,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		return
 	}
 	m.term, m.stream, m.selected, m.creating, m.error = term, stream, s, false, ""
+	m.rememberSession(s)
 	m.invalidate()
 }
 
@@ -750,6 +756,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 				}
 			})
 		})
+		m.recentSessionsView(c)
 		if m.error != "" {
 			ui.Text(c, m.error).Key("connection-status").TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4)
 		}

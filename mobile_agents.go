@@ -58,6 +58,7 @@ func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
 	m.syncPushRegistration()
 	m.agentPrevious = next
 	m.sessions = sessions
+	m.refreshRecentSessions()
 }
 
 func (m *mobileApp) openNotifiedSession(desktop, sid string) {
