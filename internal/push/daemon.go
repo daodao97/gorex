@@ -15,7 +15,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"syscall"
 	"time"
 )
@@ -27,14 +26,6 @@ func serviceSocket(dir string) string {
 	}
 	sum := sha256.Sum256([]byte(dir))
 	return filepath.Join(os.TempDir(), fmt.Sprintf("gorex-push-%d-%x.sock", os.Getuid(), sum[:8]))
-}
-func readKeychain(service, account string) ([]byte, error) {
-	if runtime.GOOS != "darwin" {
-		return nil, errors.New("keychain unavailable")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	return exec.CommandContext(ctx, "security", "find-generic-password", "-s", service, "-a", account, "-w").Output()
 }
 
 type serviceRequest struct {

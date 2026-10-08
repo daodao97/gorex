@@ -195,21 +195,32 @@ suppress duplicate pushes, new task input cancels stale reminders, and notificat
 taps reconnect to the original desktop and pane, including a cold launch. The
 mobile session list includes a background-reminder switch.
 
+The project enables APNs with `ios.pushNotifications: true` in `mygo.json`.
 Enable Push Notifications for the `dev.gorex.app` App ID in Apple Developer, use
-an iOS provisioning profile with `aps-environment`, and create a topic-specific
-APNs key. Import the downloaded `.p8` on the desktop:
+an appropriate provisioning profile, and create a topic-specific APNs key. Import
+it once from the project directory on the desktop sender:
 
 ```sh
-GoRex -push-import /private/path/AuthKey_KEYID.p8 KEYID TEAMID sandbox
-GoRex -push-status  # configured flag, device count, delivery count and last error
+go tool mygo push setup /private/path/AuthKey_KEYID.p8
+go tool mygo push status # verify local provider configuration and key loading
+GoRex -push-status      # worker device/delivery count and last error
 ```
+
+MyGo infers Bundle ID, Team ID and Key ID; configuration loading, credential
+storage, JWT/HTTP2 reuse and key reload live in its `push/apns` package. GoRex
+owns only subscriptions and task policies. New projects can use
+`mygo.App.PushProvider()` directly; standalone senders use
+`apns.OpenProvider(dataDir)`. See the fork's
+[APNs onboarding guide](https://github.com/daodao97/mygo/blob/main/docs/push.md).
+The older `GoRex -push-import KEYFILE KEYID TEAMID ENVIRONMENT` command remains
+available for compatibility, including existing installed versions.
 
 On macOS the private key is stored in the login Keychain. Provider metadata and
 device subscriptions live in private files in the GoRex application-support
 directory. The mobile app sends its refreshed token through the existing encrypted
 connection; provider keys are never embedded in the mobile app. Only short task
 status, desktop name and project basename appear in a push, without terminal output
-or prompts. Use `production` and the matching production key/profile for a
+or prompts. Use `mygo push setup -environment production KEYFILE` and the matching key/profile for a
 distribution build; development device builds use `sandbox`. APNs accepts delivery
 requests independently of the phone connection, but notification taps still need
 the desktop's Tailcat link to be available.

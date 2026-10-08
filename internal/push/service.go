@@ -1,10 +1,7 @@
 package push
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -53,10 +50,8 @@ type service struct {
 	dir            string
 	state          database
 	provider       sender
-	topic          string
 	lastError      string
-	loadedConfig   []byte
-	loadedKey      [32]byte
+	managed        *apns.Provider
 	current        map[string]rex.SessionInfo
 	initialized    bool
 	inflightKey    string
@@ -276,7 +271,7 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 		return
 	}
 	d, exists := s.state.Devices[chosen.Device]
-	provider, topic := s.provider, s.topic
+	provider := s.provider
 	if !exists {
 		s.removeLocked(key)
 		s.mu.Unlock()
@@ -286,7 +281,7 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 	defer cancel()
 	s.inflightKey, s.inflightCancel = key, cancel
 	s.mu.Unlock()
-	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, Topic: topic, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body + " · 点击进入会话", Group: "gorex-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
+	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body + " · 点击进入会话", Group: "gorex-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inflightKey = ""
@@ -334,7 +329,12 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 }
 
 func (s *service) configure() {
-	cfg, raw, key, err := loadConfig(s.dir)
+	var err error
+	if s.managed == nil {
+		s.managed, err = apns.OpenProvider(s.dir)
+	} else {
+		err = s.managed.Reload()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err != nil {
@@ -342,46 +342,8 @@ func (s *service) configure() {
 		s.lastError = err.Error()
 		return
 	}
-	fingerprint := sha256.Sum256(key)
-	if bytes.Equal(raw, s.loadedConfig) && fingerprint == s.loadedKey && s.provider != nil {
-		return
-	}
-	client, err := apns.New(apns.Config{TeamID: cfg.TeamID, KeyID: cfg.KeyID, PrivateKey: key, Environment: apns.Environment(cfg.Environment)})
-	if err != nil {
-		s.provider = nil
-		s.lastError = err.Error()
-		return
-	}
-	s.provider, s.topic, s.loadedConfig = client, cfg.Topic, raw
-	s.loadedKey = fingerprint
+	s.provider = s.managed
 	s.lastError = ""
-}
-func loadConfig(dir string) (Config, []byte, []byte, error) {
-	var cfg Config
-	raw, err := os.ReadFile(filepath.Join(dir, "push-config.json"))
-	if err != nil {
-		return cfg, nil, nil, errors.New("后台通知尚未配置")
-	}
-	if len(raw) > 8192 || json.Unmarshal(raw, &cfg) != nil || cfg.Topic != "dev.gorex.app" || cfg.Environment != "sandbox" && cfg.Environment != "production" {
-		return cfg, nil, nil, errors.New("APNs 配置无效")
-	}
-	var key []byte
-	if cfg.KeychainService != "" {
-		key, err = readKeychain(cfg.KeychainService, cfg.KeyID)
-		if err == nil {
-			key, err = base64.StdEncoding.DecodeString(string(bytes.TrimSpace(key)))
-		}
-	} else {
-		st, e := os.Stat(cfg.KeyFile)
-		if e != nil || !st.Mode().IsRegular() || st.Mode().Perm()&0077 != 0 {
-			return cfg, nil, nil, errors.New("APNs 密钥必须是仅当前用户可读的文件")
-		}
-		key, err = os.ReadFile(cfg.KeyFile)
-	}
-	if err != nil || len(key) > 8192 {
-		return cfg, nil, nil, errors.New("无法读取 APNs 密钥")
-	}
-	return cfg, raw, key, nil
 }
 
 func (s *service) String() string {

@@ -41,15 +41,6 @@ func (r Registration) Validate() error {
 	return nil
 }
 
-type Config struct {
-	TeamID          string `json:"teamID"`
-	KeyID           string `json:"keyID"`
-	Topic           string `json:"topic"`
-	Environment     string `json:"environment"` // sandbox or production, matching the signed app
-	KeyFile         string `json:"keyFile,omitempty"`
-	KeychainService string `json:"keychainService,omitempty"`
-}
-
 type Status struct {
 	Configured bool      `json:"configured"`
 	Devices    int       `json:"devices"`

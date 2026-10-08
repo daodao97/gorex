@@ -21,9 +21,7 @@
       "foregroundColor": "#ffffff"
     },
     "buildNumber": "1",
-    "entitlements": {
-      "aps-environment": "development"
-    },
-    "developmentTeam": "XNDA84PBM3"
+    "developmentTeam": "XNDA84PBM3",
+    "pushNotifications": true
   }
 }

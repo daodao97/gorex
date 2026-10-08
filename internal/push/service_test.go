@@ -39,7 +39,6 @@ func newFixture(t *testing.T) (*service, *testSender, rex.Hello, rex.SessionInfo
 	}
 	provider := &testSender{}
 	s.provider = provider
-	s.topic = "dev.gorex.app"
 	now := time.Now()
 	hello := rex.Hello{Version: 5, Host: rex.HostInfo{ID: "desktop", Name: "My Mac"}}
 	pane := rex.SessionInfo{ID: "pane", Dir: "/private/project", LastInput: now, Agent: rex.AgentState{ID: "codex", SessionID: "thread", State: "running", Updated: now}}
