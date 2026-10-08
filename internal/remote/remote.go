@@ -236,19 +236,55 @@ func Probe(ctx context.Context, raw string) error {
 }
 
 func probeClient(ctx context.Context, client *rex.Client) error {
+	_, _, err := readDesktopInfo(ctx, client, false)
+	return err
+}
+
+// Preview reads host and session display metadata without registering a phone
+// or attaching to a terminal. It shares the availability probe's short tunnel.
+func Preview(ctx context.Context, raw string) (rex.Hello, []rex.SessionInfo, error) {
+	client, closeTunnel, err := connect(ctx, raw, false)
+	if err != nil {
+		return rex.Hello{}, nil, err
+	}
+	defer closeTunnel()
+	defer client.Close()
+	return readDesktopInfo(ctx, client, true)
+}
+
+func readDesktopInfo(ctx context.Context, client *rex.Client, list bool) (rex.Hello, []rex.SessionInfo, error) {
 	stop := context.AfterFunc(ctx, func() { client.Close() })
 	defer stop()
+	var sessions []rex.SessionInfo
+	if list {
+		// The bridge registers phones only after hello followed by list.
+		// Reading the list first keeps a preview invisible on older bridges too.
+		var err error
+		sessions, err = client.List()
+		if ctx.Err() != nil {
+			return rex.Hello{}, nil, ctx.Err()
+		}
+		if err != nil {
+			return rex.Hello{}, nil, err
+		}
+	}
 	hello, err := client.Hello()
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return hello, nil, ctx.Err()
 	}
 	if err != nil {
-		return err
+		return hello, nil, err
 	}
 	if hello.Version <= 0 || hello.Host.Name == "" {
-		return errors.New("invalid GoRex hello")
+		return hello, nil, errors.New("invalid GoRex hello")
 	}
-	return nil
+	if !list {
+		return hello, nil, nil
+	}
+	if !rex.CompatibleProtocol(hello.Version) {
+		return hello, nil, &ConnectionError{Kind: ProtocolMismatch}
+	}
+	return hello, sessions, nil
 }
 
 // iOS networks may use DNS64 or a domain-based packet tunnel. Dialing the

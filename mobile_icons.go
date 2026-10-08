@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 
+	"github.com/egoist/mygo/ui"
 	"gorex/internal/rex"
 )
 
@@ -19,6 +20,19 @@ func desktopPlatform(host rex.HostInfo) string {
 	default:
 		return ""
 	}
+}
+
+func mobileSessionIcon(c *ui.Context, name string) *ui.Element {
+	prog := programOf(name)
+	color := programIconColor(c, prog)
+	if prog.Glyph == "square-terminal" {
+		prog.Glyph = "terminal"
+		color = colorsOf(c).iconMuted
+	}
+	if name == "" {
+		prog.Name = "终端"
+	}
+	return mobileListIcon(c, prog.Glyph, color).Role(ui.RoleImage).Label(prog.Name + " icon")
 }
 
 func desktopPlatformProgram(platform string) program {

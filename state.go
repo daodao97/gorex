@@ -598,11 +598,7 @@ func (p *Pane) label() (name, detail string) {
 		return name, dir
 	}
 	if t := strings.TrimSpace(p.title); t != "" && !titleOfShell(t, in) {
-		// Claude prefixes its OSC title with a status asterisk. The tab
-		// already has Claude's brand icon, so show only the title text.
-		if prog.Glyph == "agent:claude" && strings.HasPrefix(t, "✳") {
-			t = strings.TrimSpace(strings.TrimLeft(strings.TrimPrefix(t, "✳"), "\ufe0e\ufe0f"))
-		}
+		t = programTitle(t, prog)
 		if t != "" {
 			return t, ""
 		}

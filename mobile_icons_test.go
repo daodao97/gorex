@@ -84,13 +84,14 @@ func TestMobileHomeShowsSystemAndTaskIcons(t *testing.T) {
 			{Desktop: "mac", Session: "codex", Title: "修复登录流程", Program: "codex"},
 			{Desktop: "win", Session: "claude", Title: "代码审查", Program: "claude"},
 			{Desktop: "linux", Session: "python", Title: "数据处理", Program: "python3"},
+			{Desktop: "mac", Session: "shell", Title: "终端会话"},
 		},
 	}
 	tt := ui.NewTester(m.view, 390, 844)
 	for _, dark := range []bool{false, true} {
 		tt.SetDark(dark)
 		tt.Frame()
-		for _, label := range []string{"macOS icon", "Windows icon", "Linux icon", "Codex icon", "Claude Code icon", "Python icon"} {
+		for _, label := range []string{"macOS icon", "Windows icon", "Linux icon", "Codex icon", "Claude Code icon", "Python icon", "终端 icon"} {
 			if rect, ok := tt.Find(label); !ok || rect.W != 32 || rect.H != 32 {
 				t.Fatalf("missing or incorrectly sized %s: %+v", label, rect)
 			}

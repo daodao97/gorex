@@ -49,6 +49,28 @@ type program struct {
 	Agent     bool
 }
 
+func programIconColor(c *ui.Context, p program) ui.Color {
+	color := p.IconColor
+	if !c.Theme().Dark {
+		if color == ui.Hex("#d5d7db") {
+			color = colorsOf(c).text
+		} else {
+			color = color.Mix(ui.Hex("#000000"), 0.2)
+		}
+	}
+	return color
+}
+
+// Claude's OSC title includes a status asterisk; the brand icon already
+// identifies the task in both desktop tabs and mobile rows.
+func programTitle(title string, p program) string {
+	title = strings.TrimSpace(title)
+	if p.Glyph == "agent:claude" && strings.HasPrefix(title, "✳") {
+		title = strings.TrimSpace(strings.TrimLeft(strings.TrimPrefix(title, "✳"), "\ufe0e\ufe0f"))
+	}
+	return title
+}
+
 var (
 	shellProgram = program{Glyph: "square-terminal", IconColor: ui.Hex("#5fd38d"), Shell: true}
 

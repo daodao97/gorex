@@ -553,10 +553,14 @@ func (m *mobileApp) create() {
 }
 
 func mobileSessionTitle(s rex.SessionInfo) string {
-	if strings.TrimSpace(s.Title) != "" {
-		return s.Title
+	prog := programOf(sessionProgramName(s))
+	if title := programTitle(s.Title, prog); title != "" {
+		return title
 	}
 	if s.Program != "" {
+		if prog.Name != "" {
+			return prog.Name
+		}
 		return s.Program
 	}
 	if s.Shell != "" {
@@ -778,7 +782,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 					row := mobileListRow(c, "desktop-"+entry.Link, label, 56).Value(status).Disabled(m.busy || m.scanning || m.reconnecting)
 					row.Children(func() {
 						platform := desktopPlatformProgram(entry.OS)
-						mobileListIcon(c, platform.Glyph).Role(ui.RoleImage).Label(platform.Name + " icon")
+						mobileListIcon(c, platform.Glyph, colorsOf(c).iconMuted).Role(ui.RoleImage).Label(platform.Name + " icon")
 						ui.Text(c, entry.Name).FontSize(15).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 						ui.Row(c).Gap(5).Shrink(0).AlignItems(ui.Center).Children(func() {
 							color := c.Theme().TextMuted
@@ -818,9 +822,9 @@ func mobileListRow(c *ui.Context, key, label string, height float32) *ui.Element
 	return row
 }
 
-func mobileListIcon(c *ui.Context, name string) *ui.Element {
+func mobileListIcon(c *ui.Context, name string, color ui.Color) *ui.Element {
 	return ui.Box(c).Size(32, 32).Shrink(0).Center().Children(func() {
-		ui.Icon(c, icon(name)).Size(21, 21).TextColor(colorsOf(c).iconMuted)
+		ui.Icon(c, icon(name)).Size(21, 21).TextColor(color)
 	})
 }
 
@@ -885,8 +889,7 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 					return false
 				})
 				row.Children(func() {
-					prog := programOf(sessionProgramName(s))
-					mobileListIcon(c, prog.Glyph).Role(ui.RoleImage).Label(prog.Name + " icon")
+					mobileSessionIcon(c, sessionProgramName(s))
 					ui.Column(c).Grow(1).MinWidth(0).Gap(5).Children(func() {
 						ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 							ui.Text(c, m.sessionTitle(s)).FontSize(16).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")

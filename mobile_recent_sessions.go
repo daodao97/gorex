@@ -221,8 +221,7 @@ func (m *mobileApp) recentSessionsView(c *ui.Context) {
 				}
 				row := mobileListRow(c, "recent-session-"+entry.Desktop+"-"+entry.Session, "进入最近会话 "+entry.Desktop+" "+entry.Session, 64).Disabled(m.busy || m.scanning || m.reconnecting).Value(m.recentSessionTitle(entry) + " · " + desktop.Name)
 				row.Children(func() {
-					prog := programOf(entry.Program)
-					mobileListIcon(c, prog.Glyph).Role(ui.RoleImage).Label(prog.Name + " icon")
+					mobileSessionIcon(c, entry.Program)
 					ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 						ui.Text(c, m.recentSessionTitle(entry)).FontSize(15).SingleLine().Ellipsis("…")
 						ui.Text(c, desktop.Name).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Ellipsis("…")

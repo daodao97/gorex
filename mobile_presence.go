@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"gorex/internal/remote"
+	"gorex/internal/rex"
 )
 
 type desktopPresenceState uint8
@@ -85,7 +87,7 @@ func (m *mobileApp) refreshRecentPresence(c *ui.Context) {
 					return
 				}
 				probeCtx, stop := context.WithTimeout(ctx, 12*time.Second)
-				err := remote.Probe(probeCtx, link)
+				hello, sessions, err := remote.Preview(probeCtx, link)
 				stop()
 				if ctx.Err() != nil {
 					return
@@ -97,6 +99,9 @@ func (m *mobileApp) refreshRecentPresence(c *ui.Context) {
 				mygo.RunOnMain(func() {
 					if m.presenceEpoch == epoch {
 						m.presence[link] = result
+						if err == nil {
+							m.applyRecentDesktopMetadata(link, hello, sessions)
+						}
 						m.invalidate()
 					}
 				})
@@ -110,4 +115,63 @@ func (m *mobileApp) refreshRecentPresence(c *ui.Context) {
 			}
 		})
 	}()
+}
+
+// Refresh cached icons even when the user stays on the home page. Previewing
+// another desktop must not replace the active connection or its session list.
+func (m *mobileApp) applyRecentDesktopMetadata(link string, hello rex.Hello, sessions []rex.SessionInfo) {
+	var desktop desktopRecent
+	for i, entry := range m.history {
+		if entry.Link != link {
+			continue
+		}
+		platform := desktopPlatform(hello.Host)
+		if platform != "" && entry.OS != platform {
+			m.history[i].OS = platform
+			m.persistDesktopHistory()
+		}
+		desktop = m.history[i]
+		break
+	}
+	if desktop.Link == "" {
+		return
+	}
+	changed := false
+	for i, entry := range m.recentSessions {
+		if entry.Desktop != desktop.Link && (desktop.ID == "" || entry.Desktop != desktop.ID) {
+			continue
+		}
+		for _, session := range sessions {
+			if session.ID != entry.Session || session.Exited {
+				continue
+			}
+			entry.Program, entry.Title = sessionProgramName(session), mobileSessionTitle(session)
+			if entry != m.recentSessions[i] {
+				m.recentSessions[i] = entry
+				changed = true
+			}
+			break
+		}
+	}
+	if changed {
+		m.persistRecentSessions()
+	}
+}
+
+func (m *mobileApp) persistDesktopHistory() {
+	if m.store == nil || m.storage == nil {
+		return
+	}
+	saved, _ := json.Marshal(m.history)
+	epoch := m.historyEpoch
+	m.storage <- func() {
+		if err := m.store.Set("history", saved); err != nil {
+			mygo.RunOnMain(func() {
+				if m.historyEpoch == epoch {
+					m.error = "无法保存连接记录，请重试"
+					m.invalidate()
+				}
+			})
+		}
+	}
 }
