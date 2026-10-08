@@ -76,6 +76,7 @@ type mobileApp struct {
 	imagePasteBusy                          bool
 	imagePasteCancel                        context.CancelFunc
 	imagePasteEpoch                         int
+	keyboardModifiers, keyboardLocked       ui.Modifiers
 	connectionIssue                         *mobileConnectionIssue
 	connectionDetailsOpen                   bool
 }
@@ -222,6 +223,7 @@ func (m *mobileApp) invalidate() {
 }
 
 func (m *mobileApp) detach() {
+	m.clearKeyboardModifiers()
 	m.cancelImagePaste()
 	m.keyboardMore = false
 	if m.term != nil {
@@ -514,7 +516,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		})
 	})
 	stream.geometry(s.Cols, s.Rows)
-	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, OnPaste: m.pasteClipboard})
+	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: max(s.Cols, 1), FixedRows: max(s.Rows, 1), ReflowView: true, FitToView: m.overview, Font: terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OptionAsAlt: true, SelectOnDrag: true, CopyRawText: true, ActiveCursor: true, OnPaste: m.pasteClipboard})
 	if err != nil {
 		stream.Close()
 		m.error = "无法打开终端：" + err.Error()
@@ -955,12 +957,19 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	}
 	var element *ui.Element
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Padding(4).Background(c.Theme().Background).Children(func() {
-		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputAccessory(mobileKeyboardActions, func(id string) { m.keyboardAction(c, id) })
+		keyboard := ui.KeyboardText
+		if m.keyboardModifiers != 0 {
+			keyboard = ui.KeyboardASCII
+		}
+		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().InputOptions(ui.InputOptions{Keyboard: keyboard, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputModifiers(m.keyboardModifiers, m.consumeKeyboardModifiers).InputAccessory(m.keyboardActions(), func(id string) { m.keyboardAction(c, id) })
 		if m.focusTerminal {
 			element.Focus()
 			m.focusTerminal = false
 		}
 	})
+	if !element.Focused() {
+		m.clearKeyboardModifiers()
+	}
 	// Non-iOS previews use the same actions with Go controls. On iPhone,
 	// UIKit owns their keyboard-attached view and the full reading viewport.
 	if runtime.GOOS != "ios" && element.Focused() {
@@ -970,68 +979,6 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 		c.Blur()
 	}
 	m.selectionMenu(c, element)
-}
-
-var mobileKeyboardActions = []ui.InputAction{
-	{ID: "escape", Label: "Esc"}, {ID: "tab", Label: "Tab"}, {ID: "interrupt", Label: "Ctrl+C"},
-	{ID: "up", Label: "↑", Symbol: "arrow.up"}, {ID: "down", Label: "↓", Symbol: "arrow.down"},
-	{ID: "more", Label: "更多", Symbol: "ellipsis", Items: []ui.InputAction{
-		{ID: "left", Label: "←", Symbol: "arrow.left"}, {ID: "right", Label: "→", Symbol: "arrow.right"},
-		{ID: "eof", Label: "Ctrl+D"}, {ID: "search", Label: "Ctrl+R"}, {ID: "paste", Label: "粘贴"},
-		{ID: "/", Label: "/"}, {ID: "-", Label: "-"}, {ID: "|", Label: "|"}, {ID: "~", Label: "~"}, {ID: "\\", Label: "\\"},
-	}},
-	{ID: "dismiss", Label: "收起", Symbol: "chevron.down"},
-}
-
-func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
-	if m.term == nil || m.reconnecting || m.background || m.stream != nil && !m.stream.inputReady() {
-		return
-	}
-	if data, ok := map[string]string{"escape": "\x1b", "tab": "\t", "interrupt": "\x03", "up": "\x1b[A", "down": "\x1b[B", "left": "\x1b[D", "right": "\x1b[C", "eof": "\x04", "search": "\x12", "/": "/", "-": "-", "|": "|", "~": "~", "\\": "\\"}[id]; ok {
-		m.term.Send([]byte(data))
-		return
-	}
-	switch id {
-	case "paste":
-		m.pasteClipboard(c)
-	case "more":
-		m.keyboardMore = !m.keyboardMore
-	case "dismiss":
-		m.keyboardMore = false
-		c.Blur()
-		mobile.HideKeyboard()
-	}
-	c.Invalidate()
-}
-
-func (m *mobileApp) keyboardPreview(c *ui.Context) {
-	button := func(action ui.InputAction) {
-		b := ui.ButtonBase(c).Label(action.Label).Role(ui.RoleButton).KeepFocus().Height(44).MinWidth(44).Grow(1).Shrink(1).Radius(8)
-		if b.Pressed() {
-			b.Background(c.Theme().SurfacePressed)
-		}
-		b.Children(func() { ui.Text(c, action.Label).FontSize(14) })
-		if b.Clicked() {
-			m.keyboardAction(c, action.ID)
-		}
-	}
-	ui.Column(c).FillWidth().Padding(0, 8).Background(c.Theme().Surface).Children(func() {
-		if m.keyboardMore {
-			items := mobileKeyboardActions[5].Items
-			for i := 0; i < len(items); i += 5 {
-				ui.Row(c).FillWidth().Gap(2).Children(func() {
-					for _, action := range items[i:min(i+5, len(items))] {
-						button(action)
-					}
-				})
-			}
-		}
-		ui.Row(c).FillWidth().Gap(2).Children(func() {
-			for _, action := range mobileKeyboardActions {
-				button(action)
-			}
-		})
-	})
 }
 
 func (m *mobileApp) selectionMenu(c *ui.Context, element *ui.Element) {

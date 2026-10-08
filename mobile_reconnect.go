@@ -6,6 +6,7 @@ import (
 )
 
 func (m *mobileApp) pauseConnection() {
+	m.clearKeyboardModifiers()
 	m.cancelImagePaste()
 	m.stopPolling()
 	m.generation++

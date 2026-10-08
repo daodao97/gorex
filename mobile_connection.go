@@ -70,6 +70,7 @@ func (m *mobileApp) stopBackgroundTimer() {
 }
 
 func (m *mobileApp) enterBackground() {
+	m.clearKeyboardModifiers()
 	if m.background {
 		return
 	}

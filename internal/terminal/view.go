@@ -301,7 +301,11 @@ func (v *view) input(ev ui.InputEvent) bool {
 	case ui.InputKeyUp:
 		return v.keyUp(ev)
 	case ui.InputText:
-		v.typed(ev.Text)
+		if ev.Mods != 0 {
+			v.modifiedText(ev.Text, ev.Mods)
+		} else {
+			v.typed(ev.Text)
+		}
 		return true
 	case ui.InputCompose:
 		v.preedit, v.preeditCaret, v.pending = ev.Text, ev.Caret, nil
@@ -346,7 +350,7 @@ func (v *view) keyDown(ev ui.InputEvent) bool {
 		return true
 	case mods == ui.Shift && (key == ui.KeyPageUp || key == ui.KeyPageDown) && v.scrollPage(key == ui.KeyPageUp):
 		return true
-	case mods&ui.Super != 0:
+	case mods&ui.Super != 0 && !ev.Software:
 		return false // the app's shortcuts
 	}
 	k, unshifted := vtKey(key)
@@ -398,7 +402,7 @@ func (v *view) scrollPage(up bool) bool {
 
 func (v *view) keyUp(ev ui.InputEvent) bool {
 	k, unshifted := vtKey(ev.Key)
-	if k == vt.KeyUnidentified || ev.Mods&ui.Super != 0 {
+	if k == vt.KeyUnidentified || ev.Mods&ui.Super != 0 && !ev.Software {
 		return false
 	}
 	if p := v.pending; p != nil && p.key == k {

@@ -82,7 +82,7 @@ final class GoRexUITests: XCTestCase {
             app.buttons["Next keyboard"].tap()
         }
         XCTAssertTrue(app.keys["q"].exists, "English keyboard unavailable for shell fixture")
-        for label in ["Esc", "Tab", "Ctrl+C", "↑", "↓", "更多", "收起"] {
+        for label in ["Esc", "Ctrl", "Option", "Cmd", "Tab", "更多", "收起"] {
             let key = app.buttons[label]
             XCTAssertTrue(key.isHittable, "Accessory action hidden: " + label)
             XCTAssertGreaterThanOrEqual(key.frame.width, 44)
@@ -91,8 +91,8 @@ final class GoRexUITests: XCTestCase {
         app.buttons["更多"].tap()
         XCTAssertTrue(app.buttons["粘贴"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["粘贴"].isHittable)
-        XCTAssertGreaterThanOrEqual(app.otherElements["Input accessory"].frame.height, 140)
-        for label in ["←", "→", "Ctrl+D", "Ctrl+R", "粘贴", "/", "-", "|", "~", "\\"] {
+        XCTAssertGreaterThanOrEqual(app.otherElements["Input accessory"].frame.height, 132)
+        for label in ["Shift", "←", "→", "↑", "↓", "粘贴", "/", "-", "|", "\\"] {
             XCTAssertTrue(app.buttons[label].isHittable, "Expanded key hidden: " + label)
             XCTAssertGreaterThanOrEqual(app.buttons[label].frame.height, 44)
         }
@@ -128,7 +128,26 @@ final class GoRexUITests: XCTestCase {
         app.typeText(XCUIKeyboardKey.delete.rawValue)
         app.typeText("K\\n'\n")
         screenshot("existing-terminal-keyboard")
-        app.buttons["Ctrl+C"].tap()
+        // Native modifier gestures switch to letters, lock across multiple
+        // keys and release on the next tap. All input targets this fixture.
+        for _ in 0..<8 where !nineKey(app, "MNO").exists { app.buttons["Next keyboard"].tap() }
+        XCTAssertTrue(nineKey(app, "MNO").exists)
+        let ctrl = app.buttons["Ctrl"]
+        ctrl.press(forDuration: 0.6)
+        XCTAssertEqual(ctrl.value as? String, "已锁定")
+        XCTAssertTrue(app.keys["c"].waitForExistence(timeout: 5))
+        screenshot("keyboard-modifier-locked")
+        app.keys["c"].tap()
+        XCTAssertEqual(ctrl.value as? String, "已锁定")
+        app.keys["c"].tap()
+        ctrl.tap()
+        XCTAssertEqual(ctrl.value as? String, "未启用")
+        ctrl.tap()
+        XCTAssertEqual(ctrl.value as? String, "下一次输入")
+        app.keys["c"].tap()
+        XCTAssertEqual(ctrl.value as? String, "未启用")
+        for _ in 0..<8 where !app.keys["q"].exists { app.buttons["Next keyboard"].tap() }
+        XCTAssertTrue(app.keys["q"].exists)
         app.typeText("touch '" + Fixture.directory + "/disconnect-phone'\n")
         let reconnect = app.descendants(matching: .any).matching(identifier: "正在重连").firstMatch
         XCTAssertTrue(reconnect.waitForExistence(timeout: 10), "Controlled transport loss did not enter reconnect")

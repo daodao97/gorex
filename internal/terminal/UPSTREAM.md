@@ -34,3 +34,9 @@ update's total age, and schedules its own wakeup even with a hidden cursor.
 Active long redraws keep the previous frame visible until commit. Optional
 OnRenderEvent reports slow updates and watchdog releases outside emulator
 locks, with timing metadata only; GoRex stores these in a bounded render log.
+
+Software modifiers from MyGo's InputModifiers use the session's key encoder
+for ASCII input and control keys, including Kitty event reporting and release
+events. Terminal.SendKey gives native accessory buttons the same cursor/key
+protocol behavior. Software Cmd+C/V/A invoke local selection/clipboard actions;
+hardware app shortcuts retain their existing routing.

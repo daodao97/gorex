@@ -176,7 +176,7 @@ func TestMobileKeyboardActionsStayVisibleAndKeepFocus(t *testing.T) {
 		if !tt.Focused("Terminal") {
 			t.Fatal("secondary keys dismissed terminal input")
 		}
-		for _, label := range []string{"←", "→", "Ctrl+D", "Ctrl+R", "粘贴"} {
+		for _, label := range []string{"Shift", "←", "→", "↑", "↓", "粘贴"} {
 			if r, ok := tt.Find(label); !ok || r.W < 44 || r.X+r.W > float32(width)+1 {
 				t.Fatalf("secondary key hidden: %s", label)
 			}

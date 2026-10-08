@@ -110,9 +110,14 @@ The title-bar phone icon appears only while a phone is connected; click it
 to view connection details and the QR code. On iPhone, tap **扫码连接桌面** and scan it. The phone
 lists the desktop's sessions; tap one to attach or the top-right **＋** to start the
 default shell in a desktop directory. The terminal follows the system keyboard, including Chinese nine-key input.
-A fixed accessory row provides Esc, Tab, Ctrl+C, up/down, **更多** and **收起**.
-**更多** expands left/right, Ctrl+D, Ctrl+R, paste and common symbols while keeping
-the keyboard open. Copy an image in Photos or another iPhone app, then choose
+A fixed accessory row provides Esc, Ctrl, Option, Cmd, Tab, **更多** and **收起**.
+Tap a modifier for the next key; hold it to lock, then tap again to unlock.
+Modifiers combine and request the system alphabet keyboard. Switching waits
+for an active IME candidate to finish. **更多** expands Shift, directional keys,
+paste and common symbols while keeping the keyboard open. Cmd+C/V/A use local
+terminal copy, paste and select-all; other combinations follow the session's
+keyboard protocol. Hiding the keyboard, backgrounding or reconnecting clears
+held modifiers. Copy an image in Photos or another iPhone app, then choose
 **更多 → 粘贴** in the terminal. The paired desktop receives the PNG over Tailcat,
 copies it to its system clipboard and sends Ctrl+V to that session, using the
 desktop Agent's existing image paste. System paste commands use the same flow;
