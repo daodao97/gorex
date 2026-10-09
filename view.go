@@ -96,11 +96,13 @@ func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) ui.Element {
 	if n.Pane != nil {
 		return a.paneCard(c, k, t, n.Pane)
 	}
-	box := ui.Row(c)
+	var box ui.Element
 	if n.Vertical {
-		box = ui.Column(c)
+		box = ui.Column(c.Key(n.ID))
+	} else {
+		box = ui.Row(c.Key(n.ID))
 	}
-	box.Key(n.ID).MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
+	box.MinWidth(0).MinHeight(0).AlignItems(ui.Stretch)
 	bounds := box.Bounds()
 	// The tree may change as its panes build, as a split: build the
 	// children it has now.

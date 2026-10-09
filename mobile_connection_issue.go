@@ -61,7 +61,7 @@ func (m *mobileApp) connectionFeedback(c *ui.Context) {
 	if m.connectionIssue != nil {
 		title, body = m.connectionIssue.title, m.connectionIssue.body
 	}
-	mobileCard(c).Key("connection-feedback").Label("连接状态").Padding(12).Gap(4).Children(func() {
+	mobileCard(c.Key("connection-feedback")).Label("连接状态").Padding(12).Gap(4).Children(func() {
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			if m.recoveryAnimating() {
 				mobileReconnectIcon(c, 14, c.Theme().Accent)
