@@ -114,9 +114,46 @@ go version -m build/darwin-arm64/Retty.app/Contents/MacOS/Retty
 codesign --verify --deep --strict build/darwin-arm64/Retty.app
 ```
 
-构建信息必须包含 `-X github.com/egoist/mygo.production=1` 和 `mygo_noinspector`。需要 DMG 时省略 `-skip-dmg`；Intel Mac 使用 `darwin/amd64`，双架构使用 `darwin/universal`。
+生产构建必须设置 `-X github.com/egoist/mygo.production=1` 和 `mygo_noinspector`，`mygo build` 自动设置两者。Go 1.27 的 `-trimpath` 构建信息不记录 `-ldflags`，因此这类包用 `go version -m` 验证标签，不能据此判断生产标志缺失。需要 DMG 时省略 `-skip-dmg`；Intel Mac 使用 `darwin/amd64`，双架构使用 `darwin/universal`。
 
-GitHub Actions 的 **Build macOS DMG** 工作流在推送 `main`、推送 `v*` 标签或手动运行时生成双架构 DMG。运行成功后，在该次运行的 Artifacts 中下载 `Retty-macos-universal-dmg`，产物保留 14 天。CI 使用 `GOWORK=off` 和固定版本的 MyGo CLI 进行生产构建，并验证两种架构的 `mygo_noinspector` 标签、应用签名和 DMG 完整性。当前使用 ad hoc 签名，没有 Developer ID 公证；包内版本来自 `mygo.json`，工作流只上传构建产物，不自动创建 GitHub Release。
+GitHub Actions 的 **Build macOS DMG** 工作流在推送 `main` 或手动运行时生成双架构 DMG 及 SHA-256 文件。运行成功后，在该次运行的 Artifacts 中下载 `Retty-macos-universal-dmg`，产物保留 14 天。CI 使用 `GOWORK=off` 和固定版本的 MyGo CLI 进行生产构建，并验证两种架构的 `mygo_noinspector` 标签、应用签名和 DMG 完整性。
+
+### GitHub Release
+
+**Release** 复用 CLI 和 DMG 构建工作流，等待四个平台的 CLI 和 Universal DMG 全部构建、测试和校验通过，先上传到草稿 Release，再公开发布，共五个安装包和五份 SHA-256 文件。发布入口：
+
+- 推送 `v<版本>` 标签，版本必须与 `mygo.json.version` 一致。
+- 在 Actions 中手动运行 **Release**，使用所选分支的实际提交和 `mygo.json.version` 创建标签。
+
+同一版本标签不能指向不同提交；新版先更新 `mygo.json.version`。重新运行已公开的同一版本不会覆盖其产物，失败的草稿可重新运行补齐。发布任务才有 `contents: write` 权限；日常构建只读仓库。
+
+当前没有配置 Developer ID 凭据，DMG 使用 ad hoc 签名。要让下载的应用通过 macOS Gatekeeper，在仓库 Actions Secrets 中配置：
+
+| Secret | 内容 |
+| --- | --- |
+| `MACOS_CERTIFICATE_P12` | 包含 **Developer ID Application** 证书和私钥的 `.p12` 文件，base64 编码 |
+| `MACOS_CERTIFICATE_PASSWORD` | P12 导出密码；无密码时可留空 |
+| `MACOS_NOTARY_KEY` | Apple 团队级 App Store Connect API Key 的 `.p8` 原文，需具备公证权限 |
+| `MACOS_NOTARY_KEY_ID` | 该 API Key 的 Key ID |
+| `MACOS_NOTARY_ISSUER_ID` | 对应 Issuer ID |
+
+可通过 `base64 < DeveloperID.p12 | gh secret set MACOS_CERTIFICATE_P12` 和 `gh secret set MACOS_NOTARY_KEY < AuthKey.p8` 上传文件，密码使用 `gh secret set MACOS_CERTIFICATE_PASSWORD` 交互输入。不要把证书、私钥或密码放进仓库。
+
+配置后，CI 导入临时 Keychain，用 Developer ID 为应用、内嵌代码和 DMG 签名，启用 hardened runtime 与时间戳，等待 Apple 公证通过并 staple 票据，再验证 Gatekeeper 和生成校验文件。公证失败会阻止产物上传及 Release 发布；部分配置缺失会报错，不退回 ad hoc。任务结束后删除临时凭据。iOS 的 Apple Development / Apple Distribution 证书不能替代 Developer ID Application。
+
+### 下载后提示已损坏
+
+先区分 DMG 无法挂载，还是复制到 Applications 后应用无法打开。前者用 `hdiutil verify "Retty 0.1.0.dmg"` 检查镜像；Release 下载同时用 `shasum -a 256 -c "Retty 0.1.0.dmg.sha256"` 比较校验值，校验失败需重新下载。
+
+当前 ad hoc 包没有 Apple 公证，浏览器下载带有 quarantine 标记，macOS 可能拦截应用并提示“已损坏”。如果确认来源是本仓库构建、包的 SHA-256 和签名完整性验证通过，可将应用拖入 Applications 后，仅移除这个应用的下载隔离标记：
+
+```sh
+codesign --verify --deep --strict /Applications/Retty.app
+xattr -dr com.apple.quarantine /Applications/Retty.app
+open /Applications/Retty.app
+```
+
+这只是未公证构建的临时安装方法，不是正式分发修复。正式修复是上述 Developer ID 签名和 Apple 公证，不关闭系统全局 Gatekeeper。
 
 下面是仅修改 Go 代码、资源和应用配置保持一致时的本机更新流程。先在同一个终端定义只读快照函数；它只发送 `hello`、`list`，不会启动或重启服务，也不保存终端内容、任务提示或 token：
 

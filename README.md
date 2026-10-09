@@ -99,11 +99,11 @@ Retty 只负责观察与提醒，不替 Agent 做授权决定，也不安装 Age
 
 | 平台 | 获取方式 |
 | --- | --- |
-| macOS 13+ | Universal DMG（Apple Silicon + Intel），来自 GitHub Actions **Build macOS DMG** 的 Artifacts。当前为 ad hoc 签名，尚未公证。 |
+| macOS 13+ | [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 的 Universal DMG（Apple Silicon + Intel）。当前尚未配置 Developer ID，下载后可能被 Gatekeeper 拦截，见[安装说明](docs/development.md#下载后提示已损坏)。 |
 | iOS 15+ | 从源码构建并用自己的证书签名安装（Bundle ID `com.daodao.retty`）。 |
-| Linux / macOS 服务器 | GitHub Actions **Build CLI** 的 `Retty-cli-*` Artifacts，包含 `retty` 与 Ghostty 动态库。 |
+| Linux / macOS 服务器 | [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 的 `retty-{系统}-{架构}.tar.gz`，包含 `retty` 与 Ghostty 动态库。 |
 
-工作流在推送 `main`、`v*` 标签或手动运行时构建，Artifacts 保留 14 天，暂不自动创建 Release。
+推送 `main` 时生成日常构建，Actions Artifacts 保留 14 天。推送与 `mygo.json.version` 对应的 `v*` 标签，或手动运行 **Release**，会构建四个平台的 CLI 和 Universal DMG，校验后发布到 GitHub Release，每个包附有 SHA-256 文件。正式签名与公证的配置见[开发说明](docs/development.md#github-release)。
 
 ## 安全须知
 

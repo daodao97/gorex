@@ -3,20 +3,36 @@ name: Build macOS DMG
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
+  workflow_call:
+    outputs:
+      notarized:
+        value: ${{ jobs.build-dmg.outputs.notarized }}
+    secrets:
+      MACOS_CERTIFICATE_P12:
+        required: false
+      MACOS_CERTIFICATE_PASSWORD:
+        required: false
+      MACOS_NOTARY_KEY:
+        required: false
+      MACOS_NOTARY_KEY_ID:
+        required: false
+      MACOS_NOTARY_ISSUER_ID:
+        required: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: dmg-${{ github.ref }}
+  group: ${{ github.workflow }}-dmg-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-dmg:
     runs-on: macos-15
     timeout-minutes: 30
+    outputs:
+      notarized: ${{ steps.signing.outputs.enabled }}
     env:
       GOWORK: 'off'
     steps:
@@ -29,8 +45,82 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: go.sum
 
+      - name: Prepare optional Developer ID signing
+        id: signing
+        shell: bash
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$CERTIFICATE_P12$CERTIFICATE_PASSWORD$NOTARY_KEY$NOTARY_KEY_ID$NOTARY_ISSUER_ID" ]]; then
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'identity=-' >> "$GITHUB_OUTPUT"
+            echo '::warning::Developer ID credentials are absent; this DMG is ad hoc signed and not notarized.'
+            exit 0
+          fi
+          for name in CERTIFICATE_P12 NOTARY_KEY NOTARY_KEY_ID NOTARY_ISSUER_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Incomplete macOS signing credentials: $name is missing."
+              exit 1
+            fi
+          done
+          umask 077
+          folder="$RUNNER_TEMP/retty-signing"
+          mkdir -p "$folder"
+          printf '%s' "$CERTIFICATE_P12" | base64 --decode > "$folder/certificate.p12"
+          printf '%s' "$NOTARY_KEY" > "$folder/notary-key.p8"
+          password=$(openssl rand -hex 32)
+          echo "::add-mask::$password"
+          keychain="$folder/signing.keychain-db"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$folder/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" "$HOME/Library/Keychains/login.keychain-db"
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)".*/\1/p')
+          if [[ -z "$identity" || "$identity" == *$'\n'* ]]; then
+            echo '::error::The P12 must contain exactly one valid Developer ID Application identity and private key.'
+            exit 1
+          fi
+          echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
       - name: Build production app and universal DMG
-        run: env -u MYGO_INSPECTOR go tool mygo build -platform darwin/universal -sign - .
+        env:
+          SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: env -u MYGO_INSPECTOR go tool mygo build -platform darwin/universal -sign "$SIGNING_IDENTITY" .
+
+      - name: Notarize and staple Apple tickets
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        env:
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          for image in build/darwin-universal/*.dmg; do
+            xcrun notarytool submit "$image" --key "$RUNNER_TEMP/retty-signing/notary-key.p8" \
+              --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+              --wait --timeout 20m --output-format json > "$RUNNER_TEMP/retty-notary.json"
+            python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          result = json.loads((Path(os.environ['RUNNER_TEMP']) / 'retty-notary.json').read_text())
+          if result.get('status') != 'Accepted':
+              raise SystemExit(f'Notarization failed: {result}')
+          print(f'Notarization accepted: {result["id"]}')
+          PY
+            xcrun stapler staple "$image"
+            xcrun stapler validate "$image"
+            spctl --assess --type open --context context:primary-signature --verbose=4 "$image"
+          done
+          xcrun stapler staple build/darwin-universal/Retty.app
+          spctl --assess --type execute --verbose=4 build/darwin-universal/Retty.app
 
       - name: Verify architectures, release tags, signature and disk image
         shell: bash
@@ -49,13 +139,26 @@ jobs:
           images=(build/darwin-universal/*.dmg)
           for image in "${images[@]}"; do
             hdiutil verify "$image"
+            (cd "$(dirname "$image")" && shasum -a 256 "$(basename "$image")") > "$image.sha256"
           done
 
       - name: Upload DMG
         uses: actions/upload-artifact@v7
         with:
           name: Retty-macos-universal-dmg
-          path: build/darwin-universal/*.dmg
+          path: |
+            build/darwin-universal/*.dmg
+            build/darwin-universal/*.dmg.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+
+      - name: Remove temporary signing credentials
+        if: always()
+        shell: bash
+        run: |
+          folder="$RUNNER_TEMP/retty-signing"
+          if [[ -f "$folder/signing.keychain-db" ]]; then
+            security delete-keychain "$folder/signing.keychain-db"
+          fi
+          rm -rf "$folder"

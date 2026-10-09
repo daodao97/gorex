@@ -74,4 +74,6 @@ GOWORK=off ./scripts/build-cli.sh --platform all
 
 产物在 `build/cli/`，每个 tar.gz 同时带有 SHA-256 校验文件。构建下载固定 manifest 中的 Ghostty VT 动态库并校验其哈希，压缩包运行时无需下载。只构建二进制可使用 `GOWORK=off CGO_ENABLED=0 go build -tags retty_cli -o retty ./cmd/retty`；运行仍需要对应 VT 动态库。
 
-GitHub Actions 的 **Build CLI** 工作流在 `main`、`v*` 标签推送和手动运行时构建四种平台，上传对应的 `Retty-cli-*` artifact，保留 14 天。工作流不自动创建 GitHub Release。
+从 [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 下载对应系统和架构的 tar.gz 及 `.sha256`。**Release** 工作流在 `v*` 标签推送或手动运行时构建四个平台的 CLI 与 Universal DMG，全部验证通过后发布。下载后可用 `sha256sum -c retty-linux-amd64.tar.gz.sha256` 校验；macOS 使用 `shasum -a 256 -c`。
+
+**Build CLI** 工作流仍在 `main` 推送和手动运行时提供日常构建，对应的 `Retty-cli-*` Actions Artifacts 保留 14 天。

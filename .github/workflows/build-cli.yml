@@ -3,14 +3,14 @@ name: Build CLI
 on:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
 concurrency:
-  group: cli-${{ github.ref }}
+  group: ${{ github.workflow }}-cli-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

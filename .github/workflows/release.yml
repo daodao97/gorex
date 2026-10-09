@@ -1,0 +1,142 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: retty-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate version and release commit
+        id: version
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          version = json.loads(Path('mygo.json').read_text())['version']
+          if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?', version):
+              raise SystemExit(f'Invalid release version: {version}')
+          tag = f'v{version}'
+          sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          if os.environ['GITHUB_REF_TYPE'] == 'tag' and os.environ['GITHUB_REF_NAME'] != tag:
+              raise SystemExit(f'Release tag must match mygo.json: {tag}')
+          existing = subprocess.run(['git', 'rev-parse', '--verify', f'refs/tags/{tag}^{{}}'], capture_output=True, text=True)
+          if existing.returncode == 0 and existing.stdout.strip() != sha:
+              raise SystemExit(f'{tag} already points to a different commit; bump mygo.json.version')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\ntag={tag}\nsha={sha}\n')
+          PY
+
+  cli:
+    needs: prepare
+    uses: ./.github/workflows/build-cli.yml
+
+  dmg:
+    needs: prepare
+    uses: ./.github/workflows/build-dmg.yml
+    secrets: inherit
+
+  publish:
+    needs: [prepare, cli, dmg]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
+      DMG_NOTARIZED: ${{ needs.dmg.outputs.notarized }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download all CLI packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: Retty-cli-*
+          path: release
+          merge-multiple: true
+
+      - name: Download universal DMG
+        uses: actions/download-artifact@v8
+        with:
+          name: Retty-macos-universal-dmg
+          path: release
+
+      - name: Verify the complete release and checksums
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, subprocess
+          from pathlib import Path
+          folder = Path('release')
+          assets = [f'retty-{platform}.tar.gz' for platform in ['linux-amd64', 'linux-arm64', 'darwin-amd64', 'darwin-arm64']]
+          assets.append(f'Retty {os.environ["RELEASE_VERSION"]}.dmg')
+          expected = set(assets + [f'{name}.sha256' for name in assets])
+          actual = {path.name for path in folder.iterdir()}
+          if actual != expected:
+              raise SystemExit(f'Incomplete release: missing={expected-actual}, unexpected={actual-expected}')
+          for name in assets:
+              path = folder / name
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f'Empty release asset: {name}')
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if (folder / f'{name}.sha256').read_text() != f'{digest}  {name}\n':
+                  raise SystemExit(f'Checksum mismatch: {name}')
+          existing = subprocess.run(['git', 'rev-parse', '--verify', f'refs/tags/{os.environ["RELEASE_TAG"]}^{{}}'], capture_output=True, text=True)
+          if existing.returncode == 0 and existing.stdout.strip() != os.environ['RELEASE_SHA']:
+              raise SystemExit('Release tag changed while building; refusing to publish')
+          print(f'Verified {len(assets)} packages and their SHA-256 files')
+          PY
+
+      - name: Publish GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [[ "$draft" == false ]]; then
+              echo "Release $RELEASE_TAG is already published; keeping its assets unchanged."
+              gh release view "$RELEASE_TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          else
+            if [[ "$DMG_NOTARIZED" == true ]]; then
+              printf '%s\n' 'macOS: Developer ID signed and Apple notarized. All packages include SHA-256 checksums.' > "$RUNNER_TEMP/release-notes.md"
+            else
+              printf '%s\n' 'macOS: ad hoc signed, not Apple notarized. Gatekeeper may block the downloaded app. See docs/development.md for installation and signing instructions. All packages include SHA-256 checksums.' > "$RUNNER_TEMP/release-notes.md"
+            fi
+            gh release create "$RELEASE_TAG" --target "$RELEASE_SHA" \
+              --title "Retty $RELEASE_VERSION" --generate-notes --notes-file "$RUNNER_TEMP/release-notes.md" --draft
+          fi
+          files=(release/*)
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber
+          if [[ "$RELEASE_VERSION" == *-* ]]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+          fi
+          gh release view "$RELEASE_TAG" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
