@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 
-	"gorex/internal/remote"
+	"retty/internal/remote"
 	"strings"
 )
 

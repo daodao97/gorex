@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 type deadlineConn struct {

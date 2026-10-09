@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 // The native runner writes markers only into this disposable shell. Verify
 // that a background visit longer than the old 25/30-second cutoffs keeps the
 // same control socket, then that losing only control preserves the session.
 func TestTailcatIOSBackgroundRetention(t *testing.T) {
-	fixture := os.Getenv("GOREX_IOS_BACKGROUND_FIXTURE")
+	fixture := os.Getenv("RETTY_IOS_BACKGROUND_FIXTURE")
 	if fixture == "" {
-		t.Skip("set GOREX_IOS_BACKGROUND_FIXTURE for the native iPhone runner")
+		t.Skip("set RETTY_IOS_BACKGROUND_FIXTURE for the native iPhone runner")
 	}
 	dir := t.TempDir()
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	go rex.Serve()
 	deadline := time.Now().Add(10 * time.Second)
 	for {

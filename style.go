@@ -4,7 +4,7 @@ import (
 	_ "embed"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 )
 
 // colors are the app's own, in light and dark windows.

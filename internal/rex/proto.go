@@ -1,4 +1,4 @@
-// Package rex is GoRex's session server and its client.
+// Package rex is Retty's session server and its client.
 //
 // The server owns the pseudo-terminals: shells keep running when the app
 // quits, and the next launch attaches to them again, with what they printed
@@ -155,14 +155,14 @@ type Attach struct {
 
 // Dir returns the directory of the server's socket, log and state.
 func Dir() string {
-	if d := os.Getenv("GOREX_DIR"); d != "" {
+	if d := os.Getenv("RETTY_DIR"); d != "" {
 		return d
 	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		base = os.TempDir()
 	}
-	return filepath.Join(base, "GoRex")
+	return filepath.Join(base, "Retty")
 }
 
 // SocketPath returns the path of the server's socket: in Dir, unless that
@@ -174,5 +174,5 @@ func SocketPath() string {
 	}
 	h := fnv.New32a()
 	h.Write([]byte(p))
-	return filepath.Join(os.TempDir(), fmt.Sprintf("gorex-%d-%x.sock", os.Getuid(), h.Sum32()))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("retty-%d-%x.sock", os.Getuid(), h.Sum32()))
 }

@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/egoist/mygo/push/apns"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
 	"os"
 	"path/filepath"
+	"retty/internal/agents"
+	"retty/internal/rex"
 	"strings"
 	"sync"
 	"time"
@@ -370,7 +370,7 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 	defer cancel()
 	s.inflightKey, s.inflightCancel = key, cancel
 	s.mu.Unlock()
-	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body, Group: "gorex-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
+	_, err := provider.Send(sendCtx, apns.Notification{DeviceToken: d.Token, CollapseID: chosen.ID, Expiration: chosen.Created.Add(15 * time.Minute), Payload: apns.Payload{ID: chosen.ID, Title: chosen.Title, Body: chosen.Body, Group: "retty-agents", Data: map[string]string{"desktop": chosen.Desktop, "session": chosen.Session, "event": chosen.ID, "title": chosen.Title, "body": chosen.Body, "state": chosen.Kind}}})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.inflightKey = ""

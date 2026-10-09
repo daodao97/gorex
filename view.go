@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 )
 
 const (

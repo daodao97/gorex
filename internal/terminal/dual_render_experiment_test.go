@@ -13,15 +13,15 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal/internal/pty"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/pty"
+	"retty/internal/terminal/internal/vt"
 )
 
 // Research-only replay of a disposable, single-process OpenCode capture.
 // This establishes neither live scheduling correctness nor support for other
 // applications; no production path enables dual-size redraw from this test.
 func TestDualSizeRedrawCaptureExperiment(t *testing.T) {
-	dir := os.Getenv("GOREX_DUAL_RENDER_CAPTURE")
+	dir := os.Getenv("RETTY_DUAL_RENDER_CAPTURE")
 	if dir == "" {
 		t.Skip("requires owned OpenCode dual-size capture")
 	}

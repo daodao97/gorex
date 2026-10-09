@@ -1,0 +1,20 @@
+{
+  "provider": "built-in image_gen.imagegen",
+  "model": null,
+  "product": "Retty",
+  "direction": "R-shaped friendly terminal companion",
+  "rationale": "R identifies Retty, >_ evokes terminal input, stepping rounded leg evokes continued work across devices.",
+  "corner": "lower-left",
+  "palette": {
+    "body": "#168A7D",
+    "face": "#FFF1C8",
+    "background": "#B8ACD2"
+  },
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "constraint_delivery": "main-prompt constraints",
+  "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536.\nBackground: fill the entire square with solid gently muted lavender #B8ACD2, visible in all open areas and corners not occupied by the character.\nSubject: one extremely simple, endearing baby terminal companion whose single continuous outer silhouette naturally forms a chunky lowercase-inspired uppercase R. This must feel like a lovable little character first, with the R identity discovered in its shape. A huge rounded-square head makes the upper bowl, a short broad left body stem makes one stubby standing leg, and a thick softly curved diagonal right leg suggests a gentle step forward. Integrate those parts into one compact continuous body. The inner bowl is one broad cream face region. The R's broad rounded head and legs must read clearly as a simple black silhouette at 32 × 32. Keep the right leg gently curved back toward the body, suggesting reconnection, without adding any chain, arrow or separate graphic.\nExpression: on the one broad cream face region, use two large simple dark teal eye marks: the left a tiny rounded chevron greater-than shape and the right a short rounded horizontal dash, together evoking a friendly winking terminal prompt >_. Give the character a tiny calm curved smile only if it clearly improves cuteness. All facial marks reuse the teal body color and have chunky softly rounded ends. Keep the face relaxed, friendly and charming. No literal screen border.\nComplexity: 4–7 large basic shapes only, one continuous outer silhouette, no arms or accessories, no antenna, no extra terminal screen, no geometric circuit diagram. Compact baby proportions, oversized head, short chubby legs, very soft cheeks. Maximum two broad character color regions.\nColor behavior: exactly three semantic colors: lively deep turquoise teal #168A7D for the main character body and all facial marks; warm vanilla cream #FFF1C8 for one continuous broad face area; muted lavender #B8ACD2 for the background. Clear separation. No other colors.\nComposition: upright, emerging gently from the lower-left of the square, visually dominant at about 85–90% of the canvas. Keep the full head and both round leg ends visible and preserve the recognizable R shape; do not crop essential anatomy. Let the left stem occupy the lower-left area; leave slightly more breathing space at the upper right. No circle or disc behind the character. No square plate behind it.\nStyle: simplification, cuteness and baby-like appeal are the strongest qualities. Large soft forms, thick rounded contours, ultra-clean graphic treatment. Avoid a mechanical industrial feeling. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: only this one lovable character on the solid full-canvas background, clean surfaces and normal square outer corners.\nConstraints: No words, lettering separate from the character silhouette, watermark, borders, frames, presentation masks, extra subjects or scenery. No fragile lines, sharp tips, pointy chevrons, unnecessary outlines, tiny details, decorative marks, literal devices, chain links, asterisks or connection nodes. No photorealistic material, dramatic bevel, glossy hotspots, deep occlusion, extrusion, strong three-dimensional rendering or external cast shadow. Keep the background solid and uniform with no texture, vignette or lighting variation.",
+  "file": "docs/images/logo-retty-r-companion-v1.png"
+}

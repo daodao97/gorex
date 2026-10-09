@@ -1,4 +1,4 @@
-// GoRex is a terminal of tabs and split panes, after Superlogical's Rex,
+// Retty is a terminal of tabs and split panes, after Superlogical's Rex,
 // in MyGo's native UI. Its shells run in a session server of their own,
 // so that they outlive the app: quit it, open it again, and every tab and
 // pane is back as it was, its programs still running.
@@ -18,8 +18,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"gorex/internal/push"
-	"gorex/internal/rex"
+	"retty/internal/push"
+	"retty/internal/rex"
 )
 
 func main() {
@@ -91,11 +91,11 @@ func main() {
 		return
 	}
 	// The state of the sessions lives in the app's data directory, which
-	// the server it starts takes from GOREX_DIR: "GoRex", or "GoRex Dev"
+	// the server it starts takes from RETTY_DIR: "Retty", or "Retty Dev"
 	// under mygo dev, which keeps the installed app's sessions apart.
-	if os.Getenv("GOREX_DIR") == "" {
+	if os.Getenv("RETTY_DIR") == "" {
 		if dir, err := mygo.App.Path(mygo.PathUserData); err == nil {
-			os.Setenv("GOREX_DIR", dir)
+			os.Setenv("RETTY_DIR", dir)
 		}
 	}
 	registerFonts()
@@ -130,7 +130,7 @@ func (a *App) open() {
 	client, err := rex.Connect()
 	if err != nil {
 		log.Print(err)
-		mygo.Dialog.Error("GoRex could not start its session server", err.Error())
+		mygo.Dialog.Error("Retty could not start its session server", err.Error())
 		mygo.App.Quit()
 		return
 	}
@@ -150,7 +150,7 @@ func (a *App) open() {
 			a.hello, err = client.Hello()
 		} else {
 			log.Print(err)
-			mygo.Dialog.Error("GoRex could not restart its session server", err.Error())
+			mygo.Dialog.Error("Retty could not restart its session server", err.Error())
 			mygo.App.Quit()
 			return
 		}
@@ -160,7 +160,7 @@ func (a *App) open() {
 	}
 	a.reset()
 	win := mygo.NewWindow(mygo.WindowOptions{
-		Title:                "GoRex",
+		Title:                "Retty",
 		Width:                1000,
 		Height:               620,
 		MinWidth:             560,

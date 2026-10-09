@@ -5,8 +5,8 @@ import (
 	"runtime"
 	"sync"
 
-	"gorex/internal/terminal/internal/library"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/library"
+	"retty/internal/terminal/internal/vt"
 )
 
 var load struct {

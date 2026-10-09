@@ -48,7 +48,7 @@ func TestGeminiAndQwenLifecycleHooksAndTimeoutUnits(t *testing.T) {
 			t.Fatal("duplicate hook installation")
 		}
 		removed, _ := MergeHooks(agent, installed, false)
-		if !bytes.Contains(removed, []byte("user-hook")) || !bytes.Contains(removed, []byte("mine")) || bytes.Contains(removed, []byte("GOREX_HOOK")) {
+		if !bytes.Contains(removed, []byte("user-hook")) || !bytes.Contains(removed, []byte("mine")) || bytes.Contains(removed, []byte("RETTY_HOOK")) {
 			t.Fatal("removal changed foreign settings")
 		}
 	}

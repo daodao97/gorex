@@ -16,7 +16,7 @@ func TestZshPromptResize(t *testing.T) {
 	if err != nil {
 		t.Skip("zsh is not installed")
 	}
-	t.Setenv("GOREX_DIR", t.TempDir())
+	t.Setenv("RETTY_DIR", t.TempDir())
 	config := t.TempDir()
 	for file, text := range map[string]string{
 		".zshenv": "export STARTUP_ENV=loaded\nprint -r -- color-env:${NO_COLOR-unset}:${FORCE_COLOR-unset}:${CLICOLOR-unset}:${CLICOLOR_FORCE-unset}\n",
@@ -72,7 +72,7 @@ func TestColorLoginShellPreservesUserPreferences(t *testing.T) {
 	if err != nil {
 		t.Skip("zsh is not installed")
 	}
-	t.Setenv("GOREX_DIR", t.TempDir())
+	t.Setenv("RETTY_DIR", t.TempDir())
 	t.Setenv("SHELL", zsh)
 	config := t.TempDir()
 	if err := os.WriteFile(filepath.Join(config, ".zshenv"), []byte("export NO_COLOR=user-preference\n"), 0o600); err != nil {

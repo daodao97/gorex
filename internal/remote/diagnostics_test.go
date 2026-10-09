@@ -26,7 +26,7 @@ func TestDiagnosticErrorCodesNeverIncludeErrorText(t *testing.T) {
 		{&net.DNSError{Name: "secret-token", Err: "secret-token", IsTimeout: true}, "dns_timeout"},
 		{fmt.Errorf("secret-token: %w", syscall.ECONNREFUSED), "connection_refused"},
 		{x509.HostnameError{Host: "secret-token"}, "tls_certificate_invalid"},
-		{errors.New("gorex://connect?address=secret-token / session content"), "unclassified_error"},
+		{errors.New("retty://connect?address=secret-token / session content"), "unclassified_error"},
 	} {
 		if got := diagnosticCause(tt.err); got != tt.code {
 			t.Fatalf("got %q, want %q", got, tt.code)

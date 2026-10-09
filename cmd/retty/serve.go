@@ -1,4 +1,4 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package main
 
@@ -15,27 +15,28 @@ import (
 	"strings"
 	"time"
 
-	"gorex/internal/remote"
-	"gorex/internal/rex"
-	"gorex/internal/terminal/screen"
+	"retty/internal/remote"
+	"retty/internal/rex"
+	"retty/internal/terminal/screen"
 )
 
-const usage = `GoRex CLI — connect a desktop or phone to this server's terminals.
+const usage = `Retty CLI — Reconnect TTY / Relay TTY.
+Connect a desktop or phone to this server's terminals.
 
 Usage:
-  gorex serve [--data-dir PATH] [--link-file PATH] [--foreground]
-  gorex link [--data-dir PATH] [--link-file PATH]
-  gorex status [--data-dir PATH]
-  gorex stop [--data-dir PATH]
-  gorex version
+  retty serve [--data-dir PATH] [--link-file PATH] [--foreground]
+  retty link [--data-dir PATH] [--link-file PATH]
+  retty status [--data-dir PATH]
+  retty stop [--data-dir PATH]
+  retty version
 
-serve starts the encrypted gateway in the background and prints a gorex:// link.
+serve starts the encrypted gateway in the background and prints a retty:// link.
 The command returns; the gateway stays available after the terminal closes.
 Use --foreground when running under systemd or another service supervisor.
-Paste it into GoRex desktop's connection settings, or open it on your phone.
+Paste it into Retty desktop's connection settings, or open it on your phone.
 Stopping the gateway preserves the background session server and its shells.
 link prints the saved connection link; status reads the gateway/session server.
-Data defaults to GOREX_DIR or the user config directory's GoRexServer folder.
+Data defaults to RETTY_DIR or the user config directory's RettyServer folder.
 The link is a full-access credential; connect.txt is saved with mode 0600.
 An interactive terminal also displays a QR code for phone scanning.
 Use --qr with serve/link to print a QR code even when output is redirected.
@@ -53,12 +54,12 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 		if len(args) != 1 {
 			return errors.New("version takes no arguments")
 		}
-		_, err := fmt.Fprintf(output, "gorex %s (%s)\n", version, commit)
+		_, err := fmt.Fprintf(output, "retty %s (%s)\n", version, commit)
 		return err
 	}
 	command := args[0]
 	if command != "serve" && command != "start" && command != "link" && command != "status" && command != "stop" {
-		return fmt.Errorf("unknown command %q; run gorex help", command)
+		return fmt.Errorf("unknown command %q; run retty help", command)
 	}
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(diagnostics)
@@ -98,7 +99,7 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 	case "link":
 		data, err := os.ReadFile(linkFile)
 		if err != nil {
-			return fmt.Errorf("read connection link (run gorex serve first): %w", err)
+			return fmt.Errorf("read connection link (run retty serve first): %w", err)
 		}
 		if _, err := remote.ParseLink(string(data)); err != nil {
 			return errors.New("saved connection link is invalid")
@@ -135,20 +136,20 @@ func run(ctx context.Context, args []string, output, diagnostics io.Writer) erro
 
 func setDataDir(dir string) error {
 	if dir == "" {
-		dir = os.Getenv("GOREX_DIR")
+		dir = os.Getenv("RETTY_DIR")
 	}
 	if dir == "" {
 		base, err := os.UserConfigDir()
 		if err != nil {
 			return err
 		}
-		dir = filepath.Join(base, "GoRexServer")
+		dir = filepath.Join(base, "RettyServer")
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return err
 	}
-	return os.Setenv("GOREX_DIR", abs)
+	return os.Setenv("RETTY_DIR", abs)
 }
 
 func localClient(ctx context.Context) (*rex.Client, error) {
@@ -195,7 +196,7 @@ func serve(ctx context.Context, output, diagnostics io.Writer, linkFile string, 
 		return err
 	}
 	ready(bridge.Link())
-	fmt.Fprintf(diagnostics, "GoRex ready · %s · session server PID %d\nConnection link saved to %s\n", hello.Host.Name, hello.PID, linkFile)
+	fmt.Fprintf(diagnostics, "Retty ready · %s · session server PID %d\nConnection link saved to %s\n", hello.Host.Name, hello.PID, linkFile)
 	select {
 	case <-ctx.Done():
 		fmt.Fprintln(diagnostics, "Gateway stopped; sessions continue in the background.")

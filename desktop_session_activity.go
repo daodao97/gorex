@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"time"
 )
 

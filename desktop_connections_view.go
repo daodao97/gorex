@@ -30,7 +30,7 @@ func (a *App) desktopConnectionsSettings(c *ui.Context, k *colors) {
 }
 func (a *App) desktopConnectionInput(c *ui.Context, k *colors, focus bool) {
 	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-		in := ui.TextInput(c, &a.desktops.input).Grow(1).MinWidth(0).Height(34).FontSize(12).Placeholder("粘贴 gorex://connect 连接码").Label("桌面连接码")
+		in := ui.TextInput(c, &a.desktops.input).Grow(1).MinWidth(0).Height(34).FontSize(12).Placeholder("粘贴 retty://connect 连接码").Label("桌面连接码")
 		if focus && a.desktops.initialFocus {
 			in.Focus()
 		}

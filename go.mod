@@ -1,4 +1,4 @@
-module gorex
+module retty
 
 go 1.27.1
 

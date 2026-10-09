@@ -15,9 +15,9 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/remote"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 type mobileApp struct {
@@ -97,18 +97,18 @@ type mobileApp struct {
 
 func mobileMain() {
 	if dir, err := mygo.App.Path(mygo.PathUserData); err == nil {
-		os.Setenv("GOREX_DIR", dir)
+		os.Setenv("RETTY_DIR", dir)
 	}
 	registerFonts()
 	m := &mobileApp{storage: connectionStorage(), sizeLock: true}
 	storeName := "desktop-connection"
-	if os.Getenv("GOREX_UI_TEST") == "1" {
+	if os.Getenv("RETTY_UI_TEST") == "1" {
 		storeName += "-ui-tests"
 	}
 	m.store, _ = mygo.NewSecureStore(storeName, mygo.SecureStoreOptions{})
 	mygo.App.OnLifecycleChanged(func(state mygo.LifecycleState) {
-		if os.Getenv("GOREX_DEBUG_TUNNEL") == "1" {
-			log.Printf("GoRex lifecycle: %v", state)
+		if os.Getenv("RETTY_DEBUG_TUNNEL") == "1" {
+			log.Printf("Retty lifecycle: %v", state)
 		}
 		m.invalidate()
 	})
@@ -125,7 +125,7 @@ func mobileMain() {
 		}
 	})
 	mygo.App.WhenReady(func() {
-		m.win = mygo.NewWindow(mygo.WindowOptions{Title: "GoRex", Width: 390, Height: 844, BackgroundColor: "light-dark(#f5f6f8, #111315)", Content: ui.View(m.view)})
+		m.win = mygo.NewWindow(mygo.WindowOptions{Title: "Retty", Width: 390, Height: 844, BackgroundColor: "light-dark(#f5f6f8, #111315)", Content: ui.View(m.view)})
 		m.invalidate()
 		m.loadSessionPreferences()
 		m.setupPush()
@@ -397,7 +397,7 @@ func (m *mobileApp) scan() {
 	m.error = ""
 	generation := m.generation
 	go func() {
-		raw, err := mygo.Scanner.ScanCode(context.Background(), mygo.ScanOptions{Prompt: "扫描 GoRex 桌面端的二维码", CancelLabel: "取消"})
+		raw, err := mygo.Scanner.ScanCode(context.Background(), mygo.ScanOptions{Prompt: "扫描 Retty 桌面端的二维码", CancelLabel: "取消"})
 		mygo.RunOnMain(func() {
 			m.scanning = false
 			if m.generation != generation {
@@ -422,7 +422,7 @@ func scanError(err error) string {
 	case errors.Is(err, mygo.ErrUnsupported):
 		return "请在 iPhone 上扫码，或粘贴桌面连接码"
 	case errors.Is(err, mygo.ErrCameraDenied):
-		return "请在系统设置中允许 GoRex 使用相机，或粘贴连接码"
+		return "请在系统设置中允许 Retty 使用相机，或粘贴连接码"
 	case errors.Is(err, mygo.ErrCameraUnavailable):
 		return "相机不可用，请粘贴桌面连接码"
 	}
@@ -681,9 +681,9 @@ func (m *mobileApp) errorView(c *ui.Context) {
 
 func (m *mobileApp) connectView(c *ui.Context) {
 	m.refreshRecentPresence(c)
-	m.header(c, "GoRex", nil, false)
+	m.header(c, "Retty", nil, false)
 	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().HideScrollbars().Padding(16).Gap(16).Children(func() {
-		ui.Text(c, "电脑上的 GoRex · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Text(c, "电脑上的 Retty · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted).FillWidth()
 		if ui.PrimaryButton(c, "").Label("扫码连接桌面").Role(ui.RoleButton).Height(48).FillWidth().Disabled(m.busy || m.scanning || m.reconnecting).Children(func() {
 			ui.Icon(c, icon("scan-line")).Size(20, 20)
 			ui.Text(c, "扫码连接桌面").FontSize(16)

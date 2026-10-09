@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // Padding around the grid, in DIPs.

@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 func TestMobileHistorySystemMetadata(t *testing.T) {

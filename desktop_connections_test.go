@@ -15,14 +15,14 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 // This child serves only its disposable directory, never the installed daemon.
 func TestDesktopSessionFixture(t *testing.T) {
-	if os.Getenv("GOREX_DESKTOP_FIXTURE") != "1" {
+	if os.Getenv("RETTY_DESKTOP_FIXTURE") != "1" {
 		t.Skip("owned test subprocess")
 	}
 	if err := rex.Serve(); err != nil {
@@ -31,7 +31,7 @@ func TestDesktopSessionFixture(t *testing.T) {
 }
 func desktopFixtureClient(t *testing.T) (*rex.Client, string) {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "gorex-desktop-fixture-")
+	dir, err := os.MkdirTemp("/tmp", "retty-desktop-fixture-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func desktopFixtureClient(t *testing.T) (*rex.Client, string) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(exe, "-test.run=^TestDesktopSessionFixture$", "-test.timeout=3m")
-	cmd.Env = append(os.Environ(), "GOREX_DESKTOP_FIXTURE=1", "GOREX_MOBILE_RECOVERY_E2E=0", "GOREX_DIR="+dir, "SHELL=/bin/sh")
+	cmd.Env = append(os.Environ(), "RETTY_DESKTOP_FIXTURE=1", "RETTY_MOBILE_RECOVERY_E2E=0", "RETTY_DIR="+dir, "SHELL=/bin/sh")
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -274,7 +274,7 @@ func TestDesktopNotificationKeysAndLocalPollIsolation(t *testing.T) {
 func TestDesktopConnectionViews(t *testing.T) {
 	a, tt := newStaticTestApp(t)
 	h := &desktopHost{key: "visual", client: &rex.Client{}, hello: rex.Hello{Host: rex.HostInfo{Name: "Studio Mac", Home: "/Users/developer"}}, recent: desktopRecent{Name: "Studio Mac"}, sessions: []rex.SessionInfo{
-		{ID: "one", Program: "codex", Shell: "zsh", Dir: "/Users/developer/work/gorex"},
+		{ID: "one", Program: "codex", Shell: "zsh", Dir: "/Users/developer/work/retty"},
 		{ID: "two", Program: "claude", Shell: "zsh", Dir: "/Users/developer/work/mygo"},
 	}}
 	a.desktops.hosts = []*desktopHost{h}
@@ -333,8 +333,8 @@ func saveDesktopImage(t *testing.T, tt *ui.Tester, name string) {
 }
 
 func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
-	if os.Getenv("GOREX_REMOTE_E2E") != "1" {
-		t.Skip("set GOREX_REMOTE_E2E=1 for private Tailcat fixture")
+	if os.Getenv("RETTY_REMOTE_E2E") != "1" {
+		t.Skip("set RETTY_REMOTE_E2E=1 for private Tailcat fixture")
 	}
 	a, tt := newTestApp(t)
 	desktop, socket := desktopFixtureClient(t)

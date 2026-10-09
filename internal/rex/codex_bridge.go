@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func codexSocket() (string, error) {
@@ -64,7 +64,7 @@ func StartCodexBridge(launcher string, parent int, exe string) error {
 		ctx, cancel = context.WithTimeout(context.Background(), 8*time.Second)
 		start := exec.CommandContext(ctx, exe, "app-server", "daemon", "start")
 		for _, kv := range os.Environ() {
-			if !strings.HasPrefix(kv, "GOREX_") {
+			if !strings.HasPrefix(kv, "RETTY_") {
 				start.Env = append(start.Env, kv)
 			}
 		}
@@ -81,7 +81,7 @@ func StartCodexBridge(launcher string, parent int, exe string) error {
 		}
 	}
 	c.CloseNow()
-	dir, err := os.MkdirTemp("", "gorex-codex-")
+	dir, err := os.MkdirTemp("", "retty-codex-")
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func StartCodexBridge(launcher string, parent int, exe string) error {
 }
 
 func osPaneContextMissing() bool {
-	return os.Getenv("GOREX_SESSION") == "" || os.Getenv("GOREX_AGENT_TOKEN") == "" || os.Getenv("GOREX_AGENT_SOCKET") == ""
+	return os.Getenv("RETTY_SESSION") == "" || os.Getenv("RETTY_AGENT_TOKEN") == "" || os.Getenv("RETTY_AGENT_SOCKET") == ""
 }
 
 // RunCodexProxy relays frames unchanged. It observes only lifecycle metadata
@@ -230,7 +230,7 @@ type codexTurnRequest struct {
 
 func newCodexObserver(ctx context.Context) *codexObserver {
 	events := make(chan AgentEvent, 256)
-	sid, token, socket := os.Getenv("GOREX_SESSION"), os.Getenv("GOREX_AGENT_TOKEN"), os.Getenv("GOREX_AGENT_SOCKET")
+	sid, token, socket := os.Getenv("RETTY_SESSION"), os.Getenv("RETTY_AGENT_TOKEN"), os.Getenv("RETTY_AGENT_SOCKET")
 	go func() {
 		for {
 			select {

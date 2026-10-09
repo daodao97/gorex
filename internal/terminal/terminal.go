@@ -38,8 +38,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"gorex/internal/terminal/internal/pty"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/pty"
+	"retty/internal/terminal/internal/vt"
 )
 
 // Options configure a terminal.

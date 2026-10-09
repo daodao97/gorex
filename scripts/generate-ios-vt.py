@@ -18,7 +18,7 @@ package vt
 #include <string.h>
 '''
 body = '\n'.join('extern void '+name+'(void);' for name in symbols)
-body += '\nstatic uintptr_t gorex_vt_symbol(const char *name) {\n'
+body += '\nstatic uintptr_t retty_vt_symbol(const char *name) {\n'
 body += '\n'.join(' if (!strcmp(name,"'+name+'")) return (uintptr_t)&'+name+';' for name in symbols)
 footer = '''
  return 0;
@@ -35,7 +35,7 @@ func open(string) (uintptr, error) { return 1, nil }
 func sym(_ uintptr, name string) (uintptr, error) {
  s := C.CString(name)
  defer C.free(unsafe.Pointer(s))
- address := uintptr(C.gorex_vt_symbol(s))
+ address := uintptr(C.retty_vt_symbol(s))
  if address == 0 { return 0, fmt.Errorf("vt: missing linked symbol %s", name) }
  return address, nil
 }

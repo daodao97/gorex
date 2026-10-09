@@ -5,8 +5,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 // An old hook must not put an agent badge on the shell or another program
@@ -224,7 +224,7 @@ func (a *App) showPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions
 
 func (a *App) showTerminalNotice(p *Pane, title, body string) {
 	if title == "" {
-		title = "GoRex"
+		title = "Retty"
 	}
 	a.showPaneNotice(p, "terminal", mygo.NotificationOptions{Title: title, Body: body})
 }

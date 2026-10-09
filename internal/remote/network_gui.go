@@ -1,4 +1,4 @@
-//go:build !gorex_cli
+//go:build !retty_cli
 
 package remote
 

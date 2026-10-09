@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func TestAgentNoticeBodyNamesTaskAndOmitsProjectPath(t *testing.T) {

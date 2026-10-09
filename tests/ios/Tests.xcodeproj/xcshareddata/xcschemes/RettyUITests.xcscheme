@@ -2,10 +2,10 @@
 <Scheme LastUpgradeVersion="2610" version="1.3">
   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">
     <BuildActionEntries><BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
-      <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000005" BuildableName="GoRexUITests.xctest" BlueprintName="GoRexUITests" ReferencedContainer="container:Tests.xcodeproj"/>
+      <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000005" BuildableName="RettyUITests.xctest" BlueprintName="RettyUITests" ReferencedContainer="container:Tests.xcodeproj"/>
     </BuildActionEntry></BuildActionEntries>
   </BuildAction>
   <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES">
-    <Testables><TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000005" BuildableName="GoRexUITests.xctest" BlueprintName="GoRexUITests" ReferencedContainer="container:Tests.xcodeproj"/></TestableReference></Testables>
+    <Testables><TestableReference skipped="NO"><BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="A00000000000000000000005" BuildableName="RettyUITests.xctest" BlueprintName="RettyUITests" ReferencedContainer="container:Tests.xcodeproj"/></TestableReference></Testables>
   </TestAction>
 </Scheme>

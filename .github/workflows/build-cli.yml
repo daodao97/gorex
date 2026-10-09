@@ -40,24 +40,24 @@ jobs:
       - name: Test Linux CLI and session lifecycle
         if: matrix.platform == 'linux/amd64'
         env:
-          GOREX_CLI_E2E: '1'
-          GOREX_CLI_BINARY: '${{ github.workspace }}/build/cli/gorex-linux-amd64/gorex'
-          MYGO_GHOSTTY_VT: '${{ github.workspace }}/build/cli/gorex-linux-amd64/libghostty-vt.so'
-        run: go test -tags gorex_cli ./cmd/gorex ./internal/rex ./internal/remote ./internal/terminal/screen
+          RETTY_CLI_E2E: '1'
+          RETTY_CLI_BINARY: '${{ github.workspace }}/build/cli/retty-linux-amd64/retty'
+          MYGO_GHOSTTY_VT: '${{ github.workspace }}/build/cli/retty-linux-amd64/libghostty-vt.so'
+        run: go test -tags retty_cli ./cmd/retty ./internal/rex ./internal/remote ./internal/terminal/screen
 
       - name: Archive name
         id: artifact
         env:
           PLATFORM: '${{ matrix.platform }}'
-        run: echo "name=GoRex-cli-${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
+        run: echo "name=Retty-cli-${PLATFORM//\//-}" >> "$GITHUB_OUTPUT"
 
       - name: Upload CLI
         uses: actions/upload-artifact@v7
         with:
           name: '${{ steps.artifact.outputs.name }}'
           path: |
-            build/cli/*.tar.gz
-            build/cli/*.tar.gz.sha256
+            build/cli/retty-*.tar.gz
+            build/cli/retty-*.tar.gz.sha256
           if-no-files-found: error
           compression-level: 0
           retention-days: 14

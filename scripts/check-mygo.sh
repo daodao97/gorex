@@ -1,5 +1,5 @@
 #!/bin/bash
-# Check that GoRex depends on the MyGo fork's main branch, and that the local
+# Check that Retty depends on the MyGo fork's main branch, and that the local
 # go.work checkout (if any) matches what go.mod pins. Read-only; exits non-zero
 # with a remedy when something drifted.
 set -euo pipefail

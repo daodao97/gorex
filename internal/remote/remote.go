@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailcat"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 const Port = 4242
@@ -25,7 +25,7 @@ func quiet(string, ...any) {}
 
 // Link keeps the case-sensitive Tailcat capability in a URL query, never a hostname.
 func Link(addr tailcat.Addr) string {
-	return "gorex://connect?" + url.Values{"v": {"1"}, "address": {string(addr)}}.Encode()
+	return "retty://connect?" + url.Values{"v": {"1"}, "address": {string(addr)}}.Encode()
 }
 
 func ParseLink(raw string) (tailcat.Addr, error) {
@@ -36,8 +36,8 @@ func ParseLink(raw string) (tailcat.Addr, error) {
 	addr := raw
 	if strings.Contains(raw, "://") {
 		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != "gorex" || u.Host != "connect" || u.Path != "" || u.Fragment != "" || u.User != nil {
-			return "", errors.New("请扫描 GoRex 桌面端的连接二维码")
+		if err != nil || u.Scheme != "retty" || u.Host != "connect" || u.Path != "" || u.Fragment != "" || u.User != nil {
+			return "", errors.New("请扫描 Retty 桌面端的连接二维码")
 		}
 		q, err := url.ParseQuery(u.RawQuery)
 		if err != nil || q.Get("v") != "1" || len(q["address"]) != 1 {
@@ -47,7 +47,7 @@ func ParseLink(raw string) (tailcat.Addr, error) {
 	}
 	ci, err := tailcat.ParseAddr(tailcat.Addr(addr))
 	if err != nil || ci.PresharedKey.IsZero() {
-		return "", errors.New("无效的 GoRex 连接码")
+		return "", errors.New("无效的 Retty 连接码")
 	}
 	return tailcat.Addr(addr), nil
 }
@@ -204,11 +204,11 @@ func connect(ctx context.Context, raw string, reportFailure bool, diagnostics *D
 		addr = hostnameRelayAddr(addr)
 	}
 	logf := quiet
-	debugTunnel := os.Getenv("GOREX_DEBUG_TUNNEL") == "1"
+	debugTunnel := os.Getenv("RETTY_DEBUG_TUNNEL") == "1"
 	if diagnostics != nil || debugTunnel {
 		logf = func(format string, args ...any) {
 			if event := diagnostics.TransportLog(format, args...); event != "" && debugTunnel {
-				log.Printf("GoRex tunnel: %s", event)
+				log.Printf("Retty tunnel: %s", event)
 			}
 		}
 	}
@@ -227,7 +227,7 @@ func connect(ctx context.Context, raw string, reportFailure bool, diagnostics *D
 	if err != nil {
 		go tunnel.Close()
 		if reportFailure {
-			log.Printf("GoRex tunnel dial failed: %s", err)
+			log.Printf("Retty tunnel dial failed: %s", err)
 		}
 		return nil, nil, err
 	}
@@ -240,7 +240,7 @@ func connect(ctx context.Context, raw string, reportFailure bool, diagnostics *D
 	}, nil
 }
 
-// Probe checks whether the saved capability reaches a responding GoRex server.
+// Probe checks whether the saved capability reaches a responding Retty server.
 // It sends only hello: no device registration, session list or terminal attach.
 func Probe(ctx context.Context, raw string) error {
 	client, closeTunnel, err := connect(ctx, raw, false, nil)
@@ -293,7 +293,7 @@ func readDesktopInfo(ctx context.Context, client *rex.Client, list bool) (rex.He
 		return hello, nil, err
 	}
 	if hello.Version <= 0 || hello.Host.Name == "" {
-		return hello, nil, errors.New("invalid GoRex hello")
+		return hello, nil, errors.New("invalid Retty hello")
 	}
 	if !list {
 		return hello, nil, nil

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"unicode"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 // AgentNoticeBody names the task instead of displaying project paths or

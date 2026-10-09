@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 func TestMobileNewSessionTabCompletesCommand(t *testing.T) {
@@ -22,7 +22,7 @@ func TestMobileNewSessionTabCompletesCommand(t *testing.T) {
 	}
 	a, _ := newTestApp(t)
 	config := t.TempDir()
-	command := "gorex-completion-fixture"
+	command := "retty-completion-fixture"
 	if err := os.WriteFile(filepath.Join(config, command), []byte("#!/bin/sh\nprintf 'COMPLETION_EXECUTED:%s\\n' \"$1\"\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +45,7 @@ func TestMobileNewSessionTabCompletesCommand(t *testing.T) {
 		return m.term != nil && strings.Contains(m.term.Text(), "completion-fixture>")
 	})
 	tt.Click("Terminal")
-	tt.Type("gorex-completion-f")
+	tt.Type("retty-completion-f")
 	tt.Click("更多")
 	tt.Click("Tab")
 	waitFor(t, tt, "command completion", func() bool {

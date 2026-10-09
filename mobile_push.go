@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/egoist/mygo"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"sort"
 	"strings"
 	"time"
@@ -127,7 +127,7 @@ func (m *mobileApp) taskNoticeID(session rex.SessionInfo) string {
 	return rex.AgentNoticeID(m.desktopKey(), session)
 }
 func (m *mobileApp) rememberNotice(id string) bool {
-	if !strings.HasPrefix(id, "gorex-agent-") || len(id) > 64 {
+	if !strings.HasPrefix(id, "retty-agent-") || len(id) > 64 {
 		return false
 	}
 	if m.noticeReceipts == nil {

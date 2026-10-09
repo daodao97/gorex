@@ -15,7 +15,7 @@ import (
 // is exact by construction; this checks only that each frontend shows the
 // shared response at its own size without projection or a smaller font.
 func TestMultiFrontendCaptureExperiment(t *testing.T) {
-	dir := os.Getenv("GOREX_MULTI_FRONTEND_CAPTURE")
+	dir := os.Getenv("RETTY_MULTI_FRONTEND_CAPTURE")
 	if dir == "" {
 		t.Skip("requires owned multi-frontend capture")
 	}

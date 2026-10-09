@@ -8,10 +8,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
-// The Codex app-server can outlive its first pane and the GoRex server.
+// The Codex app-server can outlive its first pane and the Retty server.
 // Keep its capability private and stable instead of tying it to that pane.
 // Serve holds the server lock while loading/creating this file.
 func loadAgentToken(dir string) (string, error) {

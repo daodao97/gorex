@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // SendKey encodes a software key using the session's keyboard protocol and

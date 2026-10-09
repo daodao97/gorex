@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 // Linux hosts report a distribution's PRETTY_NAME instead of "linux".

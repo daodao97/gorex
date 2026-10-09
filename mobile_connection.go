@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/egoist/mygo"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 const mobileResumeCheckTimeout = remote.ResumeCheckTimeout

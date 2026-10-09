@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/remote"
+	"retty/internal/remote"
 )
 
 func (m *mobileApp) recordConnectionDiagnostic(report remote.DiagnosticReport) {
@@ -40,7 +40,7 @@ func (m *mobileApp) persistConnectionDiagnostics() {
 		if err == nil {
 			m.storage <- func() {
 				if err := m.store.Set("connection-diagnostics-v1", data); err != nil {
-					log.Print("GoRex: 无法保存连接诊断")
+					log.Print("Retty: 无法保存连接诊断")
 				}
 			}
 		}

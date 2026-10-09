@@ -31,16 +31,16 @@ func zshEnv(path string, env []string) ([]string, string, error) {
 		}
 	}
 	if hadZdot {
-		clean = append(clean, "GOREX_ZDOTDIR="+zdot)
+		clean = append(clean, "RETTY_ZDOTDIR="+zdot)
 	}
 	return append(clean, "ZDOTDIR="+dir), dir, nil
 }
 
 // OSC 133 identifies the active prompt so libghostty can clear it on
 // resize and let zsh redraw it, instead of wrapping its old right prompt.
-const zshIntegration = `if (( ${+GOREX_ZDOTDIR} )); then
-  export ZDOTDIR=$GOREX_ZDOTDIR
-  unset GOREX_ZDOTDIR
+const zshIntegration = `if (( ${+RETTY_ZDOTDIR} )); then
+  export ZDOTDIR=$RETTY_ZDOTDIR
+  unset RETTY_ZDOTDIR
 else
   unset ZDOTDIR
 fi
@@ -51,7 +51,7 @@ fi
 # markers so asynchronous theme updates keep the prompt marked too.
 typeset -gi __p9k_force_term_shell_integration=1
 
-_gorex_mark_prompt() {
+_retty_mark_prompt() {
   local code=$?
   emulate -L zsh
   if ! zle; then
@@ -65,19 +65,19 @@ _gorex_mark_prompt() {
   fi
   [[ $PS2 == *$'\e]133;'* ]] || PS2=$continuation$PS2$input
 }
-_gorex_command_start() {
+_retty_command_start() {
   printf '\e]133;C\a'
 }
-_gorex_install_marks() {
+_retty_install_marks() {
   emulate -L zsh
   # Login startup files can rebuild PATH. Keep the pane's Codex launcher first.
-  [[ -z $GOREX_CODEX_BIN ]] || path=($GOREX_CODEX_BIN ${path:#$GOREX_CODEX_BIN})
+  [[ -z $RETTY_CODEX_BIN ]] || path=($RETTY_CODEX_BIN ${path:#$RETTY_CODEX_BIN})
   autoload -Uz add-zsh-hook
-  add-zsh-hook -d precmd _gorex_install_marks
-  add-zsh-hook precmd _gorex_mark_prompt
-  add-zsh-hook preexec _gorex_command_start
-  _gorex_mark_prompt
+  add-zsh-hook -d precmd _retty_install_marks
+  add-zsh-hook precmd _retty_mark_prompt
+  add-zsh-hook preexec _retty_command_start
+  _retty_mark_prompt
 }
 typeset -ga precmd_functions
-precmd_functions+=(_gorex_install_marks)
+precmd_functions+=(_retty_install_marks)
 `

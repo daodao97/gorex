@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 // Even replies to terminal queries are writes, not requests to take ownership

@@ -46,7 +46,7 @@ func startLaunchdBackground(exe string, args []string, dir, logName, shell strin
 	logf.Close()
 	identity := strings.Join(append([]string{dir, exe, shell}, args...), "\x00")
 	sum := sha256.Sum256([]byte(identity))
-	label := fmt.Sprintf("dev.gorex.background.%x", sum[:12])
+	label := fmt.Sprintf("com.daodao.retty.background.%x", sum[:12])
 	target := fmt.Sprintf("gui/%d", os.Getuid())
 	if exec.Command("/bin/launchctl", "print", target).Run() != nil {
 		target = fmt.Sprintf("user/%d", os.Getuid())
@@ -66,14 +66,14 @@ func startLaunchdBackground(exe string, args []string, dir, logName, shell strin
 	plist.WriteString(`<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>Label</key>`)
 	str(label)
 	plist.WriteString(`<key>ProgramArguments</key><array>`)
-	argv := append([]string{shell, "-l", "-c", `exec "$@"`, "gorex-service", exe}, args...)
+	argv := append([]string{shell, "-l", "-c", `exec "$@"`, "retty-service", exe}, args...)
 	if filepath.Base(shell) == "fish" {
 		argv = append([]string{shell, "--login", "-c", `exec $argv`, exe}, args...)
 	}
 	for _, arg := range argv {
 		str(arg)
 	}
-	plist.WriteString(`</array><key>EnvironmentVariables</key><dict><key>GOREX_DIR</key>`)
+	plist.WriteString(`</array><key>EnvironmentVariables</key><dict><key>RETTY_DIR</key>`)
 	str(dir)
 	plist.WriteString(`<key>SHELL</key>`)
 	str(shell)

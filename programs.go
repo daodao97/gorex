@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 //go:embed assets/icons/*.svg assets/brands/*.svg assets/agents/* assets/platforms/*

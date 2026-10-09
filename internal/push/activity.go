@@ -2,7 +2,7 @@ package push
 
 import (
 	"errors"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"time"
 )
 
@@ -66,7 +66,7 @@ func (s *service) desktopActivity(activity DesktopActivity, now time.Time) error
 	return nil
 }
 
-// Foreground GoRex already handles task reminders on the desktop. Persist these
+// Foreground Retty already handles task reminders on the desktop. Persist these
 // IDs so switching away or restarting the worker cannot replay them on a phone.
 func (s *service) markDesktopSeenLocked(now time.Time) {
 	changed := false

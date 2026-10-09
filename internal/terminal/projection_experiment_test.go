@@ -10,10 +10,10 @@ import (
 )
 
 // Research-only: shows how today's phone projection renders a single
-// desktop-sized capture. GOREX_PROJECTION_CAPTURE names a capture directory
+// desktop-sized capture. RETTY_PROJECTION_CAPTURE names a capture directory
 // with manifest.json whose records all share one geometry.
 func TestProjectionCaptureExperiment(t *testing.T) {
-	dir := os.Getenv("GOREX_PROJECTION_CAPTURE")
+	dir := os.Getenv("RETTY_PROJECTION_CAPTURE")
 	if dir == "" {
 		t.Skip("requires owned capture")
 	}

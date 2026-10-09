@@ -9,18 +9,18 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 // newTestApp starts a session server of its own and an app on it, whose
 // view runs without a window.
 func newTestApp(t *testing.T) (*App, *ui.Tester) {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "gorex")
+	dir, err := os.MkdirTemp("/tmp", "retty")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	t.Setenv("SHELL", "/bin/sh")
 	go rex.Serve()
 	var client *rex.Client

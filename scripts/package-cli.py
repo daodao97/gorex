@@ -20,7 +20,7 @@ def native_library(spec, cache):
     if dest.is_file() and hashlib.sha256(dest.read_bytes()).hexdigest() == spec["sha256"]:
         return dest
     dest.parent.mkdir(parents=True, exist_ok=True)
-    request = urllib.request.Request(spec["url"], headers={"User-Agent": "GoRex CLI build"})
+    request = urllib.request.Request(spec["url"], headers={"User-Agent": "Retty CLI build"})
     with urllib.request.urlopen(request, timeout=120) as response:
         data = response.read(64 * 1024 * 1024 + 1)
     if len(data) > 64 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != spec["sha256"]:
@@ -56,20 +56,20 @@ def main():
     for platform in TARGETS if target == "all" else (target,):
         goos, goarch = platform.split("/")
         platform_env = dict(env, GOOS=goos, GOARCH=goarch)
-        dependencies = subprocess.check_output(["go", "list", "-tags", "gorex_cli", "-deps", "./cmd/gorex"], cwd=ROOT, env=platform_env, text=True)
-        if any(line.startswith("github.com/egoist/mygo") or line == "gorex/internal/terminal" for line in dependencies.splitlines()):
+        dependencies = subprocess.check_output(["go", "list", "-tags", "retty_cli", "-deps", "./cmd/retty"], cwd=ROOT, env=platform_env, text=True)
+        if any(line.startswith("github.com/egoist/mygo") or line == "retty/internal/terminal" for line in dependencies.splitlines()):
             raise RuntimeError("CLI unexpectedly depends on the graphics/UI runtime")
-        name = f"gorex-{goos}-{goarch}"
+        name = f"retty-{goos}-{goarch}"
         package = output / name
         package.mkdir(exist_ok=True)
-        subprocess.run(["go", "build", "-tags", "gorex_cli", "-trimpath", "-ldflags", f"-s -w -X main.version={version} -X main.commit={commit}", "-o", str(package / "gorex"), "./cmd/gorex"], cwd=ROOT, env=platform_env, check=True)
+        subprocess.run(["go", "build", "-tags", "retty_cli", "-trimpath", "-ldflags", f"-s -w -X main.version={version} -X main.commit={commit}", "-o", str(package / "retty"), "./cmd/retty"], cwd=ROOT, env=platform_env, check=True)
         spec = files[f"{goos}-{goarch}"]
         library = native_library(spec, ROOT / ".mygo" / "cli-natives")
         shutil.copy2(library, package / spec["name"])
         shutil.copy2(ROOT / "docs" / "cli.md", package / "README.md")
         archive = output / f"{name}.tar.gz"
         with tarfile.open(archive, "w:gz") as tar:
-            for entry in ("gorex", spec["name"], "README.md"):
+            for entry in ("retty", spec["name"], "README.md"):
                 tar.add(package / entry, arcname=f"{name}/{entry}")
         checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
         archive.with_suffix(archive.suffix + ".sha256").write_text(f"{checksum}  {archive.name}\n")

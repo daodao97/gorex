@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 func TestRecentAvailabilityStaysInCompactRow(t *testing.T) {

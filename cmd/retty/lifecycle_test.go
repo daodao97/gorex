@@ -1,4 +1,4 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package main
 
@@ -17,22 +17,22 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 // Exercise the packaged CLI executable, its private helpers and real encrypted
 // transport against only an owned directory and disposable shell.
 func TestCLIServerLifecycle(t *testing.T) {
-	if os.Getenv("GOREX_CLI_E2E") != "1" {
-		t.Skip("set GOREX_CLI_E2E=1 for live encrypted CLI transport")
+	if os.Getenv("RETTY_CLI_E2E") != "1" {
+		t.Skip("set RETTY_CLI_E2E=1 for live encrypted CLI transport")
 	}
 	dir := t.TempDir()
-	t.Setenv("GOREX_DIR", filepath.Join(dir, "state"))
-	binary := os.Getenv("GOREX_CLI_BINARY")
+	t.Setenv("RETTY_DIR", filepath.Join(dir, "state"))
+	binary := os.Getenv("RETTY_CLI_BINARY")
 	if binary == "" {
-		binary = filepath.Join(dir, "gorex")
-		build := exec.Command("go", "build", "-tags", "gorex_cli", "-o", binary, ".")
+		binary = filepath.Join(dir, "retty")
+		build := exec.Command("go", "build", "-tags", "retty_cli", "-o", binary, ".")
 		build.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
 		if output, err := build.CombinedOutput(); err != nil {
 			t.Fatalf("build CLI: %v\n%s", err, output)
@@ -120,7 +120,7 @@ func TestCLIServerLifecycle(t *testing.T) {
 				var decoded struct {
 					Gateway gatewayState `json:"gateway"`
 				}
-				if err != nil || json.Unmarshal(data, &decoded) != nil || decoded.Gateway.PID != state.PID || !decoded.Gateway.Ready || strings.Contains(string(data), "gorex://") {
+				if err != nil || json.Unmarshal(data, &decoded) != nil || decoded.Gateway.PID != state.PID || !decoded.Gateway.Ready || strings.Contains(string(data), "retty://") {
 					t.Fatal("CLI status lost service state or exposed credentials")
 				}
 				info, err := os.Stat(gatewaySocket())
@@ -128,7 +128,7 @@ func TestCLIServerLifecycle(t *testing.T) {
 					t.Fatal("gateway management socket is not private")
 				}
 				log, _ := os.ReadFile(filepath.Join(rex.Dir(), "gateway.log"))
-				if strings.Contains(string(log), "gorex://") {
+				if strings.Contains(string(log), "retty://") {
 					t.Fatal("background service leaked its connection code into logs")
 				}
 			}

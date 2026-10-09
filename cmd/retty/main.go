@@ -1,6 +1,6 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
-// GoRex CLI exposes the existing session server through its encrypted bridge.
+// Retty CLI exposes the existing session server through its encrypted bridge.
 package main
 
 import (
@@ -13,7 +13,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 var version = "dev"
@@ -21,7 +21,7 @@ var commit = "unknown"
 
 func main() {
 	log.SetOutput(os.Stderr)
-	log.SetPrefix("[gorex] ")
+	log.SetPrefix("[retty] ")
 	if handled, err := helper(os.Args[1:], os.Stdin); handled {
 		if err != nil {
 			os.Exit(1)
@@ -31,7 +31,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintln(os.Stderr, "gorex:", err)
+		fmt.Fprintln(os.Stderr, "retty:", err)
 		os.Exit(1)
 	}
 }

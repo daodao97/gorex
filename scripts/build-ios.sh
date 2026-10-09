@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build libghostty-vt for the selected SDK, then package the native GoRex app.
+# Build libghostty-vt for the selected SDK, then package the native Retty app.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -28,4 +28,32 @@ SDK_VERSION=$(xcrun --sdk "$SDK" --show-sdk-version)
 python3 scripts/generate-ios-vt.py
 gofmt -w internal/terminal/internal/vt/open_ios.go
 xcrun ld -r -arch arm64 -platform_version "$PLATFORM" 15.0 "$SDK_VERSION" -all_load "$PREFIX/lib/libghostty-vt.a" -o internal/terminal/internal/vt/ghostty_ios_arm64.syso
-go tool mygo build -platform ios/arm64 "$@" .
+# MyGo currently shares one icon setting across platforms. Use an isolated
+# config for the full-bleed iOS artwork without changing the desktop config.
+ICON_CONFIG_DIR=$(mktemp -d "$WORK/build-config-XXXXXX")
+trap 'rm -rf "$ICON_CONFIG_DIR"' EXIT
+python3 - "$ROOT" "$ICON_CONFIG_DIR" <<'PY'
+import json, os, sys
+from pathlib import Path
+root, stage = map(Path, sys.argv[1:])
+config = json.loads((root / 'mygo.json').read_text())
+config['main'] = str(root / config.get('main', '.'))
+config['out'] = str(root / config.get('out', 'build'))
+config['icon'] = str(root / 'resources/ios/app-icon.png')
+for key in ('bindings', 'frontendDist'):
+    if config.get(key):
+        config[key] = str(root / config[key])
+config['resources'] = [str(root / path) for path in config.get('resources', [])]
+launch = config.get('ios', {}).get('launchScreen', {})
+if launch.get('image'):
+    launch['image'] = str(root / launch['image'])
+if os.environ.get('IOS_PROVISIONING_PROFILE'):
+    signing = config.setdefault('ios', {}).setdefault('signing', {})
+    signing['style'] = 'manual'
+    signing['provisioningProfile'] = os.environ['IOS_PROVISIONING_PROFILE']
+    if os.environ.get('IOS_SIGNING_IDENTITY'):
+        signing['identity'] = os.environ['IOS_SIGNING_IDENTITY']
+(stage / 'mygo.json').write_text(json.dumps(config, indent=2) + '\n')
+(stage / 'resources').symlink_to(root / 'resources', target_is_directory=True)
+PY
+go tool mygo build -platform ios/arm64 "$@" "$ICON_CONFIG_DIR"

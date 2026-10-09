@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 func TestServerProtocolCompatibility(t *testing.T) {

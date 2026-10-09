@@ -15,13 +15,13 @@ for name in ('fixture.json','ios-finished'): (work/name).unlink(missing_ok=True)
 PYCODE
 case "${IOS_TEST_FLOW:-full}" in
  full)
-  TEST_CASE=GoRexUITests/testRemoteSessionFlow
-  GOREX_REMOTE_E2E=1 GOREX_IOS_FIXTURE="$WORK/fixture.json" \
+  TEST_CASE=RettyUITests/testRemoteSessionFlow
+  RETTY_REMOTE_E2E=1 RETTY_IOS_FIXTURE="$WORK/fixture.json" \
    go test ./internal/remote -run '^TestTailcatSessionLifecycle$' -v -timeout 25m > "$WORK/host.log" 2>&1 &
   ;;
  background)
-  TEST_CASE=GoRexUITests/testBackgroundConnectionRetention
-  GOREX_IOS_BACKGROUND_FIXTURE="$WORK/fixture.json" \
+  TEST_CASE=RettyUITests/testBackgroundConnectionRetention
+  RETTY_IOS_BACKGROUND_FIXTURE="$WORK/fixture.json" \
    go test ./internal/remote -run '^TestTailcatIOSBackgroundRetention$' -v -timeout 6m > "$WORK/host.log" 2>&1 &
   ;;
  *) echo "IOS_TEST_FLOW must be full or background" >&2; exit 1 ;;
@@ -50,9 +50,9 @@ with open(path,'w') as out:
  out.write('}\n')
 os.chmod(path,0o600)
 PY
-xcrun devicectl device install app --device "$IOS_DEVICE" build/ios-arm64/GoRex.app
+xcrun devicectl device install app --device "$IOS_DEVICE" build/ios-arm64/Retty.app
 RESULT="$WORK/$(date +%Y%m%d-%H%M%S).xcresult"
-xcodebuild -quiet -project tests/ios/Tests.xcodeproj -scheme GoRexUITests \
+xcodebuild -quiet -project tests/ios/Tests.xcodeproj -scheme RettyUITests \
  -sdk iphoneos -destination "id=$IOS_DEVICE" -derivedDataPath "$WORK/derived" \
  -only-testing:"$TEST_CASE" \
  -resultBundlePath "$RESULT" -collect-test-diagnostics never \

@@ -7,18 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func TestAgentHookCapturesTaskOnlyAfterSuccessfulReport(t *testing.T) {
 	for _, authorized := range []bool{false, true} {
 		t.Run(map[bool]string{true: "accepted", false: "rejected"}[authorized], func(t *testing.T) {
 			dir := t.TempDir()
-			t.Setenv("GOREX_DIR", dir)
-			t.Setenv("GOREX_SESSION", "pane")
-			t.Setenv("GOREX_AGENT_TOKEN", "fixture-token")
-			t.Setenv("GOREX_AGENT_SERVER_TOKEN", "")
-			t.Setenv("GOREX_AGENT_SOCKET", SocketPath())
+			t.Setenv("RETTY_DIR", dir)
+			t.Setenv("RETTY_SESSION", "pane")
+			t.Setenv("RETTY_AGENT_TOKEN", "fixture-token")
+			t.Setenv("RETTY_AGENT_SERVER_TOKEN", "")
+			t.Setenv("RETTY_AGENT_SOCKET", SocketPath())
 			listener, err := net.Listen("unix", SocketPath())
 			if err != nil {
 				t.Fatal(err)

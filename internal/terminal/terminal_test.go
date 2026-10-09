@@ -13,7 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/gomonobold"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // loadLib loads libghostty-vt, or skips the test where it cannot.

@@ -2,7 +2,7 @@ package terminal
 
 import (
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // Theme is the colors of a terminal, which programs may change (OSC 4,

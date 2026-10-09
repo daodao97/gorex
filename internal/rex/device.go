@@ -16,7 +16,7 @@ func deviceFingerprint(identity string) string {
 		return ""
 	}
 	// Publish an app-specific digest instead of exposing the hardware UUID.
-	digest := sha256.Sum256([]byte("gorex-device:" + identity))
+	digest := sha256.Sum256([]byte("retty-device:" + identity))
 	return "machine:" + hex.EncodeToString(digest[:16])
 }
 
@@ -29,7 +29,7 @@ func legacyHostID(host HostInfo) string {
 		return ""
 	}
 	key := strings.Join([]string{host.Name, host.User, host.Home, host.Model, host.Chip}, "\x00")
-	digest := sha256.Sum256([]byte("gorex-legacy-host:" + key))
+	digest := sha256.Sum256([]byte("retty-legacy-host:" + key))
 	return "legacy:" + hex.EncodeToString(digest[:16])
 }
 

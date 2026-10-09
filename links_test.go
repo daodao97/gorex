@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 func TestTerminalLinkResolution(t *testing.T) {
@@ -96,12 +96,35 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 		t.Fatalf("app Command click failed: %v (%s)", opened, a.err)
 	}
 	saveSettingsImage(t, tt, "file-links-compact")
+	// Codex-style painting inserts a hard break in a long file:// path.
+	// Verify the complete filename reaches the application's file resolver.
+	cols, _ := p.term.Size()
+	base := "file://" + dir + "/"
+	padding := cols - len(base) - len("/exec-") - 3
+	if padding < 1 {
+		t.Fatal("test terminal too narrow for its temporary directory")
+	}
+	first := base + strings.Repeat("a", padding) + "/exec-"
+	tail := "0e64fee3-e2b3-4f2a-99c7-7619d408d347.png"
+	imagePath := strings.TrimPrefix(first+tail, "file://")
+	if err := os.MkdirAll(filepath.Dir(imagePath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(imagePath, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p.term.Feed([]byte("\x1b[H\x1b[2J" + first + "\r\n" + tail))
+	tt.Frame()
+	tt.ClickAtWith(ui.Cmd, r.X+3, r.Y+7)
+	if got, want := opened[len(opened)-1], (&url.URL{Scheme: "cursor", Host: "file", Path: imagePath}).String(); got != want || a.err != "" {
+		t.Fatalf("wrapped file opening = %q (%s), want %q", got, a.err, want)
+	}
 }
 
 func TestPaneLinkOpeningAndPreference(t *testing.T) {
 	previous := prefs
 	t.Cleanup(func() { prefs = previous })
-	t.Setenv("GOREX_DIR", t.TempDir())
+	t.Setenv("RETTY_DIR", t.TempDir())
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.go")
 	if err := os.WriteFile(path, []byte("package main\n"), 0o600); err != nil {

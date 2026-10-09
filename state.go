@@ -12,10 +12,10 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 // Tab is a tab of the window: panes in a tree of splits.
@@ -83,7 +83,7 @@ type Pane struct {
 	unlockedAt        time.Time
 }
 
-// App is the state of GoRex's window.
+// App is the state of Retty's window.
 type App struct {
 	desktops        desktopConnections
 	desktopStorage  chan func()

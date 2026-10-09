@@ -1,7 +1,7 @@
 package screen
 
 import (
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 	"testing"
 )
 

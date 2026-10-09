@@ -6,12 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gorex/internal/rex"
 	"image"
 	"image/png"
 	"net"
 	"os"
 	"path/filepath"
+	"retty/internal/rex"
 	"testing"
 	"time"
 )
@@ -21,7 +21,7 @@ func TestRemoteImageClipboardPrecedesCtrlVAndKeepsGeometry(t *testing.T) {
 	png.Encode(&imageData, image.NewNRGBA(image.Rect(0, 0, 2, 2)))
 	for _, scenario := range []string{"success", "closed pane", "clipboard denied"} {
 		t.Run(scenario, func(t *testing.T) {
-			dir, err := os.MkdirTemp("/tmp", "gorex-paste-")
+			dir, err := os.MkdirTemp("/tmp", "retty-paste-")
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -36,11 +36,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app=build/darwin-universal/GoRex.app
-          binary="$app/Contents/MacOS/GoRex"
+          app=build/darwin-universal/Retty.app
+          binary="$app/Contents/MacOS/Retty"
           lipo "$binary" -verify_arch arm64 x86_64
           for arch in arm64 x86_64; do
-            thin="$RUNNER_TEMP/GoRex-$arch"
+            thin="$RUNNER_TEMP/Retty-$arch"
             lipo "$binary" -thin "$arch" -output "$thin"
             info=$(go version -m "$thin")
             grep -F mygo_noinspector <<< "$info"
@@ -54,7 +54,7 @@ jobs:
       - name: Upload DMG
         uses: actions/upload-artifact@v7
         with:
-          name: GoRex-macos-universal-dmg
+          name: Retty-macos-universal-dmg
           path: build/darwin-universal/*.dmg
           if-no-files-found: error
           compression-level: 0

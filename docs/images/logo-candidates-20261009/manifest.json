@@ -1,0 +1,142 @@
+{
+  "product": "Retty",
+  "brief": "Native terminal workbench connecting Mac, iPhone and headless servers. Reconnect TTY. Relay TTY. Switch screens and keep working; terminal sessions and agents persist after the UI disconnects.",
+  "provider": "built-in image_gen.imagegen",
+  "model": "Runtime tool does not expose a model identifier or model-selection parameter.",
+  "constraint_delivery": "main-prompt constraints",
+  "constraints": "Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+  "candidates": [
+    {
+      "label": "A1",
+      "direction": "终端小机器人",
+      "rationale": "终端与 Agent 工作台",
+      "corner": "lower-left",
+      "background": "muted periwinkle blue #8B9DC3",
+      "colors": "warm ivory #FFF0CC for the rounded head and compact body, deep petrol teal #123D46 for one continuous broad visor and simple ivory eyes",
+      "subject": "tiny terminal companion robot",
+      "feature": "Use a large soft rounded-square head with one broad continuous horizontal visor, two widely spaced simple eyes within the visor, and a very compact body merged into the outer silhouette. No antenna, buttons or literal terminal symbols.",
+      "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536 pixels, with normal square outer corners.\nBackground: fill the entire square with solid muted periwinkle blue #8B9DC3. Keep that background visible in every open area and in the corners not occupied by the character; the assigned emergence corner must be occupied by the character.\nSubject: place one extremely simplified, cute, endearing tiny terminal companion robot character on the background, reduced to one soft rounded continuous silhouette and one defining feature. Use a large soft rounded-square head with one broad continuous horizontal visor, two widely spaced simple eyes within the visor, and a very compact body merged into the outer silhouette. No antenna, buttons or literal terminal symbols.\nComplexity: use only 4–7 large basic shapes and at most two broad internal color regions. Use two simple eyes and add one tiny mouth only when it helps the expression. Remove every nonessential line, outline, anatomical detail, texture, and decoration. Keep the character readable at 32 × 32.\nColor behavior: use exactly three semantic colors in the complete image: exactly two character base colors, warm ivory #FFF0CC for the rounded head and compact body, deep petrol teal #123D46 for one continuous broad visor and simple ivory eyes, plus the background color. Organize the character colors into broad purposeful masses and reuse them for facial marks. Keep the character, facial marks and background clearly separated.\nComposition: keep the character upright and emerging from the assigned lower-left, filling about 85–95% of the square so it remains visually dominant. Cropping at the bottom or assigned side is welcome when it strengthens the corner emergence. Preserve both paired identifying features. Never center or bottom-center the character.\nStyle: make simplification, cuteness, and lovable baby-like appeal the strongest qualities. Use large soft forms, compact proportions, thick rounded contours, and an ultra-clean graphic treatment. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: show only the character on the full-canvas background, with clean surfaces and normal square outer corners.\nConstraints: Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+      "requested_dimensions": [
+        1536,
+        1536
+      ],
+      "file": "A1.png",
+      "actual_dimensions": [
+        1254,
+        1254
+      ],
+      "saved_path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/A1.png",
+      "source_path": "/Users/daodao/.codex/generated_images/01a11f96-1b4e-7590-bf30-5c9c56c86926/exec-76f20fbd-7023-4421-8f9c-bab3f3c989c0.png"
+    },
+    {
+      "label": "A2",
+      "direction": "终端小机器人",
+      "rationale": "终端与 Agent 工作台",
+      "corner": "lower-right",
+      "background": "muted warm apricot #E9B896",
+      "colors": "mint turquoise #64D9BE for the rounded head and compact body, midnight teal #12383C for one continuous broad visor and simple mint eyes",
+      "subject": "tiny terminal companion robot",
+      "feature": "Use a slightly taller pill-shaped rounded-square head with one broad continuous visor, two widely spaced simple eyes within the visor, and a very compact body merged into the outer silhouette. No antenna, buttons or literal terminal symbols.",
+      "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536 pixels, with normal square outer corners.\nBackground: fill the entire square with solid muted warm apricot #E9B896. Keep that background visible in every open area and in the corners not occupied by the character; the assigned emergence corner must be occupied by the character.\nSubject: place one extremely simplified, cute, endearing tiny terminal companion robot character on the background, reduced to one soft rounded continuous silhouette and one defining feature. Use a slightly taller pill-shaped rounded-square head with one broad continuous visor, two widely spaced simple eyes within the visor, and a very compact body merged into the outer silhouette. No antenna, buttons or literal terminal symbols.\nComplexity: use only 4–7 large basic shapes and at most two broad internal color regions. Use two simple eyes and add one tiny mouth only when it helps the expression. Remove every nonessential line, outline, anatomical detail, texture, and decoration. Keep the character readable at 32 × 32.\nColor behavior: use exactly three semantic colors in the complete image: exactly two character base colors, mint turquoise #64D9BE for the rounded head and compact body, midnight teal #12383C for one continuous broad visor and simple mint eyes, plus the background color. Organize the character colors into broad purposeful masses and reuse them for facial marks. Keep the character, facial marks and background clearly separated.\nComposition: keep the character upright and emerging from the assigned lower-right, filling about 85–95% of the square so it remains visually dominant. Cropping at the bottom or assigned side is welcome when it strengthens the corner emergence. Preserve both paired identifying features. Never center or bottom-center the character.\nStyle: make simplification, cuteness, and lovable baby-like appeal the strongest qualities. Use large soft forms, compact proportions, thick rounded contours, and an ultra-clean graphic treatment. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: show only the character on the full-canvas background, with clean surfaces and normal square outer corners.\nConstraints: Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+      "requested_dimensions": [
+        1536,
+        1536
+      ],
+      "file": "A2.png",
+      "actual_dimensions": [
+        1254,
+        1254
+      ],
+      "saved_path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/A2.png",
+      "source_path": "/Users/daodao/.codex/generated_images/01a11f96-1b4e-7590-bf30-5c9c56c86926/exec-ad5ce263-bf4a-4f0d-8d33-99746d6bf829.png"
+    },
+    {
+      "label": "B1",
+      "direction": "接力小水獭",
+      "rationale": "跨设备连接与接力",
+      "corner": "lower-left",
+      "background": "muted cornflower blue #849BC4",
+      "colors": "warm amber orange #ED9F4B for the outer body, dark cocoa #573824 for one continuous face-and-belly patch and simple amber eyes",
+      "subject": "baby otter",
+      "feature": "Use a large rounded head, both small blunt circular ears clearly visible, and two broad rounded arms merging into one hugging body contour. One continuous contrasting face-and-belly patch. No whiskers, nose, fur detail, tail or held objects.",
+      "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536 pixels, with normal square outer corners.\nBackground: fill the entire square with solid muted cornflower blue #849BC4. Keep that background visible in every open area and in the corners not occupied by the character; the assigned emergence corner must be occupied by the character.\nSubject: place one extremely simplified, cute, endearing baby otter character on the background, reduced to one soft rounded continuous silhouette and one defining feature. Use a large rounded head, both small blunt circular ears clearly visible, and two broad rounded arms merging into one hugging body contour. One continuous contrasting face-and-belly patch. No whiskers, nose, fur detail, tail or held objects.\nComplexity: use only 4–7 large basic shapes and at most two broad internal color regions. Use two simple eyes and add one tiny mouth only when it helps the expression. Remove every nonessential line, outline, anatomical detail, texture, and decoration. Keep the character readable at 32 × 32.\nColor behavior: use exactly three semantic colors in the complete image: exactly two character base colors, warm amber orange #ED9F4B for the outer body, dark cocoa #573824 for one continuous face-and-belly patch and simple amber eyes, plus the background color. Organize the character colors into broad purposeful masses and reuse them for facial marks. Keep the character, facial marks and background clearly separated.\nComposition: keep the character upright and emerging from the assigned lower-left, filling about 85–95% of the square so it remains visually dominant. Cropping at the bottom or assigned side is welcome when it strengthens the corner emergence. Preserve both paired identifying features. Never center or bottom-center the character.\nStyle: make simplification, cuteness, and lovable baby-like appeal the strongest qualities. Use large soft forms, compact proportions, thick rounded contours, and an ultra-clean graphic treatment. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: show only the character on the full-canvas background, with clean surfaces and normal square outer corners.\nConstraints: Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+      "requested_dimensions": [
+        1536,
+        1536
+      ],
+      "file": "B1.png",
+      "actual_dimensions": [
+        1254,
+        1254
+      ],
+      "saved_path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/B1.png",
+      "source_path": "/Users/daodao/.codex/generated_images/01a11f96-37f7-7fc2-9414-357ff1aeb90b/exec-145037cf-6518-47c8-b5dc-aa4b63b7fe6f.png"
+    },
+    {
+      "label": "B2",
+      "direction": "接力小水獭",
+      "rationale": "跨设备连接与接力",
+      "corner": "lower-right",
+      "background": "muted dusty mauve #B9A0BE",
+      "colors": "cream peach #FFE0AC for the outer body, rich terracotta #98472F for one continuous face-and-belly patch and simple cream eyes",
+      "subject": "baby otter",
+      "feature": "Use a broad bean-shaped body, large rounded head, both small blunt circular ears clearly visible, and two short broad arms merged into a gentle hugging outer contour. One continuous contrasting face-and-belly patch. No whiskers, nose, fur detail, tail or held objects.",
+      "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536 pixels, with normal square outer corners.\nBackground: fill the entire square with solid muted dusty mauve #B9A0BE. Keep that background visible in every open area and in the corners not occupied by the character; the assigned emergence corner must be occupied by the character.\nSubject: place one extremely simplified, cute, endearing baby otter character on the background, reduced to one soft rounded continuous silhouette and one defining feature. Use a broad bean-shaped body, large rounded head, both small blunt circular ears clearly visible, and two short broad arms merged into a gentle hugging outer contour. One continuous contrasting face-and-belly patch. No whiskers, nose, fur detail, tail or held objects.\nComplexity: use only 4–7 large basic shapes and at most two broad internal color regions. Use two simple eyes and add one tiny mouth only when it helps the expression. Remove every nonessential line, outline, anatomical detail, texture, and decoration. Keep the character readable at 32 × 32.\nColor behavior: use exactly three semantic colors in the complete image: exactly two character base colors, cream peach #FFE0AC for the outer body, rich terracotta #98472F for one continuous face-and-belly patch and simple cream eyes, plus the background color. Organize the character colors into broad purposeful masses and reuse them for facial marks. Keep the character, facial marks and background clearly separated.\nComposition: keep the character upright and emerging from the assigned lower-right, filling about 85–95% of the square so it remains visually dominant. Cropping at the bottom or assigned side is welcome when it strengthens the corner emergence. Preserve both paired identifying features. Never center or bottom-center the character.\nStyle: make simplification, cuteness, and lovable baby-like appeal the strongest qualities. Use large soft forms, compact proportions, thick rounded contours, and an ultra-clean graphic treatment. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: show only the character on the full-canvas background, with clean surfaces and normal square outer corners.\nConstraints: Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+      "requested_dimensions": [
+        1536,
+        1536
+      ],
+      "file": "B2.png",
+      "actual_dimensions": [
+        1254,
+        1254
+      ],
+      "saved_path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/B2.png",
+      "source_path": "/Users/daodao/.codex/generated_images/01a11f96-37f7-7fc2-9414-357ff1aeb90b/exec-0f51f866-1b61-40b9-b44f-8ed97f251755.png"
+    },
+    {
+      "label": "C1",
+      "direction": "会话小精灵",
+      "rationale": "界面关闭后会话与任务持续存在",
+      "corner": "lower-left",
+      "background": "muted dusty teal #71A6A1",
+      "colors": "soft lavender #E1CCFF for the continuous outer body, deep indigo #47326A for one continuous broad face region and simple lavender eyes",
+      "subject": "tiny friendly session spirit",
+      "feature": "Use a single plump arch-shaped body, softly rounded shoulders and a gently scalloped bottom with just two broad blunt lobes. One broad rounded face patch with two widely spaced calm eyes. No arms, accessories, floating objects or decorative symbols.",
+      "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536 pixels, with normal square outer corners.\nBackground: fill the entire square with solid muted dusty teal #71A6A1. Keep that background visible in every open area and in the corners not occupied by the character; the assigned emergence corner must be occupied by the character.\nSubject: place one extremely simplified, cute, endearing tiny friendly session spirit character on the background, reduced to one soft rounded continuous silhouette and one defining feature. Use a single plump arch-shaped body, softly rounded shoulders and a gently scalloped bottom with just two broad blunt lobes. One broad rounded face patch with two widely spaced calm eyes. No arms, accessories, floating objects or decorative symbols.\nComplexity: use only 4–7 large basic shapes and at most two broad internal color regions. Use two simple eyes and add one tiny mouth only when it helps the expression. Remove every nonessential line, outline, anatomical detail, texture, and decoration. Keep the character readable at 32 × 32.\nColor behavior: use exactly three semantic colors in the complete image: exactly two character base colors, soft lavender #E1CCFF for the continuous outer body, deep indigo #47326A for one continuous broad face region and simple lavender eyes, plus the background color. Organize the character colors into broad purposeful masses and reuse them for facial marks. Keep the character, facial marks and background clearly separated.\nComposition: keep the character upright and emerging from the assigned lower-left, filling about 85–95% of the square so it remains visually dominant. Cropping at the bottom or assigned side is welcome when it strengthens the corner emergence. Preserve both paired identifying features. Never center or bottom-center the character.\nStyle: make simplification, cuteness, and lovable baby-like appeal the strongest qualities. Use large soft forms, compact proportions, thick rounded contours, and an ultra-clean graphic treatment. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: show only the character on the full-canvas background, with clean surfaces and normal square outer corners.\nConstraints: Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+      "requested_dimensions": [
+        1536,
+        1536
+      ],
+      "file": "C1.png",
+      "actual_dimensions": [
+        1254,
+        1254
+      ],
+      "saved_path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/C1.png",
+      "source_path": "/Users/daodao/.codex/generated_images/01a11f96-571c-7f02-a950-49f66da0d595/exec-af86c09c-b24e-4a75-bcb7-bc1bced0370e.png"
+    },
+    {
+      "label": "C2",
+      "direction": "会话小精灵",
+      "rationale": "界面关闭后会话与任务持续存在",
+      "corner": "lower-right",
+      "background": "muted lavender blue #9297BD",
+      "colors": "butter yellow #FFE38B for the continuous outer body, forest teal #174C47 for one continuous broad face region and simple yellow eyes",
+      "subject": "tiny friendly session spirit",
+      "feature": "Use a single compact gumdrop-shaped body, softly rounded shoulders and a gently scalloped bottom with just two broad blunt lobes. One broad rounded face patch with two widely spaced calm eyes. No arms, accessories, floating objects or decorative symbols.",
+      "prompt": "Create one complete full-bleed 1:1 square image, approximately 1536 × 1536 pixels, with normal square outer corners.\nBackground: fill the entire square with solid muted lavender blue #9297BD. Keep that background visible in every open area and in the corners not occupied by the character; the assigned emergence corner must be occupied by the character.\nSubject: place one extremely simplified, cute, endearing tiny friendly session spirit character on the background, reduced to one soft rounded continuous silhouette and one defining feature. Use a single compact gumdrop-shaped body, softly rounded shoulders and a gently scalloped bottom with just two broad blunt lobes. One broad rounded face patch with two widely spaced calm eyes. No arms, accessories, floating objects or decorative symbols.\nComplexity: use only 4–7 large basic shapes and at most two broad internal color regions. Use two simple eyes and add one tiny mouth only when it helps the expression. Remove every nonessential line, outline, anatomical detail, texture, and decoration. Keep the character readable at 32 × 32.\nColor behavior: use exactly three semantic colors in the complete image: exactly two character base colors, butter yellow #FFE38B for the continuous outer body, forest teal #174C47 for one continuous broad face region and simple yellow eyes, plus the background color. Organize the character colors into broad purposeful masses and reuse them for facial marks. Keep the character, facial marks and background clearly separated.\nComposition: keep the character upright and emerging from the assigned lower-right, filling about 85–95% of the square so it remains visually dominant. Cropping at the bottom or assigned side is welcome when it strengthens the corner emergence. Preserve both paired identifying features. Never center or bottom-center the character.\nStyle: make simplification, cuteness, and lovable baby-like appeal the strongest qualities. Use large soft forms, compact proportions, thick rounded contours, and an ultra-clean graphic treatment. Prefer one clear shape over several explanatory details. Add an extremely, extremely subtle, almost imperceptible sense of depth through a barely-there neo-skeuomorphic treatment.\nFinish: show only the character on the full-canvas background, with clean surfaces and normal square outer corners.\nConstraints: Use no text or watermark. Add no borders, frames, cards, or presentation masks. Include one character only, with no extra subjects or scenery. Use no fragile lines, sharp tips, unnecessary outlines, tiny details, or decorative marks. Add no photorealistic material, dramatic bevel, glossy hotspot, deep occlusion, extrusion, strong three-dimensional rendering, or external cast shadow. Keep the background solid and uniform, with no texture, vignette, or lighting variation.",
+      "requested_dimensions": [
+        1536,
+        1536
+      ],
+      "file": "C2.png",
+      "actual_dimensions": [
+        1254,
+        1254
+      ],
+      "saved_path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/C2.png",
+      "source_path": "/Users/daodao/.codex/generated_images/01a11f96-571c-7f02-a950-49f66da0d595/exec-b51a0a40-74ca-480c-a28a-4b0fbf06eafd.png"
+    }
+  ]
+}

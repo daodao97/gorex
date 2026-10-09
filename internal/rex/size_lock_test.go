@@ -29,7 +29,7 @@ func TestSizeLockOwnsPTYUntilUnlocked(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	go Serve()
 	for i := 0; i < 100; i++ {
 		if _, err := os.Stat(filepath.Join(dir, "server.sock")); err == nil {

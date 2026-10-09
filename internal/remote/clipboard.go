@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/tailscale/tailcat"
-	"gorex/internal/rex"
 	"image/png"
 	"io"
 	"net"
+	"retty/internal/rex"
 	"time"
 )
 

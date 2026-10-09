@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/egoist/mygo"
-	"gorex/internal/push"
-	"gorex/internal/rex"
 	"os"
+	"retty/internal/push"
+	"retty/internal/rex"
 	"time"
 )
 

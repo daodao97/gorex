@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 // scrollback is about how many bytes of output a session keeps above its
@@ -115,14 +115,14 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 	token := newID() + newID()
 	env := sessionEnv(id, o.Env)
 	exe, _ := os.Executable()
-	env = append(env, "GOREX_SESSION="+id, "GOREX_AGENT_TOKEN="+token, "GOREX_AGENT_SOCKET="+SocketPath(), "GOREX_HOOK="+exe)
-	env = append(env, "GOREX_AGENT_SERVER_TOKEN="+serverToken)
+	env = append(env, "RETTY_SESSION="+id, "RETTY_AGENT_TOKEN="+token, "RETTY_AGENT_SOCKET="+SocketPath(), "RETTY_HOOK="+exe)
+	env = append(env, "RETTY_AGENT_SERVER_TOKEN="+serverToken)
 	env, codexDir, err := codexEnv(env, agents.InspectHooks("codex").Installed)
 	if err != nil {
 		return nil, err
 	}
 	if name == "codex" {
-		env = append(env, "GOREX_CODEX_EXE="+path)
+		env = append(env, "RETTY_CODEX_EXE="+path)
 		path = filepath.Join(codexDir, "codex")
 	}
 	env, shellDir, err := zshEnv(path, env)
@@ -202,7 +202,7 @@ func sessionEnv(id string, extra []string) []string {
 			k == "COLUMNS", k == "LINES", k == "SHLVL", k == "OLDPWD", k == "PWD", k == "_",
 			strings.HasPrefix(k, "ITERM_"), strings.HasPrefix(k, "GHOSTTY_"), strings.HasPrefix(k, "KITTY_"),
 			strings.HasPrefix(k, "VSCODE_"), strings.HasPrefix(k, "WEZTERM_"), strings.HasPrefix(k, "ALACRITTY_"),
-			strings.HasPrefix(k, "GOREX_"), strings.HasPrefix(k, "MYGO_"):
+			strings.HasPrefix(k, "RETTY_"), strings.HasPrefix(k, "MYGO_"):
 			continue
 		case k == "LANG" || k == "LC_ALL" || k == "LC_CTYPE":
 			hasLang = true
@@ -212,9 +212,9 @@ func sessionEnv(id string, extra []string) []string {
 	env = append(env,
 		"TERM=xterm-256color",
 		"COLORTERM=truecolor",
-		"TERM_PROGRAM=GoRex",
+		"TERM_PROGRAM=Retty",
 		"TERM_PROGRAM_VERSION=0.1.0",
-		"GOREX_SESSION="+id,
+		"RETTY_SESSION="+id,
 	)
 	if !hasLang {
 		env = append(env, "LANG=en_US.UTF-8")

@@ -1,4 +1,4 @@
-//go:build !gorex_cli && (darwin || linux)
+//go:build !retty_cli && (darwin || linux)
 
 package rex
 
@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 )
 
 func TestResyncScreenDoesNotExposeClearFrame(t *testing.T) {

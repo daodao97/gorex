@@ -1,4 +1,4 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package main
 
@@ -9,13 +9,30 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"retty/internal/rex"
 )
+
+func TestCLIDefaultDataDirectoryUsesRettyNamespace(t *testing.T) {
+	t.Setenv("RETTY_DIR", "")
+	base, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.Abs(filepath.Join(base, "RettyServer"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := setDataDir(""); err != nil || rex.Dir() != want {
+		t.Fatalf("default CLI data directory = %q, want %q: %v", rex.Dir(), want, err)
+	}
+}
 
 func TestCLIHelpAndStatusNeverStartServer(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	var out, diagnostics bytes.Buffer
-	if err := run(context.Background(), []string{"help"}, &out, &diagnostics); err != nil || !strings.Contains(out.String(), "gorex serve") {
+	if err := run(context.Background(), []string{"help"}, &out, &diagnostics); err != nil || !strings.Contains(out.String(), "retty serve") {
 		t.Fatal("missing CLI help", err)
 	}
 	if err := run(context.Background(), []string{"status"}, &out, &diagnostics); err == nil {
@@ -41,7 +58,7 @@ func TestCLIHelpAndStatusNeverStartServer(t *testing.T) {
 
 func TestSavedLinkIsPrivateAndUnrelatedStateIsPreserved(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	path := filepath.Join(dir, "connect.txt")
 	if err := os.WriteFile(path, []byte("old"), 0644); err != nil {
 		t.Fatal(err)
@@ -57,7 +74,7 @@ func TestSavedLinkIsPrivateAndUnrelatedStateIsPreserved(t *testing.T) {
 	if string(data) != "fixture-capability\n" {
 		t.Fatal("connection link was not atomically replaced")
 	}
-	if err := setDataDir(dir); err != nil || os.Getenv("GOREX_DIR") != dir {
+	if err := setDataDir(dir); err != nil || os.Getenv("RETTY_DIR") != dir {
 		t.Fatal("data directory not propagated", err)
 	}
 	var out, diagnostics bytes.Buffer

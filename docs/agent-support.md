@@ -3,13 +3,13 @@
 2026-10-08 对照本地 Magpie，版本 `2cdae80a101531a9d25cc9e684e35236f1a58e52`。
 其 `internal/agent/agents.go` 的 `All()` 有 **49 种基础客户端**，包含终端 Agent、桌面应用与编辑器；不计动态 OMP profiles、WSL 副本，以及仅按请求识别的 magpie/curl。
 
-GoRex 目前识别 **37 种终端 Agent**。前台进程或明确的启动入口决定默认标题和图标；保留 Agent 设置的任务标题及用户重命名。桌面标签页、命令面板、手机会话列表和最近会话使用同一份信息。
+Retty 目前识别 **37 种终端 Agent**。前台进程或明确的启动入口决定默认标题和图标；保留 Agent 设置的任务标题及用户重命名。桌面标签页、命令面板、手机会话列表和最近会话使用同一份信息。
 
 Hook 已验证的仍为 Claude Code、Codex、Gemini CLI、Qwen Code，本次只扩展识别和展示。
 
 ## 本次新增的 17 种
 
-| Magpie 客户端 | GoRex 识别的命令 | 图标 |
+| Magpie 客户端 | Retty 识别的命令 | 图标 |
 | --- | --- | --- |
 | Antigravity CLI | `agy`、`antigravity-cli` | Magpie 原 SVG |
 | OpenChamber | `openchamber` | Magpie 原 SVG |
@@ -34,7 +34,7 @@ Node、Bun、npx、pnpm 等包装启动按入口识别；提示词、后续参�
 
 ## Magpie 中已经覆盖的 16 种
 
-| Magpie 名称 | GoRex 名称 |
+| Magpie 名称 | Retty 名称 |
 | --- | --- |
 | Claude Code | Claude Code |
 | Codex | Codex |
@@ -53,7 +53,7 @@ Node、Bun、npx、pnpm 等包装启动按入口识别；提示词、后续参�
 | Grok Build | Grok |
 | CodeBuddy Code | CodeBuddy |
 
-GoRex 另保留 Aider、Amp、Qwen Code、TraeCode；这些不在该版本 Magpie 的基础客户端目录中。
+Retty 另保留 Aider、Amp、Qwen Code、TraeCode；这些不在该版本 Magpie 的基础客户端目录中。
 
 ## Magpie 其余 16 种
 
@@ -76,6 +76,6 @@ GoRex 另保留 Aider、Amp、Qwen Code、TraeCode；这些不在该版本 Magpi
 | Alma | 桌面应用 |
 | Cindy | 桌面应用 |
 
-Magpie 的 Aliases 是网关/客户端名称，并非全是可执行命令。GoRex 不将 `cmd` 当作 Command Code、不将 `cc` 当作 Claude Code，也不将裸 `morph` 当作 Mister Morph。
+Magpie 的 Aliases 是网关/客户端名称，并非全是可执行命令。Retty 不将 `cmd` 当作 Command Code、不将 `cc` 当作 Claude Code，也不将裸 `morph` 当作 Mister Morph。
 
 图标来源及许可见 [assets/agents/UPSTREAM.md](../assets/agents/UPSTREAM.md)。

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
+	"retty/internal/agents"
 	"strings"
 )
 
@@ -12,7 +12,7 @@ var settingsSections = []struct{ title, label, glyph string }{
 	{"终端", "Terminal settings", "square-terminal"},
 	{"Agent", "Agent integrations", "bot"},
 	{"连接", "Connections", "monitor"},
-	{"关于", "About GoRex", "circle-dot"},
+	{"关于", "About Retty", "circle-dot"},
 }
 
 type preferenceItem struct {
@@ -147,7 +147,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 
 func (a *App) preferenceItems() []preferenceItem {
 	items := []preferenceItem{
-		{id: "desktop-connection", title: "连接其他桌面", label: "Connect desktop", detail: "粘贴 GoRex 连接码，打开已有会话或在其他电脑上新建终端。", group: "远端电脑", section: 3,
+		{id: "desktop-connection", title: "连接其他桌面", label: "Connect desktop", detail: "粘贴 Retty 连接码，打开已有会话或在其他电脑上新建终端。", group: "远端电脑", section: 3,
 			control: func(c *ui.Context) {
 				if ui.Button(c, "管理连接").Label("Manage desktop connections").Clicked() {
 					a.showDesktopConnections(nil)
@@ -248,10 +248,10 @@ func (a *App) preferenceItems() []preferenceItem {
 		}
 		detail := status + "。安装到用户配置，保留已有 hooks；在新启动的 Agent 会话中生效。"
 		if id == "codex" {
-			detail += " 正常启动 codex，并在 /hooks 中信任 GoRex 新增项；已安装不代表已信任。"
+			detail += " 正常启动 codex，并在 /hooks 中信任 Retty 新增项；已安装不代表已信任。"
 		}
 		if (id == "gemini" || id == "qwen") && a.hello.Version > 0 && a.hello.Version < 5 {
-			detail += " 当前后台服务需更新；结束现有任务后，使用 Shell → Quit and End All Sessions，再打开新版 GoRex。"
+			detail += " 当前后台服务需更新；结束现有任务后，使用 Shell → Quit and End All Sessions，再打开新版 Retty。"
 		}
 		if s.Error != "" {
 			detail = "无法读取配置：" + s.Error
@@ -344,9 +344,9 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 		return
 	}
 	if a.settingsSection == 4 && query == "" && !a.settingsModifiedOnly {
-		ui.Text(c, "GoRex").FontSize(17).FontWeight(600).TextColor(theme.Text).Margin(12, 0)
-		ui.Text(c, "macOS 原生终端").FontSize(13).TextColor(theme.TextMuted)
-		ui.Text(c, "持久会话、标签页与分屏。使用 Go、MyGo 和 Ghostty VT 构建。").FontSize(12).TextColor(theme.TextMuted).Margin(16, 0)
+		ui.Text(c, "Retty").FontSize(17).FontWeight(600).TextColor(theme.Text).Margin(12, 0)
+		ui.Text(c, "Reconnect TTY · Relay TTY").FontSize(13).TextColor(theme.TextMuted)
+		ui.Text(c, "换个屏幕，接着工作。电脑、手机与服务器上的持久终端会话。").FontSize(12).TextColor(theme.TextMuted).Margin(16, 0)
 		return
 	}
 	if a.agentHookError != "" && (a.settingsSection == 2 || query != "") {

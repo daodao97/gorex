@@ -13,11 +13,11 @@ import (
 
 func TestLaunchdServiceDoesNotInheritAutomationEnvironment(t *testing.T) {
 	// Exercise real launchd with only disposable jobs and fixture executables.
-	// No normal GoRex service, socket or session is used by this test.
+	// No normal Retty service, socket or session is used by this test.
 	for _, preference := range []string{"", "user-preference"} {
 		t.Run("login-preference-"+preference, func(t *testing.T) {
 			t.Setenv("NO_COLOR", "1")
-			t.Setenv("GOREX_AUTOMATION_FIXTURE", "must-not-leak")
+			t.Setenv("RETTY_AUTOMATION_FIXTURE", "must-not-leak")
 			dir := t.TempDir()
 			shell := filepath.Join(dir, "login-shell")
 			startup := "#!/bin/sh\nshift\nexport STARTUP_MARKER=from-login\n"
@@ -29,14 +29,14 @@ func TestLaunchdServiceDoesNotInheritAutomationEnvironment(t *testing.T) {
 				t.Fatal(err)
 			}
 			exe := filepath.Join(dir, "fixture")
-			fixture := "#!/bin/sh\nprintf '%s\\n' \"color:${NO_COLOR-unset}\" \"automation:${GOREX_AUTOMATION_FIXTURE-unset}\" \"startup:$STARTUP_MARKER\" \"dir:$GOREX_DIR\" \"argument:$1\" >> \"$GOREX_DIR/result\"\n"
-			fixture += "while [ ! -f \"$GOREX_DIR/release\" ]; do sleep 0.05; done\n"
+			fixture := "#!/bin/sh\nprintf '%s\\n' \"color:${NO_COLOR-unset}\" \"automation:${RETTY_AUTOMATION_FIXTURE-unset}\" \"startup:$STARTUP_MARKER\" \"dir:$RETTY_DIR\" \"argument:$1\" >> \"$RETTY_DIR/result\"\n"
+			fixture += "while [ ! -f \"$RETTY_DIR/release\" ]; do sleep 0.05; done\n"
 			if err := os.WriteFile(exe, []byte(fixture), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			args := []string{"argument with spaces & quotes '"}
 			sum := sha256.Sum256([]byte(strings.Join(append([]string{dir, exe, shell}, args...), "\x00")))
-			service := fmt.Sprintf("gui/%d/dev.gorex.background.%x", os.Getuid(), sum[:12])
+			service := fmt.Sprintf("gui/%d/com.daodao.retty.background.%x", os.Getuid(), sum[:12])
 			t.Cleanup(func() {
 				// This is exclusively the job registered with this test's fixture.
 				if err := exec.Command("/bin/launchctl", "bootout", service).Run(); err != nil {

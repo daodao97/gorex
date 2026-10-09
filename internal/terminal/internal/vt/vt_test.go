@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"gorex/internal/terminal/internal/library"
+	"retty/internal/terminal/internal/library"
 )
 
 // loadLib loads the libghostty-vt of the terminal plugin, which it

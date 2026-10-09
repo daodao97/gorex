@@ -11,8 +11,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/tailscale/tailcat"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 func recentTestLink() string {

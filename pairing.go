@@ -8,9 +8,9 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/skip2/go-qrcode"
-	"gorex/internal/push"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/push"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 type phonePair struct {

@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 // AgentState is owned by the session server, so reconnecting a window does
@@ -188,9 +188,9 @@ func (t *agentTracker) apply(e AgentEvent) {
 // RunAgentHook never writes model-visible output, starts a server or changes
 // an approval decision. A failed report cannot hold up the agent.
 func RunAgentHook(agent string, stdin io.Reader) {
-	sid, token, socket := os.Getenv("GOREX_SESSION"), os.Getenv("GOREX_AGENT_TOKEN"), os.Getenv("GOREX_AGENT_SOCKET")
-	if agent == "codex" && os.Getenv("GOREX_AGENT_SERVER_TOKEN") != "" {
-		token = os.Getenv("GOREX_AGENT_SERVER_TOKEN")
+	sid, token, socket := os.Getenv("RETTY_SESSION"), os.Getenv("RETTY_AGENT_TOKEN"), os.Getenv("RETTY_AGENT_SOCKET")
+	if agent == "codex" && os.Getenv("RETTY_AGENT_SERVER_TOKEN") != "" {
+		token = os.Getenv("RETTY_AGENT_SERVER_TOKEN")
 	}
 	if sid == "" || token == "" || socket == "" {
 		return

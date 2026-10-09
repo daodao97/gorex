@@ -9,8 +9,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 func withAgentState(p *Pane, agent, state string, revision uint64) rex.SessionInfo {
@@ -420,7 +420,7 @@ func TestAgentHookSurvivesWindowReconnect(t *testing.T) {
 	script, capture := filepath.Join(bin, "claude"), filepath.Join(dir, "environment")
 	// A local fixture exercises PTY foreground detection and inherited hook
 	// credentials without starting an AI session or touching user settings.
-	fixture := "#!/bin/sh\numask 077\nprintf '%s\\n' \"$GOREX_SESSION\" \"$GOREX_AGENT_TOKEN\" \"$GOREX_AGENT_SOCKET\" > \"$1\"\nprintf 'fixture-ready\\n'\nwhile IFS= read -r line; do :; done\n"
+	fixture := "#!/bin/sh\numask 077\nprintf '%s\\n' \"$RETTY_SESSION\" \"$RETTY_AGENT_TOKEN\" \"$RETTY_AGENT_SOCKET\" > \"$1\"\nprintf 'fixture-ready\\n'\nwhile IFS= read -r line; do :; done\n"
 	if err := os.WriteFile(script, []byte(fixture), 0o700); err != nil {
 		t.Fatal(err)
 	}

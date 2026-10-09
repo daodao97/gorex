@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -123,15 +124,116 @@ func (v *view) linkAt(x, y float32) linkMatch {
 			return linkMatch{Link: Link{URL: url}, cellA: a, cellB: b, row: row}
 		}
 	}
+	if m := v.hardWrappedFileAt(col, row); m.valid() {
+		return m
+	}
 	text, cols, start := v.t.term.LogicalRowText(row)
 	m := matchLink(text, cols, col+(row-start)*v.cols)
 	if m.valid() {
-		m.cellA, m.cellB, m.row = cols[m.start], cols[m.end-1]+1, start
-		if m.end < len(cols) {
-			m.cellB = max(m.cellB, cols[m.end])
-		}
+		m.setCells(cols, start)
 	}
 	return m
+}
+
+func (m *linkMatch) setCells(cols []int, start int) {
+	m.cellA, m.cellB, m.row = cols[m.start], cols[m.end-1]+1, start
+	if m.end < len(cols) {
+		m.cellB = max(m.cellB, cols[m.end])
+	}
+}
+
+// Some TUIs draw each display row themselves instead of letting the emulator
+// wrap it. Recover file references at those edges, without changing the VT's
+// actual line boundaries (selection, search and ordinary URLs still use them).
+func (v *view) hardWrappedFileAt(col, row int) linkMatch {
+	first, last := max(0, row-8), min(v.rows-1, row+7)
+	texts, columns := make([][]rune, last-first+1), make([][]int, last-first+1)
+	for y := first; y <= last; y++ {
+		r, c := v.t.term.RowText(y)
+		end := len(r)
+		for end > 0 && unicode.IsSpace(r[end-1]) {
+			end--
+		}
+		texts[y-first], columns[y-first] = r[:end], c[:end]
+	}
+	for start := first; start <= row; start++ {
+		text := append([]rune(nil), texts[start-first]...)
+		cols := append([]int(nil), columns[start-first]...)
+		for end := start; end < last; end++ {
+			r, c := texts[end-first], columns[end-first]
+			if len(r) == 0 || v.t.term.RowsJoined(end) ||
+				v.cols-c[len(c)-1]-1 > 8 || !unfinishedFileAtEdge(text, cols) {
+				break
+			}
+			next, nc := texts[end+1-first], columns[end+1-first]
+			a := 0
+			for a < len(next) && unicode.IsSpace(next[a]) {
+				a++
+			}
+			b := a
+			for b < len(next) && !unicode.IsSpace(next[b]) {
+				b++
+			}
+			if a == b || nc[a] > 4 || !fileContinuation(string(next[a:b])) {
+				break
+			}
+			text = append(text, next[a:b]...)
+			for _, x := range nc[a:b] {
+				cols = append(cols, x+(end+1-start)*v.cols)
+			}
+			if end+1 >= row {
+				m := matchLink(text, cols, col+(row-start)*v.cols)
+				if m.valid() && (m.Path != "" || strings.HasPrefix(m.URL, "file://")) {
+					m.setCells(cols, start)
+					// Keep reading if another row may finish the filename.
+					if b < len(next) || end+1 == last || !unfinishedFileAtEdge(text, cols) ||
+						v.cols-nc[b-1]-1 > 8 {
+						return m
+					}
+				}
+			}
+			if b < len(next) {
+				break
+			}
+		}
+	}
+	return linkMatch{}
+}
+
+func unfinishedFileAtEdge(text []rune, cols []int) bool {
+	if len(cols) == 0 {
+		return false
+	}
+	m := matchLink(text, cols, cols[len(cols)-1])
+	if !m.valid() || m.end != len(text) || m.Line != 0 {
+		return false
+	}
+	path := m.Path
+	if m.URL != "" {
+		if !strings.HasPrefix(m.URL, "file://") {
+			return false
+		}
+		path = strings.TrimPrefix(m.URL, "file://")
+	}
+	if !strings.Contains(path, "/") {
+		return false
+	}
+	base := path[strings.LastIndex(path, "/")+1:]
+	// A completed filename/location is a separate reference, even near an edge.
+	return !strings.Contains(base, ".") || strings.HasSuffix(base, "-")
+}
+
+func fileContinuation(s string) bool {
+	if strings.Contains(s, "://") || strings.HasPrefix(s, "/") ||
+		strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") || strings.HasPrefix(s, "~/") {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_-.%/:#", r) {
+			return false
+		}
+	}
+	return true
 }
 
 // urlPattern finds the URLs programs print as text, which a Command+click

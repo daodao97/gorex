@@ -2,6 +2,6 @@
 
 package terminal
 
-import "gorex/internal/terminal/internal/library/desktop"
+import "retty/internal/terminal/internal/library/desktop"
 
 var natives = desktop.Manifest

@@ -1,10 +1,10 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package rex
 
 import (
-	"gorex/internal/terminal/screen"
 	"io"
+	"retty/internal/terminal/screen"
 )
 
 func newSessionScreen(cols, rows int, bell func()) (sessionScreen, io.Closer, error) {

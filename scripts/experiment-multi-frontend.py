@@ -2,7 +2,7 @@
 """Disposable multi-frontend capture: one OpenCode backend, one TUI per viewport.
 
 Each frontend owns a PTY that is never resized, so every byte it emits was laid
-out for exactly that geometry. No GoRex service or real Agent is touched.
+out for exactly that geometry. No Retty service or real Agent is touched.
 """
 
 import argparse

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailcat"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 type ConnectionStage string
@@ -138,7 +138,7 @@ func (d *Diagnostics) ProtocolVersion(version int) {
 }
 
 // TransportLog recognizes a small set of upstream formats. The original
-// formatted message is never retained, including with GOREX_DEBUG_TUNNEL.
+// formatted message is never retained, including with RETTY_DEBUG_TUNNEL.
 func (d *Diagnostics) TransportLog(format string, args ...any) string {
 	event := ""
 	switch {
@@ -178,7 +178,7 @@ func (d *Diagnostics) Finish(err error) DiagnosticReport {
 		result = (&ConnectionError{Kind: Failure(err)}).Error()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "GoRex 连接诊断 v1\n时间：%s\n平台：%s/%s\n模式：%s / 第 %d 次\n总耗时：%d ms / 限时 %d ms\n结果：%s", d.started.Format(time.RFC3339Nano), runtime.GOOS, runtime.GOARCH, d.mode, d.attempt, time.Since(d.started).Milliseconds(), d.budget.Milliseconds(), result)
+	fmt.Fprintf(&b, "Retty 连接诊断 v1\n时间：%s\n平台：%s/%s\n模式：%s / 第 %d 次\n总耗时：%d ms / 限时 %d ms\n结果：%s", d.started.Format(time.RFC3339Nano), runtime.GOOS, runtime.GOARCH, d.mode, d.attempt, time.Since(d.started).Milliseconds(), d.budget.Milliseconds(), result)
 	if d.failed != "" {
 		fmt.Fprintf(&b, "\n失败阶段：%s", d.failed)
 	}

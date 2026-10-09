@@ -7,8 +7,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 type desktopPresenceState uint8

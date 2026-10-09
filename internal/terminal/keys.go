@@ -4,7 +4,7 @@ import (
 	"unicode"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // keys maps MyGo's keys to Ghostty's, and to the character they type

@@ -1,4 +1,4 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package main
 
@@ -36,7 +36,7 @@ func printConnectionLink(output io.Writer, link string, forceQR bool) error {
 	bitmap := code.Bitmap()
 	qrRows := (len(bitmap)+1)/2 + 3
 	if (cols > 0 && cols < len(bitmap)) || (rows > 0 && rows < qrRows) {
-		_, err = fmt.Fprintf(output, "二维码需要至少 %d 列 × %d 行，请放大终端后运行 gorex link。\n", len(bitmap), qrRows)
+		_, err = fmt.Fprintf(output, "二维码需要至少 %d 列 × %d 行，请放大终端后运行 retty link。\n", len(bitmap), qrRows)
 		return err
 	}
 	_, err = fmt.Fprintln(output, "\n手机扫码连接：\n"+qrText(bitmap))

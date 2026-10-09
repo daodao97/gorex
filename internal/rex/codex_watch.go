@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 // WatchCodexThread attaches metadata-only observation to an already running
@@ -73,7 +73,7 @@ func pollCodexThread(ctx context.Context, socket, thread string, parent int, obs
 			return json.Unmarshal(response.Result, result)
 		}
 	}
-	if err := call("initialize", map[string]any{"clientInfo": map[string]string{"name": "gorex_status_observer", "version": "1"}, "capabilities": map[string]any{"experimentalApi": true}}, nil); err != nil {
+	if err := call("initialize", map[string]any{"clientInfo": map[string]string{"name": "retty_status_observer", "version": "1"}, "capabilities": map[string]any{"experimentalApi": true}}, nil); err != nil {
 		return err
 	}
 	if err := c.Write(ctx, websocket.MessageText, []byte(`{"method":"initialized"}`)); err != nil {

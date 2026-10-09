@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 func TestAgentTabs(t *testing.T) {
@@ -132,7 +132,7 @@ func TestMagpieAgentTitlesAndIconsOnMobile(t *testing.T) {
 	for start := 0; start < len(ids); start += 6 {
 		m := &mobileApp{client: &rex.Client{}}
 		for _, id := range ids[start:min(start+6, len(ids))] {
-			m.sessions = append(m.sessions, rex.SessionInfo{ID: id, Shell: "zsh", Program: id, Dir: "/work/github/quickgui/gorex", Idle: false})
+			m.sessions = append(m.sessions, rex.SessionInfo{ID: id, Shell: "zsh", Program: id, Dir: "/work/github/quickgui/retty", Idle: false})
 		}
 		tt := ui.NewTester(m.view, 390, 750)
 		for _, dark := range []bool{false, true} {

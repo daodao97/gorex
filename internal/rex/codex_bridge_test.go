@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func TestCodexBridgeOnlyTracksItsCLIThread(t *testing.T) {
@@ -238,7 +238,7 @@ func TestCodexBridgeContinuationDoesNotAnnounceIntermediateCompletion(t *testing
 }
 
 func TestCodexWatchConfirmsIdleAfterReadingTurnHistory(t *testing.T) {
-	dir, err := os.MkdirTemp("/tmp", "gorex-watch-")
+	dir, err := os.MkdirTemp("/tmp", "retty-watch-")
 	if err != nil {
 		t.Fatal(err)
 	}

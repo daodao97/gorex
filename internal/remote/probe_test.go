@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 func TestProbeHandshakeDoesNotRegisterPhone(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"runtime"
 	"slices"
 )

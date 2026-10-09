@@ -1,4 +1,4 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package main
 
@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-	"gorex/internal/rex"
-	"gorex/internal/terminal/screen"
+	"retty/internal/rex"
+	"retty/internal/terminal/screen"
 )
 
 type gatewayState struct {
@@ -34,7 +34,7 @@ func gatewaySocket() string {
 		return path
 	}
 	sum := sha256.Sum256([]byte(path))
-	return filepath.Join(os.TempDir(), fmt.Sprintf("gorex-gateway-%d-%x.sock", os.Getuid(), sum[:8]))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("retty-gateway-%d-%x.sock", os.Getuid(), sum[:8]))
 }
 
 func gatewayRequest(ctx context.Context, op string) (gatewayState, error) {
@@ -78,7 +78,7 @@ func startGateway(ctx context.Context, output, diagnostics io.Writer, linkFile s
 			}
 			err := printConnectionLink(output, state.Link, qr)
 			if err == nil {
-				fmt.Fprintf(diagnostics, "GoRex running in background · gateway PID %d\n", state.PID)
+				fmt.Fprintf(diagnostics, "Retty running in background · gateway PID %d\n", state.PID)
 			}
 			return err
 		}

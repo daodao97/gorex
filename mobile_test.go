@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 	"github.com/tailscale/tailcat"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/remote"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 func TestMobileNavigationBackReleasesOnlyCurrentPage(t *testing.T) {
@@ -116,9 +116,9 @@ func TestMobileScreensFitPhoneAndKeyboard(t *testing.T) {
 			m.hello.Host.Name = "MacBook Pro (2)"
 			m.hello.Host.Home = "/Users/fixture"
 			m.sessions = []rex.SessionInfo{
-				{ID: "fixture", Title: "安装当前修改到 iOS 真机 | GoRex 终端与会话同步", Program: "codex", Dir: "/Users/fixture/work/github/quickgui/gorex", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "codex", State: "running"}},
+				{ID: "fixture", Title: "安装当前修改到 iOS 真机 | Retty 终端与会话同步", Program: "codex", Dir: "/Users/fixture/work/github/quickgui/retty", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "codex", State: "running"}},
 				{ID: "workers", Title: "确认线上 50 个 worker 生效", Program: "codex", Dir: "/Users/fixture/work/github/gpt-pay", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "codex", State: "waiting"}},
-				{ID: "claude", Title: "Claude Code", Program: "claude", Dir: "/Users/fixture/work/github/quickgui/gorex", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "claude", State: "completed"}},
+				{ID: "claude", Title: "Claude Code", Program: "claude", Dir: "/Users/fixture/work/github/quickgui/retty", Cols: 80, Rows: 24, Agent: rex.AgentState{ID: "claude", State: "completed"}},
 			}
 			tt.Frame()
 			if r, ok := tt.Find("打开会话 fixture"); !ok || r.H < 44 || r.X+r.W > size[0]+1 {
@@ -136,7 +136,7 @@ func TestMobileScreensFitPhoneAndKeyboard(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			term.Feed([]byte("\x1b[?25l\x1b[HGoRex on iPhone\r\n$ "))
+			term.Feed([]byte("\x1b[?25l\x1b[HRetty on iPhone\r\n$ "))
 			m.term, m.selected = term, m.sessions[0]
 			tt.Frame()
 			r, ok := tt.Find("Terminal")

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // screen is the emulator whose cells the user sees. The caller holds t.mu.

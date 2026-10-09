@@ -6,9 +6,9 @@ package screen
 import (
 	"sync"
 
-	"gorex/internal/terminal/internal/library"
-	"gorex/internal/terminal/internal/library/desktop"
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/library"
+	"retty/internal/terminal/internal/library/desktop"
+	"retty/internal/terminal/internal/vt"
 )
 
 type Screen struct {

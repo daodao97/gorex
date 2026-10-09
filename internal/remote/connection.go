@@ -3,7 +3,7 @@ package remote
 import (
 	"context"
 	"errors"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"time"
 )
 

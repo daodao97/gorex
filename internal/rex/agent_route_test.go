@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func TestCodexConversationRouting(t *testing.T) {
@@ -68,12 +68,12 @@ func TestSharedAgentCapabilitySurvivesServerRestart(t *testing.T) {
 // every report carries the first pane's inherited environment, even after
 // that pane has been closed. No model call or global configuration is used.
 func TestSharedCodexDaemonRoutesToCorrectLivePane(t *testing.T) {
-	dir, err := os.MkdirTemp("/tmp", "gorex-shared-hook-")
+	dir, err := os.MkdirTemp("/tmp", "retty-shared-hook-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	token, err := loadAgentToken(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -139,10 +139,10 @@ func TestSharedCodexDaemonRoutesToCorrectLivePane(t *testing.T) {
 		}
 	}()
 	first, second := server.sessions["first"], server.sessions["second"]
-	t.Setenv("GOREX_SESSION", first.id)
-	t.Setenv("GOREX_AGENT_TOKEN", first.agentToken)
-	t.Setenv("GOREX_AGENT_SERVER_TOKEN", token)
-	t.Setenv("GOREX_AGENT_SOCKET", path)
+	t.Setenv("RETTY_SESSION", first.id)
+	t.Setenv("RETTY_AGENT_TOKEN", first.agentToken)
+	t.Setenv("RETTY_AGENT_SERVER_TOKEN", token)
+	t.Setenv("RETTY_AGENT_SOCKET", path)
 	send := func(input agents.HookInput) {
 		t.Helper()
 		data, _ := json.Marshal(input)

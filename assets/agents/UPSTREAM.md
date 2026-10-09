@@ -17,7 +17,7 @@ The following 15 SVGs and one PNG were copied without modification from
 MAGPIE-LICENSE.txt. Its reference documentation identifies brand logos as
 coming from lobehub/lobe-icons.
 
-| GoRex asset | Magpie asset |
+| Retty asset | Magpie asset |
 | --- | --- |
 | agy.svg | antigravity-color.svg |
 | openchamber.svg | openchamber.svg |

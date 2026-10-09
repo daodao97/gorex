@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// Import retains the existing GoRex command for compatibility. New projects
+// Import retains the existing Retty command for compatibility. New projects
 // use `mygo push setup`; provider configuration and key storage belong to MyGo.
 func Import(dir, keyFile, keyID, teamID, environment string) error {
 	key, err := os.ReadFile(keyFile)
@@ -14,6 +14,6 @@ func Import(dir, keyFile, keyID, teamID, environment string) error {
 		return errors.New("无法读取 APNs 密钥")
 	}
 	return apns.ImportProvider(dir, apns.ProviderConfig{
-		KeyID: keyID, TeamID: teamID, Topic: "dev.gorex.app", Environment: apns.Environment(environment),
+		KeyID: keyID, TeamID: teamID, Topic: "com.daodao.retty", Environment: apns.Environment(environment),
 	}, key)
 }

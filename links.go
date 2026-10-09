@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"github.com/egoist/mygo"
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 )
 
 var fileURLLocation = regexp.MustCompile(`:([0-9]+)(?::([0-9]+))?$`)
@@ -40,7 +40,7 @@ func localFileHost(host string) bool {
 }
 
 // resolveTerminalLink returns an escaped URL, never a shell command. Relative
-// paths are anchored to the pane, not GoRex's own launch directory.
+// paths are anchored to the pane, not Retty's own launch directory.
 func resolveTerminalLink(link terminal.Link, cwd, home, editor string, remote bool) (string, error) {
 	if link.URL != "" {
 		u, err := url.Parse(link.URL)

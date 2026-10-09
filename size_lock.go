@@ -6,7 +6,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 // followSizeLock shows a session whose size a phone holds at the phone's

@@ -3,7 +3,7 @@ package terminal
 import (
 	"time"
 
-	"gorex/internal/terminal/internal/vt"
+	"retty/internal/terminal/internal/vt"
 )
 
 // SearchState describes a literal, ASCII case-insensitive search of the active

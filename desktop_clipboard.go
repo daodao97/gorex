@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/egoist/mygo"
-	"gorex/internal/rex"
 	"io"
 	"net"
+	"retty/internal/rex"
 	"time"
 )
 

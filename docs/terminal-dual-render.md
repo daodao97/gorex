@@ -39,7 +39,7 @@ DEC mode 2026 的开始/结束标记界定一个同步输出批次，不是 resi
 
 ## 复现
 
-需要 Python 3、已安装的 OpenCode 和项目固定版本的 Ghostty/MyGo。脚本不会连接 GoRex 的真实服务，也不会操作现有 Agent。默认输出至被 Git 忽略的 `.mygo/terminal-dual-render/`，每次使用新目录；只清理自己创建的进程组和临时目录。
+需要 Python 3、已安装的 OpenCode 和项目固定版本的 Ghostty/MyGo。脚本不会连接 Retty 的真实服务，也不会操作现有 Agent。默认输出至被 Git 忽略的 `.mygo/terminal-dual-render/`，每次使用新目录；只清理自己创建的进程组和临时目录。
 
 ```sh
 python3 scripts/experiment-dual-render.py --mode draft
@@ -54,12 +54,12 @@ python3 scripts/experiment-dual-render.py --mode stream-control
 ```sh
 CAPTURE_DIR="$PWD/.mygo/terminal-dual-render/my-run"
 mkdir -p "$CAPTURE_DIR/images"
-GOREX_DUAL_RENDER_CAPTURE="$CAPTURE_DIR" \
+RETTY_DUAL_RENDER_CAPTURE="$CAPTURE_DIR" \
   MYGO_TEST_IMAGES="$CAPTURE_DIR/images" GOWORK=off \
   go test ./internal/terminal -run '^TestDualSizeRedraw' -count=1 -v
 ```
 
-不设置 `GOREX_DUAL_RENDER_CAPTURE` 时，真实 OpenCode 捕获回放跳过；可控 PTY 反例仍运行。原始 ANSI、截图、临时配置不提交。
+不设置 `RETTY_DUAL_RENDER_CAPTURE` 时，真实 OpenCode 捕获回放跳过；可控 PTY 反例仍运行。原始 ANSI、截图、临时配置不提交。
 
 ## 尚缺的能力
 
@@ -71,17 +71,17 @@ GOREX_DUAL_RENDER_CAPTURE="$CAPTURE_DIR" \
 
 单个 PTY 无法确认画面属于哪个尺寸：`TIOCSWINSZ`/`SIGWINCH` 没有应答通道，程序可以在任何时候用旧布局输出完整批次（见上面的可控反例）。逐个程序猜测“重绘完成”只能是启发式。唯一能构造性保证“这些字节按尺寸 S 排版”的方法，是产生字节的 PTY 从未离开过尺寸 S。
 
-因此候选改为：Agent 的任务状态在一个后端进程中，桌面和手机各运行一个前端 TUI，各自拥有一个固定尺寸、永不轮转的 PTY，都由 GoRex 会话服务持有。两端不再共享屏幕字节，而共享任务、消息、审批和进度；尺寸确认问题不再存在。
+因此候选改为：Agent 的任务状态在一个后端进程中，桌面和手机各运行一个前端 TUI，各自拥有一个固定尺寸、永不轮转的 PTY，都由 Retty 会话服务持有。两端不再共享屏幕字节，而共享任务、消息、审批和进度；尺寸确认问题不再存在。
 
 已有的前端/后端分离入口：
 
 | Agent | 后端 | 第二个前端 | 状态 |
 | --- | --- | --- | --- |
 | OpenCode 1.18.35 | `opencode serve`（或 TUI 内置服务） | `opencode attach URL --session ID` | 已用隔离 fixture 验证，见下 |
-| Codex 0.161.0 | 共享 app-server daemon（GoRex 已有 bridge） | `codex resume --remote unix://… THREAD` | 未测试多前端同时连接 |
+| Codex 0.161.0 | 共享 app-server daemon（Retty 已有 bridge） | `codex resume --remote unix://… THREAD` | 未测试多前端同时连接 |
 | Claude Code 2.1.291 | `claude --bg` 后台会话 | `claude attach ID` | 未测试两个 attach 同时存在 |
 
-这需要每个 Agent 一条“如何启动第二个前端”的启动规则（与现有 Codex shim 同类），但不解析 Agent 的私有协议，GoRex 仍只传终端字节。未知程序、普通 shell、vim 等没有后端分离能力，继续使用现有单 PTY 和本地 reflow。
+这需要每个 Agent 一条“如何启动第二个前端”的启动规则（与现有 Codex shim 同类），但不解析 Agent 的私有协议，Retty 仍只传终端字节。未知程序、普通 shell、vim 等没有后端分离能力，继续使用现有单 PTY 和本地 reflow。
 
 ### 实测（2026-10-08）
 
@@ -96,7 +96,7 @@ GOREX_DUAL_RENDER_CAPTURE="$CAPTURE_DIR" \
 python3 scripts/experiment-multi-frontend.py
 CAPTURE_DIR=<打印的 capture 目录>
 mkdir -p "$CAPTURE_DIR/images"
-GOREX_MULTI_FRONTEND_CAPTURE="$CAPTURE_DIR" MYGO_TEST_IMAGES="$CAPTURE_DIR/images" \
+RETTY_MULTI_FRONTEND_CAPTURE="$CAPTURE_DIR" MYGO_TEST_IMAGES="$CAPTURE_DIR/images" \
   GOWORK=off go test ./internal/terminal -run '^TestMultiFrontendCaptureExperiment$' -count=1 -v
 ```
 

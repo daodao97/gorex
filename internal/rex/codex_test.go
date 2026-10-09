@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func TestCodexLauncherPreservesPaneAndExplicitConnections(t *testing.T) {
@@ -31,7 +31,7 @@ func TestCodexLauncherPreservesPaneAndExplicitConnections(t *testing.T) {
 		{"disabled integration", true, []string{"resume", "thread"}, "resume\nthread\n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("GOREX_DIR", t.TempDir())
+			t.Setenv("RETTY_DIR", t.TempDir())
 			bin := filepath.Join(t.TempDir(), "space bin")
 			os.Mkdir(bin, 0o700)
 			helper := filepath.Join(bin, "helper")
@@ -42,9 +42,9 @@ func TestCodexLauncherPreservesPaneAndExplicitConnections(t *testing.T) {
 			if err := os.WriteFile(helper, []byte(bootstrap), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			fake := "#!/bin/sh\nprintf '%s\\n' \"$@\"\nprintf 'pane:%s token:%s shared:%s\\n' \"$GOREX_SESSION\" \"$GOREX_AGENT_TOKEN\" \"${GOREX_AGENT_SERVER_TOKEN-unset}\"\n"
+			fake := "#!/bin/sh\nprintf '%s\\n' \"$@\"\nprintf 'pane:%s token:%s shared:%s\\n' \"$RETTY_SESSION\" \"$RETTY_AGENT_TOKEN\" \"${RETTY_AGENT_SERVER_TOKEN-unset}\"\n"
 			os.WriteFile(filepath.Join(bin, "codex"), []byte(fake), 0o700)
-			env, dir, err := codexEnv([]string{"PATH=" + bin + ":/usr/bin:/bin", "GOREX_SESSION=pane", "GOREX_AGENT_TOKEN=private", "GOREX_AGENT_SERVER_TOKEN=shared", "GOREX_HOOK=" + helper}, tc.name != "disabled integration")
+			env, dir, err := codexEnv([]string{"PATH=" + bin + ":/usr/bin:/bin", "RETTY_SESSION=pane", "RETTY_AGENT_TOKEN=private", "RETTY_AGENT_SERVER_TOKEN=shared", "RETTY_HOOK=" + helper}, tc.name != "disabled integration")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -79,17 +79,17 @@ func TestCodexLauncherSurvivesLoginPathReset(t *testing.T) {
 	if err != nil {
 		t.Skip("zsh unavailable")
 	}
-	t.Setenv("GOREX_DIR", t.TempDir())
+	t.Setenv("RETTY_DIR", t.TempDir())
 	t.Setenv("CODEX_HOME", t.TempDir())
 	if err := agents.SetHooks("codex", true); err != nil {
 		t.Fatal(err)
 	}
 	config := t.TempDir()
 	bin := t.TempDir()
-	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nprintf 'bridge:%s:%s:%s\\n' \"$1\" \"$2\" \"${GOREX_AGENT_SERVER_TOKEN-unset}\"\n"), 0o700)
+	os.WriteFile(filepath.Join(bin, "codex"), []byte("#!/bin/sh\nprintf 'bridge:%s:%s:%s\\n' \"$1\" \"$2\" \"${RETTY_AGENT_SERVER_TOKEN-unset}\"\n"), 0o700)
 	helper := filepath.Join(bin, "helper")
 	os.WriteFile(helper, []byte(fakeCodexBridge), 0o700)
-	os.WriteFile(filepath.Join(config, ".zshrc"), []byte("export PATH='"+bin+":/usr/bin:/bin'\nexport GOREX_HOOK='"+helper+"'\nPROMPT='ready> '\n"), 0o600)
+	os.WriteFile(filepath.Join(config, ".zshrc"), []byte("export PATH='"+bin+":/usr/bin:/bin'\nexport RETTY_HOOK='"+helper+"'\nPROMPT='ready> '\n"), 0o600)
 	s, err := newSessionForServer("launcher", CreateOptions{Command: []string{zsh, "-i"}, Dir: config, Env: []string{"ZDOTDIR=" + config}}, "shared")
 	if err != nil {
 		t.Fatal(err)

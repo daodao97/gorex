@@ -3,7 +3,7 @@ package rex
 import (
 	"crypto/sha256"
 	"fmt"
-	"gorex/internal/agents"
+	"retty/internal/agents"
 	"strconv"
 )
 
@@ -21,7 +21,7 @@ func AgentNoticeID(desktop string, s SessionInfo) string {
 		key += "\x00" + strconv.FormatInt(a.Updated.UnixNano(), 10)
 	}
 	sum := sha256.Sum256([]byte(key))
-	return fmt.Sprintf("gorex-agent-%x", sum[:16])
+	return fmt.Sprintf("retty-agent-%x", sum[:16])
 }
 
 // AgentNoticeTransition recognizes actual lifecycle changes. It does not infer

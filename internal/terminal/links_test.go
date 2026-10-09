@@ -135,3 +135,69 @@ func TestURLAt(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandClickTUIPaintedFileContinuations(t *testing.T) {
+	loadLib(t)
+	var opened []Link
+	term, err := New(Options{Conn: newPipe(), OnOpenLink: func(link Link) { opened = append(opened, link) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer term.Close()
+	tt := ui.NewTester(func(c *ui.Context) { View(c, term).Fill().AutoFocus() }, 960, 240)
+	v := term.v
+	click := func(col, row int) Link {
+		t.Helper()
+		x := float32(v.ox+col*v.cellW+v.cellW/2) / v.scale
+		y := float32(v.oy+row*v.cellH+v.cellH/2) / v.scale
+		opened = nil
+		tt.ClickAtWith(ui.Cmd, x, y)
+		if len(opened) != 1 {
+			t.Fatalf("click (%d,%d): opened %v", col, row, opened)
+		}
+		return opened[0]
+	}
+	for _, prefix := range []string{"file:///tmp/", "/tmp/", "./images/"} {
+		t.Run(prefix, func(t *testing.T) {
+			first := prefix + strings.Repeat("a", v.cols-len(prefix)-len("Saved to: ")-len("/exec-")-3) + "/exec-"
+			last := "0e64fee3-e2b3-4f2a-99c7-7619d408d347.png"
+			term.Feed([]byte("\x1b[H\x1b[2JSaved to: " + first + "\r\n  " + last))
+			tt.Frame()
+			want := Link{Path: first + last}
+			if strings.HasPrefix(prefix, "file://") {
+				want = Link{URL: first + last}
+			}
+			for _, cell := range [][2]int{{12, 0}, {v.cols - 5, 0}, {4, 1}, {len(last), 1}} {
+				if got := click(cell[0], cell[1]); got != want {
+					t.Fatalf("got %+v, want %+v", got, want)
+				}
+			}
+		})
+	}
+	// A TUI can use cursor-addressed painting, without any wrap flag/newline.
+	first := "/tmp/" + strings.Repeat("a", v.cols-8) + "-"
+	middle := strings.Repeat("b", v.cols-4) + "-"
+	term.Feed([]byte("\x1b[H\x1b[2J" + first + "\x1b[2;1H" + middle + "\x1b[3;1Hfinal.png:12:3"))
+	tt.Frame()
+	want := Link{Path: first + middle + "final.png", Line: 12, Column: 3}
+	for row := range 3 {
+		if got := click(4, row); got != want {
+			t.Fatalf("three-row path = %+v, want %+v", got, want)
+		}
+	}
+	for _, tc := range []struct {
+		first, second string
+		want          Link
+	}{
+		{"https://example.com/" + strings.Repeat("a", v.cols-23), "other.png", Link{Path: "other.png"}},
+		{"/tmp/" + strings.Repeat("a", v.cols-14) + ".png", "other.png", Link{Path: "other.png"}},
+		{first, "/tmp/other.png", Link{Path: "/tmp/other.png"}},
+		{"file:///tmp/short-", "other.png", Link{Path: "other.png"}},
+	} {
+		term.Feed([]byte("\x1b[H\x1b[2J" + tc.first + "\r\n" + tc.second))
+		tt.Frame()
+		if got := click(4, 1); got != tc.want {
+			t.Fatalf("unrelated rows %q/%q became %+v", tc.first, tc.second, got)
+		}
+	}
+}

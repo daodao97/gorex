@@ -1,476 +1,203 @@
-# GoRex
+# Retty
 
-A replica of [Superlogical's Rex](https://www.superlogical.com/updates/public-testing-beginning)
-terminal, written in Go with [MyGo](https://mygo.egoist.dev)'s native UI and its
-terminal plugin (Ghostty's libghostty-vt). Desktop builds use no webview or cgo;
-iOS uses the UIKit host in the pinned MyGo fork.
+**Reconnect TTY. Relay TTY.**
 
-![GoRex](docs/screenshot.png)
+换个屏幕，接着工作。
 
-## What it does
+Retty 是连接 **Mac、iPhone 和无桌面服务器** 的原生终端工作台。终端会话留在运行它的电脑或服务器上，你可以从桌面打开，在手机上继续，再回到桌面。退出界面或断开连接，会话里的 shell 和程序仍然运行。
 
-- **Tabs and split panes.** A compact tab bar leaves the rest of the window
-  to edge-to-edge terminals. Split, zoom and close panes with menus, the
-  command palette or keyboard shortcuts. Drag the separators to resize
-  panes (double-click resets a split to half).
-- **Persistent sessions.** Shells run in a session server, a background
-  process of the same binary (`GoRex -server`). Quit GoRex and everything
-  keeps running; open it again and every tab, split and pane comes back as
-  it was, programs still running. The server keeps each session's screen in
-  a headless libghostty-vt emulator and sends a snapshot on attach, so
-  full-screen programs (lazygit, vim, htop…) come back exactly.
-  Normal quit leaves that server running. Protocol versions 4 and 5 are
-  compatible, so upgrading or reopening the UI reuses those live sessions.
-  Older servers use observed state/input changes for Agent completion alerts;
-  version 5's completion counter also covers turns completed between polls.
-- **Program activity.** The server watches each terminal's foreground
-  process (`tcgetpgrp`, `sysctl`, `proc_pidinfo`): tabs name the
-  program (`Node`, `Git Changes` for lazygit, `Codex`, `SSH host`…) and its
-  working directory, a green dot shows a program printing, and an orange dot
-  marks a pane whose program finished or rang the bell out of sight. A long
-  command finishing in a background tab/unfocused pane or window posts a
-  notification; clicking it returns to that pane.
-- **Tabs** reorder by dragging, rename by double-click, and have a context
-  menu. Each tab shows its keyboard shortcut and the focused Agent's icon.
-- **Right-click splits.** Choose `Split Pane Vertically` for side-by-side
-  panes or `Split Pane Horizontally` for stacked panes. The new session
-  inherits the right-clicked pane's working directory and receives focus.
-- **Agent recognition:** tab titles and icons follow Codex, Claude Code,
-  Gemini CLI, Cursor Agent, OpenCode, Copilot, Aider, Amp, Pi, Oh My Pi,
-  Goose, Droid, Grok, Qwen Code, Kimi Code, Crush, CodeBuddy, Qoder CLI,
-  Qoder CN CLI and TraeCode. Native executables and common Node/Python/npm
-  launchers are recognized. Custom tab names remain intact; exiting an Agent
-  restores the shell title and removes the Agent icon.
-  Recognition also covers 17 additional Magpie terminal clients, including
-  Antigravity CLI, MiMo Code, OmO, DeepSeek Harness, Hermes Agent, Cline and
-  AtomCode, for 37 in total. See the [full catalog and Magpie comparison](docs/agent-support.md).
-- **Agent status and input reminders:** Claude Code, Codex, Gemini CLI and Qwen Code hooks
-  report ready, running, waiting for authorization/answers, completed and
-  failed states. Waiting panes take priority in a split tab; click its status
-  marker to focus that pane. A new waiting period posts one desktop notification
-  unless you are already viewing its pane. Clicking the notification selects
-  the correct tab and split, reveals it if another pane was zoomed, and restores
-  keyboard focus. Status stays in the session server across window reconnects.
-  Completed/failed Agent turns also notify in background tabs or unfocused panes,
-  even while the app is in front. Each completed turn notifies at most once;
-  already viewed or historical completed turns are not replayed on tab changes
-  or window reconnects. Settings → Agent separately controls completion/failure
-  and waiting-input notifications; both are enabled by default.
-- **Command palette** (⇧⌘P): every command, and every pane
-  to jump to, fuzzy-matched.
-- **Find in terminal** (⌘F): search the current pane's screen and scrollback,
-  with highlighted matches and a result count. Enter / ⌘G moves toward older
-  output, Shift-Enter / ⇧⌘G toward newer output, wrapping at either end.
-  Escape closes the bar and returns focus to the terminal. Searches are
-  literal and ignore ASCII letter case; Unicode text is matched exactly.
-- **Copy on selection:** releasing a drag selection, double-clicking a word,
-  or triple-clicking a line copies it automatically. Empty selections leave
-  the clipboard intact; ⌘C and the Copy menu continue to work.
-  Settings → Terminal → Copy content chooses visible text (the default,
-  omitting concealed characters) or raw terminal text. Both keep selected
-  list numbers and literal code; switching applies to existing panes without
-  restarting sessions. Raw text cannot restore Markdown absent from the terminal.
-  In recognized Agent panes, dragging uses the terminal's selection so list
-  markers stay selectable even when the Agent enables mouse reporting. Plain
-  clicks and scrolling still reach the Agent; hold Option to let it handle a
-  drag, or Shift to force terminal selection in other mouse-aware programs.
-- **Command-click links and file paths:** hold ⌘ for a hand cursor and underline,
-  then click a URL, OSC 8 link, or printed file reference. Relative paths use
-  the pane's current working directory; absolute paths, `~/`, quoted paths with
-  spaces, `file:line:column`, `file(line,column)` and `file#LlineCcolumn` work too.
-  Soft-wrapped visible links and scrollback are supported. Settings → Terminal
-  selects Auto, VS Code, Cursor or the system default app. Auto prefers installed
-  VS Code, then Cursor; those editors support line/column navigation through their
-  file URL handlers ([VS Code reference](https://code.visualstudio.com/docs/configure/command-line)).
-  Directories open in Finder. Missing files show an error; remote SSH/Mosh file
-  paths are not opened locally. Command-click also works while a program reports
-  mouse events and leaves the clipboard intact. Relative paths in older output
-  use the current directory, rather than a historical command directory.
-- **Settings** (⌘, or GoRex ▸ Settings): the full-window settings page has
-  Appearance, Terminal, Agent, Connections and About sections, search across sections,
-  a modified-only filter, and per-setting reset controls. Escape returns focus
-  to your terminal or its open search field.
-- **Compact desktop layout**: a thin, flat tab bar with shortcut numbers,
-  no host or pane headers, and terminals extending to the window edges.
-  Splits, tab dragging and renaming, search and keyboard shortcuts still work.
-- Light and dark appearances, with iTerm2-inspired charcoal chrome and a
-  near-black terminal in dark mode. Change the theme in Settings or View ▸
-  Appearance, including following the system. Your choice is remembered.
-  Text size (⌘+ ⌘− ⌘0), JetBrains Mono embedded.
-  Light mode uses a darker ANSI palette and adjusts low-contrast terminal
-  text against its cell background, including 256-color, RGB and faint Agent
-  output. Text adjustment only affects rendering; copied text, concealed
-  text and block artwork retain their existing behavior.
-  All panes additionally adapt neutral RGB/256-color panels
-  cached by programs such as Codex across appearance changes. Their text
-  stays readable in either theme without restarting the program; colored and
-  standard ANSI backgrounds retain their program-supplied colors.
+它适合日常命令行、远程开发，以及 Codex、Claude Code、OpenCode 等终端 Agent。Retty 用 Go 编写，基于 [MyGo](https://github.com/daodao97/mygo) 的原生 UI 和 Ghostty 的 libghostty-vt；桌面界面不使用 WebView，iOS 使用 UIKit 宿主。
 
-## Connect another desktop
+![Retty 暗色桌面：标签页和左右分屏](docs/images/desktop-workspace-dark.jpg)
 
-In Settings → **连接**, paste a `gorex://connect` link under **连接其他桌面**.
-Choose an existing session or create one with an optional remote working directory.
-The arrow beside **＋** selects a computer; **＋**, ⌘T and splits inherit the
-current tab's computer and directory. Remote tabs show the computer's name.
-Connections reuse the mobile client's handshake, health checks and recovery.
-Closing a remote tab or disconnecting preserves its sessions. Reopening the app
-restores remote tabs and splits. The active remote pane takes the session's size
-at its normal font size, using the same ownership mechanism as the phone.
-Switching tabs or leaving the window detaches that pane and releases its size.
-If another device takes the session, the previous remote view detaches without
-closing its tab or ending the task; focusing or clicking it reconnects the same
-session. Polling never reclaims ownership automatically.
+*桌面工作区：紧凑标签栏、左右分屏和独立终端。本文配图使用暗色模式及隔离的演示会话，终端内容为功能示例。手机配图来自 iPhone 16 模拟器中的实际 iOS 应用。*
 
-## iPhone
+## 一个会话，多个入口
 
-Open desktop Settings → **连接** → **显示二维码** to enable a Tailcat connection.
-The title-bar phone icon appears only while a phone is connected; click it
-to view connection details and the QR code. On iPhone, tap **扫码连接桌面** and scan it. The phone
-lists the desktop's sessions; tap one to attach or the top-right **＋** to start the
-default shell in a desktop directory. The terminal follows the system keyboard, including Chinese nine-key input.
-If a connection fails, the message identifies the unfinished stage. Tap
-**连接诊断 → 复制诊断** to share the last six connection attempts, including
-stage timings, timeout budgets, relay events, protocol versions and safe error
-codes. Reports remain available on the connection screen and in **显示与提醒**
-after a retry succeeds, and are saved in the app's Keychain namespace across
-launches. They contain no pairing links, keys, device tokens or session content.
-`dns_not_found`, `tls_certificate_invalid` and `connection_refused` identify
-specific failures; `deadline_exceeded` alone does not establish whether the
-desktop or relay was unavailable. System network preparation on iOS can reuse
-a cached result, so completing that stage is not a fresh relay reachability check.
-A fixed accessory row provides Esc, Ctrl, Option, Cmd, Tab, **更多** and **收起**.
-Tap a modifier for the next key; hold it to lock, then tap again to unlock.
-Modifiers combine and request the system alphabet keyboard. Switching waits
-for an active IME candidate to finish. **更多** expands Shift, directional keys,
-paste and common symbols while keeping the keyboard open. Cmd+C/V/A use local
-terminal copy, paste and select-all; other combinations follow the session's
-keyboard protocol. Hiding the keyboard, backgrounding or reconnecting clears
-held modifiers. Copy an image in Photos or another iPhone app, then choose
-**更多 → 粘贴** in the terminal. The paired desktop receives the PNG over Tailcat,
-copies it to its system clipboard and sends Ctrl+V to that session, using the
-desktop Agent's existing image paste. System paste commands use the same flow;
-text still uses bracketed paste. Images are limited to 32 MB / 32 million pixels.
-Leaving the session or backgrounding cancels an unfinished transfer; uncertain
-failures are never retried automatically. Reading hides the accessory; tap the header keyboard icon to
-resume input. Long-press to select text, then use the nearby copy/select-all menu.
-Leaving a terminal detaches it; desktop sessions continue running. Backgrounding
-stops polling and input while retaining the idle encrypted tunnel. Returning
-first validates the existing socket, then reopens only the control channel on
-that tunnel if needed, before falling back to a fresh connection. Desktop UI
-presence expires after 20 seconds without polling; authenticated control sockets
-remain reusable for up to 10 idle minutes. iOS may suspend or terminate the app,
-so this is not an unrestricted background execution grant. Foreground
-connection checks have a two-second deadline and cached-tunnel recovery a
-four-second total deadline; interrupted connections recover
-immediately, with failed attempts retried at intervals capped at five seconds.
-Recovery keeps the terminal page and allows reading/selection while input is
-paused. Offline keystrokes are discarded, never replayed. On desktops supporting
-screen frames, the full replacement snapshot arrives before the visible screen
-changes; retained history keeps its reading position as new output is appended.
-Retries pause while iOS is in the background. Swipe right from the
-left edge to return from a terminal or new-session form to the session list,
-or from the list to the connection screen. Cancelling the swipe keeps the
-current page, selection and keyboard. Recent desktops
-appear below the scan button for one-tap reconnection; their capabilities
-are stored in the device Keychain. Each desktop keeps only its newest
-connection record, even after generating a new QR code.
-Recent connections show **在线**, **不可达**, or **检查中**. While the connection
-screen is in the foreground, saved links are checked every 30 seconds with a
-short handshake. These checks do not attach to sessions or register a connected
-phone. Availability describes the saved GoRex link, rather than the computer's
-power state.
-The desktop title bar uses a muted green phone icon while connected; the pairing panel includes
-device names, OS and connection times. Finger swipes scroll terminal history.
-Long-press a word to select it, then drag to expand the selection; **复制**
-copies the selected text. Long presses do not open the keyboard,
-and the cursor keeps blinking while the keyboard is hidden. The phone
-decodes ANSI at the desktop's original grid size, then reflows the primary
-screen into its own columns and rows at a readable font size. Keyboard and
-orientation changes adjust only the phone's view. Tap the terminal to open
-the keyboard. Full-screen programs still generate one layout for a shared
-PTY; decoding and local reflow do not provide independent application layouts.
+| 入口 | 可以做什么 |
+| --- | --- |
+| **macOS 桌面** | 本地终端、标签页、分屏、搜索；连接另一台 Mac 或服务器，在同一工作区管理本地与远程会话。 |
+| **iPhone** | 扫码连接、查看和新建会话、终端输入与选择复制、自动重连；离开电脑后继续操作。 |
+| **服务器 CLI** | 在没有图形界面的 Linux/macOS 主机上常驻运行，为桌面和手机提供终端会话。 |
 
-**按手机尺寸显示** (in the sessions page's **显示与提醒** settings, on by default, needs a desktop
-server of protocol version 6) gives an opened session's PTY to the phone
-instead: full-screen programs such as OpenCode redraw for the phone, as
-they do when a desktop pane is resized. One PTY has one size, so the
-desktop pane then shows the session at the phone's size, with a bar naming
-the phone, and ignores its own resizes. Returning to the list, switching
-sessions, entering the background or disconnecting releases the lock and
-restores the desktop pane's size. Returning to the active phone session takes
-the size again. **解锁** on the desktop bar instead makes the phone reflow
-the desktop's screen until the session is opened again.
+运行位置不会因为换设备而改变：连接服务器后，命令在服务器执行，工作目录和已安装的 Agent 也来自服务器。手机新建的会话会同步到该主机的桌面工作区；再次回到桌面，可以继续使用。
 
-The QR code contains the Tailcat capability needed to access every session
-on that desktop. Keep it private. The desktop saves its identity and relay in
-a private `remote/identity.json` file in its app data directory. Normal app
-exit disconnects phones; reopening the desktop automatically restores the same
-connection code, so recent connections remain usable without scanning again.
-**停止连接** deletes that identity and disconnects phones; a newly enabled
-connection produces a new code. No Tailscale account
-or separately installed VPN is needed. Both devices need internet access.
+Retty 使用 Tailcat 加密连接。连接双方需要网络和可访问的中继，不需要 Tailscale 账号或单独安装 VPN，也无需为终端服务开放公网入站端口。
 
-### Build iOS
+## 桌面：保持工作区，也保持任务
 
-The module pins the iOS-capable [MyGo fork](https://github.com/daodao97/mygo).
-For local framework development, keep it beside this repository and run
-`go work init . ../mygo`; the workspace files remain local. On an Apple Silicon
-Mac with Xcode and an iOS signing team, build with:
+标签页支持拖动排序、双击改名；窗格支持水平/垂直分屏、拖动分隔线、聚焦和放大。普通退出后再打开，Retty 恢复标签页、分屏和仍在运行的会话。
+
+- **终端搜索**：搜索当前屏幕及历史输出，显示匹配位置和数量。
+- **选择复制**：拖选结束自动复制；可选择可见文本或原始终端文本。拖到上下边缘可滚动扩展选择，兼顾启用鼠标报告的终端程序。
+- **打开链接与文件**：按住 ⌘ 点击 URL 或文件路径，文件可交给 VS Code、Cursor 或系统默认应用；支持行号、列号。
+- **外观与字号**：浅色、暗色或跟随系统，内置 JetBrains Mono；字号可以调整，终端配色随外观切换。
+- **命令面板**：搜索命令或跳转到具体窗格。设置页集中管理外观、终端、Agent 和连接。
+
+常用快捷键：
+
+| 操作 | macOS 快捷键 |
+| --- | --- |
+| 新建标签页 | ⌘T |
+| 搜索终端 | ⌘F |
+| 命令面板 | ⇧⌘P |
+| 设置 | ⌘, |
+| 放大 / 缩小 / 重置文字 | ⌘+ / ⌘− / ⌘0 |
+
+### 连接另一台电脑
+
+![Retty 暗色连接设置：连接此电脑或添加远程桌面](docs/images/desktop-connections-dark.jpg)
+
+在对方 Retty 的 **设置 → 连接 → 显示二维码** 中取得连接码。在本机 **设置 → 连接 → 连接其他桌面** 粘贴 `retty://connect?...`，然后打开已有会话或指定远程目录新建会话。
+
+标签栏 **＋** 旁的箭头用于选择电脑。新建标签页、⌘T 和分屏沿用当前标签页所属电脑及目录；远程标签页显示主机名称。关闭远程标签页或断开连接会保留对方的会话。
+
+## iPhone：从列表进入同一个终端
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/ios-sessions-dark.png" width="260" alt="iOS 暗色会话列表" /><br /><sub>会话列表</sub></td>
+    <td align="center"><img src="docs/images/ios-terminal-dark.png" width="260" alt="iOS 暗色终端与扩展键盘" /><br /><sub>终端输入</sub></td>
+    <td align="center"><img src="docs/images/ios-settings-dark.png" width="260" alt="iOS 暗色显示与提醒设置" /><br /><sub>显示与提醒</sub></td>
+  </tr>
+</table>
+
+在桌面开启连接后，用手机首页的扫码按钮扫描二维码，也可以打开 `retty://connect` 链接。最近连接支持一键重连，并显示可达状态；连接记录保存在设备 Keychain。清理最近连接时可以勾选部分记录。
+
+会话列表展示标题、程序图标和工作目录。右上角 **＋** 新建终端；每行的 **…** 或长按打开会话设置，可以设置手机显示名称、置顶或结束会话。需要输入的 Agent 会话优先，其次是置顶会话，其余保持服务返回顺序；普通等待输入和已完成状态不占用列表上的状态文案。
+
+### 输入、阅读与重连
+
+- 使用系统键盘，支持中文拼音九宫格和输入法候选。
+- 扩展按键提供 Esc、Ctrl、Option、Cmd、Tab、方向键、粘贴等。修饰键支持组合，长按可锁定；发送换行后收起键盘。
+- 轻点终端进入输入；滑动阅读历史，长按选择文本并复制。返回会话列表或切到后台，不会结束终端任务。
+- 网络中断时保留终端页面和阅读位置，自动尝试恢复连接。恢复期间暂停输入，离线按键不会在重连后补发。
+- 回到前台优先复用已有连接，必要时重新建立；连接失败时可查看阶段诊断和复制诊断报告。
+- 从 iPhone 剪贴板粘贴图片到具备桌面剪贴板的 Mac 会话，再交给 Agent 的图片粘贴能力。无图形界面的服务器暂不支持图片粘贴。
+
+### 小屏幕如何适配
+
+**按手机尺寸显示默认开启**，在会话列表右上角的 **显示与提醒** 中调整。
+
+打开会话时，手机接管该会话的终端尺寸，OpenCode、Claude Code 等全屏程序会按手机宽高重新绘制。桌面上的对应窗格显示手机尺寸和占用设备提示，避免两个窗口不断互相改尺寸。
+
+返回列表、切换会话、进入后台或断开连接，会释放接管并恢复桌面尺寸；桌面也可以手动解锁。关闭这项设置时，手机在本地重排已有终端屏幕。
+
+**同一个 PTY 同时只有一个程序布局。** Retty 同步的是同一份输入、输出和任务状态；当前活跃的远程窗格或手机接管尺寸，其余视图让出控制。远程桌面失去活跃状态会释放尺寸；被另一设备接管后，需要重新聚焦或点击才能继续，不会通过轮询反复抢占。这保证全屏终端程序按当前操作端显示，而不是为每个 Agent 实现另一套界面。
+
+## 终端 Agent：识别和通知各有边界
+
+Retty 识别 **37 种终端 Agent** 的标题与图标，包括 Codex、Claude Code、Gemini CLI、OpenCode、Cursor Agent、Copilot、Aider、Amp、Pi、Oh My Pi、Goose、Droid、Qwen Code、Kimi Code、Crush 等。桌面标签页、命令面板和手机会话列表使用同一份程序信息；用户自定义标题保留，Agent 退出后恢复 shell 标题。
+
+标题/图标识别不等于完整生命周期集成。当前已验证的生命周期集成为 **Claude Code、Codex、Gemini CLI、Qwen Code**；其他程序仍可作为普通终端使用。完整目录和图标来源见 [Agent 支持](docs/agent-support.md)。
+
+生命周期集成可展示运行、等待授权或回答、完成、失败等状态：
+
+- **桌面提醒**：目标窗格不在当前活跃视野中时通知；点击提醒回到对应标签页和窗格。等待输入和完成/失败提醒可以分别关闭。
+- **手机后台提醒**：需要 iOS 通知权限、匹配的 APNs 签名配置，以及 Mac 发送端的 APNs provider。独立通知 worker 可在桌面窗口关闭后继续观察会话；桌面正在活跃使用时抑制手机推送。
+- **减少重复提醒**：按任务事件去重；新输入取消过时提醒，重新打开界面不重放历史完成事件。手机前台更新状态，后台通知点击可重连到原会话。
+
+在 **设置 → Agent** 管理支持的集成和桌面通知；在手机的 **显示与提醒** 管理后台提醒。Retty 不代替 Agent 做授权决定，也不会自动安装 Agent 本体。
+
+## 服务器：`retty serve`
+
+下载对应 CLI 压缩包，解压后保留二进制旁的 Ghostty 动态库：
 
 ```sh
-./scripts/build-ios.sh -ios-team YOUR_TEAM_ID -ios-device YOUR_DEVICE_ID
+tar -xzf retty-linux-amd64.tar.gz
+cd retty-linux-amd64
+./retty serve
 ```
 
-The script downloads Zig 0.16.0 and the pinned Ghostty source into `.mygo/ios`,
-builds libghostty-vt for iOS and embeds it into the Go archive, then invokes
-the fork's MyGo CLI to package and sign the app. Release builds strip local
-symbols after preserving the matching external dSYM and before signing.
-Camera access is requested
-only when opening the scanner. Use `-ios-simulator` for an arm64 simulator
-build; device and simulator builds regenerate the static library object.
+`serve` 启动后台常驻网关并返回。关闭 SSH 不会关闭网关；重复启动复用已有实例。交互终端同时显示 `retty://connect` 链接和二维码，手机可以扫码，桌面可以粘贴连接码。
 
 ```sh
-go test ./...
-GOREX_REMOTE_E2E=1 go test ./internal/remote -run TestTailcatSessionLifecycle -v
-GOREX_MOBILE_RECOVERY_E2E=1 go test . -run TestMobileRecoveryAcrossDesktopBridgeRestart -v
+./retty link       # 显示连接码和二维码
+./retty status     # 查看网关和会话
+./retty stop       # 停止网关，保留终端会话
 ```
 
-The mobile recovery test runs native UI dispatch with offscreen rendering and
-an isolated desktop fixture. It verifies automatic recovery after a bridge
-restart and a long background visit without touching existing sessions.
+Linux/macOS 均提供 amd64、arm64 CLI 包。Linux 需要 glibc、系统 CA 证书和可用的 PTY；当前不提供 Alpine/musl 包。服务器上的 shell、工具和 Agent 使用服务器自身环境。需要开机启动或异常退出后自动重启时，用 systemd 用户服务运行 `serve --foreground`。
+
+安装、systemd 配置、升级流程和运行要求见 [CLI 使用说明](docs/cli.md)。
+
+## 安装与构建
+
+| 平台 | 当前交付方式 |
+| --- | --- |
+| macOS 13+ | Universal DMG，包含 Apple Silicon 和 Intel 架构。 |
+| iOS 15+ | 从源码构建设备包并签名安装；Bundle ID 为 `com.daodao.retty`。 |
+| Linux / macOS 服务器 | CLI 压缩包，包含 `retty`、Ghostty 动态库及说明。 |
+
+仓库的 GitHub Actions 提供 **Build macOS DMG** 和 **Build CLI** 工作流，在推送 `main`、`v*` 标签或手动运行时构建。成功运行的 Artifacts 分别为 `Retty-macos-universal-dmg` 和 `Retty-cli-*`，保留 14 天；工作流不自动创建 GitHub Release。macOS 当前使用 ad hoc 签名，尚未做 Developer ID 公证。
+
+从源码构建需要 **Go 1.27.1+**。MyGo 及其 CLI 由 `go.mod` 固定到支持 iOS 的 fork；正式构建使用固定依赖：
 
 ```sh
-IOS_TEAM=YOUR_TEAM_ID IOS_DEVICE=YOUR_DEVICE_UDID ./scripts/test-ios.sh
-IOS_TEST_FLOW=background IOS_TEAM=YOUR_TEAM_ID IOS_DEVICE=YOUR_DEVICE_UDID ./scripts/test-ios.sh
-```
+# macOS Universal 应用及 DMG
+GOWORK=off go tool mygo build -platform darwin/universal .
 
-`tests/ios` contains a real-device XCTest flow for scanner presentation,
-existing/new sessions, keyboard actions, nine-key candidate preservation,
-selection/paste, rotation, background restoration and Keychain reconnection.
-The background flow verifies a 45-second Home-screen visit reuses the same
-control socket, then drops only control and checks recovery into the same
-desktop session without changing its geometry.
-Install English (US) and Simplified Chinese Pinyin nine-key keyboards on the test
-device. The flow uses a separate Keychain namespace so its
-temporary desktop never replaces everyday recent connections. Its private `Fixture.swift` is generated from the
-isolated transport test's `GOREX_IOS_FIXTURE` JSON and is never committed.
-
-Mobile connections automatically retry after transport loss (1–16 second backoff),
-keeping the terminal view and reading position. Input is disabled during retries
-and is never replayed. Cancel stops retries; returning from the background restores
-the same session. Mobile viewing does not resize the desktop PTY.
-
-Long-press a mobile session to pin it or set a mobile display name. Preferences
-are stored in Keychain per desktop identity and session, without changing desktop
-titles. Sessions waiting for Agent permission/answers appear first, followed by
-pinned sessions. Supported lifecycle integrations show running/waiting/completed/failed
-states; reminders can open the corresponding session. Notifications require iOS
-permission. With APNs configured, a separate desktop notification worker observes
-the existing session server and sends waiting/completed/failed reminders while iOS
-is suspended. It keeps running when the desktop window closes. A focused desktop
-window handles reminders locally and suppresses phone pushes; switching away does
-not replay those reminders. On the phone, foreground events update session status quietly without floating
-reminders or system banners; APNs handles background system notifications. Persisted event receipts
-suppress duplicate pushes across app/worker restarts, new task input cancels stale reminders, and notification
-taps reconnect to the original desktop and pane, including a cold launch. The
-mobile session list includes a background-reminder switch.
-
-The project enables APNs with `ios.pushNotifications: true` in `mygo.json`.
-Enable Push Notifications for the `dev.gorex.app` App ID in Apple Developer, use
-an appropriate provisioning profile, and create a topic-specific APNs key. Import
-it once from the project directory on the desktop sender:
-
-```sh
-go tool mygo push setup /private/path/AuthKey_KEYID.p8
-go tool mygo push status # verify local provider configuration and key loading
-GoRex -push-status      # worker device/delivery count and last error
-```
-
-MyGo infers Bundle ID, Team ID and Key ID; configuration loading, credential
-storage, JWT/HTTP2 reuse and key reload live in its `push/apns` package. GoRex
-owns only subscriptions and task policies. New projects can use
-`mygo.App.PushProvider()` directly; standalone senders use
-`apns.OpenProvider(dataDir)`. See the fork's
-[APNs onboarding guide](https://github.com/daodao97/mygo/blob/main/docs/push.md).
-The older `GoRex -push-import KEYFILE KEYID TEAMID ENVIRONMENT` command remains
-available for compatibility, including existing installed versions.
-
-On macOS the private key is stored in the login Keychain. Provider metadata and
-device subscriptions live in private files in the GoRex application-support
-directory. The mobile app sends its refreshed token through the existing encrypted
-connection; provider keys are never embedded in the mobile app. Only short task
-status, desktop name and project basename appear in a push, without terminal output
-or prompts. Use `mygo push setup -environment production KEYFILE` and the matching key/profile for a
-distribution build; development device builds use `sandbox`. APNs accepts delivery
-requests independently of the phone connection, but notification taps still need
-the desktop's Tailcat link to be available.
-
-The Gemini and Qwen hook mappings and timeout units follow their official references:
-[Gemini CLI hooks](https://geminicli.com/docs/hooks/reference/) and
-[Qwen Code hooks](https://qwenlm.github.io/qwen-code-docs/en/users/features/hooks/).
-
-## Shortcuts
-
-| | |
-|---|---|
-| ⌘T | New tab |
-| ⌘D / ⇧⌘D | Split right / down |
-| ⌘W / ⇧⌘W | Close pane / tab |
-| ⇧⌘↩ | Zoom the pane |
-| ⌥⌘ arrows | Focus the pane in that direction |
-| ⌃⌘ arrows | Move the nearest divider |
-| ⌃⌘= | Equalize panes |
-| ⌘1…⌘9, ⇧⌘[ ⇧⌘] | Switch tabs |
-| ⌃Tab / ⌃⇧Tab | Next / previous tab (wraps around) |
-| ⇧⌘R | Rename tab |
-| ⇧⌘P, ⌘P | Command palette |
-| ⌘, | Settings |
-| ⌘F | Find in the current pane |
-| ⌘G / ⇧⌘G | Next / previous search match |
-| ⌘K | Clear |
-| ⌥⌘Q | Quit and end all sessions |
-
-## Headless server (CLI)
-
-Linux and macOS servers can host sessions without installing the desktop UI.
-Download the matching CLI archive, keep its Ghostty VT library beside the binary,
-and run `./gorex serve` to start a resident background gateway. The command
-returns while the gateway stays available after closing the terminal or SSH.
-Paste the printed `gorex://connect?...` link into the
-desktop application's connection settings to open or create server terminals.
-Phones use the same link and session protocol.
-
-`gorex stop` stops the gateway and preserves its background session server and shells;
-starting it again reuses the saved identity and sessions. `gorex link` prints the
-saved link, and `gorex status` lists local sessions without starting a service.
-CLI state uses a separate `GoRexServer` user config directory by default.
-Use `gorex serve --foreground` with systemd for boot startup and supervision.
-
-```sh
-GOWORK=off ./scripts/build-cli.sh --platform linux/amd64
+# 四种服务器 CLI 包
 GOWORK=off ./scripts/build-cli.sh --platform all
+
+# iOS 真机：Xcode + 自己团队的证书、App ID 和设备 profile
+GOWORK=off ./scripts/build-ios.sh \
+  -ios-team YOUR_TEAM_ID -ios-device YOUR_DEVICE_UDID
 ```
 
-The **Build CLI** GitHub Actions workflow produces Linux/macOS amd64/arm64
-archives, including the pinned VT library and SHA-256 checksums. See
-[CLI installation and systemd setup](docs/cli.md).
-
-## Enable Agent status
-
-Open Settings (⌘,) → Agent and enable the integrations for Claude Code, Codex, Gemini CLI or Qwen Code.
-This merges GoRex's handlers into `~/.claude/settings.json` and
-`~/.codex/hooks.json`, `~/.gemini/settings.json` and `~/.qwen/settings.json`, respecting `CLAUDE_CONFIG_DIR` and `CODEX_HOME` overrides.
-Existing settings and hooks are preserved; the first original file is backed
-up as `<file>.gorex-backup`. Remove integration in the same page to remove only
-GoRex's handlers. The hooks are silent no-ops in other terminal apps.
-
-Desktop reminders and APNs notifications describe the task instead of showing
-the project path. After an authenticated user-prompt hook succeeds, GoRex keeps
-the latest request excerpt (up to 160 characters) per Agent conversation in its
-private application data directory; short continuation replies keep the previous
-task description. Full prompts, transcripts and tool arguments
-are not saved. If no excerpt is available, notifications use the terminal's task
-title or a status-specific message. This also works with existing session daemons.
-
-Gemini CLI and Qwen Code require the protocol-5 session server. Updating the app
-does not replace a running older service. After existing tasks have finished,
-use Shell → Quit and End All Sessions and reopen the updated app to start its
-new service. This ends the existing terminal sessions.
-
-Start a new Agent session after installation. Claude Code runs normally.
-For Codex, run `codex` normally and review/trust the added handlers in `/hooks`.
-New terminals prepend a pane-local Codex launcher. Interactive tasks (including
-resume/fork) connect to the existing shared daemon through a private local relay.
-Desktop zsh, bash, sh, dash, ksh and fish terminals clear inherited color switches
-before loading the user's login configuration, including when the session service
-is retained across an app update. Already-running shells and Agent CLIs keep their
-existing environment; reopen those CLI sessions after their tasks finish to apply
-the new color defaults.
-GoRex observes its structured turn and waiting events, associating the thread IDs
-returned to that CLI with the owning pane. Codex completion badges and reminders
-require a final `turn/completed` event or matching idle-thread metadata. A native
-`Stop` hook alone cannot announce success, since another hook can continue the task;
-completed history also cannot override an active thread. This requires the updated
-session service and a newly started CLI relay after existing tasks finish.
-The daemon can already be running outside
-GoRex: no special startup flags, daemon restart or inherited hook environment are
-required. Separate panes in the same directory retain independent status. The relay
-preserves the pane's working directory and forwards messages and approval responses
-unchanged. It stores no prompt text, credentials or transcripts.
-Explicit remote connections and utility commands keep their original behavior;
-if the local relay is unavailable, normal CLI startup remains available. Existing
-running tasks are not restarted. Legacy shared-daemon hooks that already carry GoRex's
-environment retain conversation-based routing; ambiguous starts are skipped.
-Remote daemons, disabled/untrusted hooks without a local relay
-and other Agent CLIs retain ordinary activity indicators;
-they do not provide input-state reminders. No trust settings or approval decisions
-are changed by GoRex. Desktop reminders are enabled by default and can be disabled
-in Settings → Agent; macOS must allow notifications for GoRex.
-
-Hook status uses actual lifecycle events, not terminal-output heuristics.
-Claude permissions, `AskUserQuestion`/MCP elicitation and Codex permission requests
-are supported. Codex `request_user_input` is recognized when that tool passes
-through Codex's local hook path; specialized tool paths that skip hooks cannot
-provide a waiting signal. Unrelated tool completions cannot clear another tool's
-pending question, and delayed events from previous conversations/turns are ignored.
-
-## Develop and build
-
-See [开发、构建与设备测试命令](docs/development.md) for production flags,
-session-preserving desktop updates, iOS signing/installation and isolated tests.
-
-GoRex needs [Go](https://go.dev/dl/) 1.27+ and MyGo 0.2.11, whose CLI
-`go.mod` pins as a tool:
+iOS 需要为 `com.daodao.retty` 配置匹配的 App ID 和 provisioning profile；后台任务通知还需要启用 Push Notifications。已有安装后沿用原团队和 profile 覆盖更新。APNs key 只在发送端配置：
 
 ```sh
-GOREX_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev # isolated development
-GOWORK=off go test ./...       # the server, and the view without a window
-GOWORK=off go tool mygo build  # production .app and .dmg
-GOWORK=off go run ./tools/mkicon # redraw resources/icon.png
+GOWORK=off go tool mygo push setup /private/path/AuthKey_KEYID.p8
+GOWORK=off go tool mygo push status
 ```
 
-MyGo and its CLI are pinned to the iOS-capable fork in `go.mod`. Update that
-replacement deliberately and validate both platforms; use `GOWORK=off` to
-check the pinned SDK rather than an ignored local workspace.
+完整的生产构建、签名、APNs 检查、真机测试和保留任务的更新步骤见 [开发说明](docs/development.md)。
 
-The app keeps its state in its data directory: the server's socket and
-log, `layout.json` and `settings.json`, in `~/Library/Application
-Support/GoRex` for the built app and `GoRex Dev` for `mygo dev`'s unless
-`GOREX_DIR` overrides it. Keep that override separate from real sessions.
-Normal production GUI updates attach to a compatible existing server; its
-terminal processes keep running the existing server's code. Service replacement
-ends those processes and must wait until real tasks have finished. Manual
-desktop production builds need `-tags mygo_noinspector` and
-`-ldflags '-X github.com/egoist/mygo.production=1'`; plain `go build` is a
-MyGo development build even when copied into an installed `.app`.
+## 会话、数据与连接码
 
-Slow synchronized redraws and incomplete-update watchdog releases are
-recorded in `render.log` in the same data directory. This contains only
-timestamps, session IDs and durations, never terminal output or input, and
-rotates at 1 MiB with one previous file. The watchdog waits for one second
-without incoming output, so a large active redraw can finish without exposing
-its intermediate clear-screen frame.
+终端由独立会话服务持有，GUI 和连接网关是访问入口。普通关闭界面、退出手机或停止网关不结束任务；显式结束会话、结束会话服务或重启主机会终止其中的程序。更新 GUI 可以复用兼容的在运行服务，已有服务的代码升级应等任务完成后安排。
 
-## Layout
+| 数据 | 默认位置 |
+| --- | --- |
+| macOS 桌面布局、设置、服务状态 | `~/Library/Application Support/Retty` |
+| CLI 服务器状态 | 用户配置目录中的 `RettyServer`，Linux 通常为 `~/.config/RettyServer` |
+| iOS 最近连接、会话偏好 | 应用的 Keychain 命名空间 |
 
-| | |
-|---|---|
-| `main.go` | the app, its window, and `-server` |
-| `state.go` | tabs, the tree of splits, panes, saving and restoring the layout |
-| `view.go`, `tabs.go`, `commands.go` | the interface: tabs, panes, menus and palette |
-| `programs.go` | how programs show: names, glyphs, icon colors |
-| `style.go`, `settings.go` | colors, fonts, terminal themes; appearance and text size |
-| `find.go` | each pane's search bar, shortcuts and focus handling |
-| `preferences.go` | settings page and its focus handling |
-| `compact.go` | compact title bar and tab labels |
-| `agent_status.go`, `internal/agents` | agent recognition, lifecycle states, notifications and hook installation |
-| `internal/rex` | the session server and its client: PTYs, foreground processes, headless screens, the socket protocol |
-| `internal/terminal` | MyGo's terminal plugin, locally extended with Ghostty search bindings and match highlighting; provenance in `UPSTREAM.md` |
+`RETTY_DIR` 或 CLI 的 `--data-dir` 可以指定独立目录。Retty 使用新的应用身份、`retty://` 链接和数据目录，不迁移或兼容先前应用的身份与连接码。
 
-Not replicated: Rex's connections to servers on other machines; GoRex's
-server listens on a local socket only.
+二维码和连接码包含访问该主机会话的凭据，应只交给自己的设备。不要将它们放入 README、截图、公开日志或仓库。不要通过删除真实 socket、连接身份或批量结束进程来升级应用。
 
-Icons: [Lucide](https://lucide.dev) (ISC) and [Simple Icons](https://simpleicons.org)
-(CC0). Font: [JetBrains Mono](https://www.jetbrains.com/lp/mono/) (OFL).
-Agent avatars: [tty7](https://github.com/l0ng-ai/tty7) (Apache-2.0); source
-revision and license are included in `assets/agents/` and embedded in the app.
+## 开发
+
+```sh
+# 开发环境使用独立数据目录
+RETTY_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev
+
+# 单元检查
+GOWORK=off go test ./...
+GOWORK=off go vet ./...
+
+# CLI 检查
+GOWORK=off CGO_ENABLED=0 go test -tags retty_cli \
+  ./cmd/retty ./internal/rex ./internal/remote ./internal/terminal/screen
+```
+
+[开发说明](docs/development.md) 包含 SDK 固定规则、隔离测试和升级约束；[终端显示设计](docs/terminal-dual-render.md) 记录多端显示的探索过程，当前行为以本文和实现为准。
+
+| 模块 | 职责 |
+| --- | --- |
+| `main.go`、`state.go`、`view.go` | 桌面入口、布局恢复与标签/窗格 |
+| `mobile*.go` | iOS 连接、会话、键盘、显示与恢复 |
+| `desktop_connections*.go` | 桌面远程主机与会话 |
+| `cmd/retty` | 无图形界面的 CLI 网关 |
+| `internal/rex` | PTY、持久会话、屏幕快照和尺寸接管 |
+| `internal/remote` | Tailcat 加密传输、连接健康检查与恢复 |
+| `internal/agents`、`internal/push` | Agent 生命周期、通知与 APNs worker |
+| `internal/terminal` | 终端渲染、输入、搜索与选择 |
+
+## 致谢
+
+Retty 的桌面工作区受到 [Superlogical Rex](https://www.superlogical.com/updates/public-testing-beginning) 启发，使用 [MyGo](https://github.com/daodao97/mygo)、[Ghostty](https://github.com/ghostty-org/ghostty) 和 [Tailcat](https://github.com/tailscale/tailcat)。
+
+图标来自 Lucide、Simple Icons 及各 Agent 的品牌资源，字体为 JetBrains Mono。终端和素材的来源与许可保留在 [internal/terminal/UPSTREAM.md](internal/terminal/UPSTREAM.md)、[assets/agents/UPSTREAM.md](assets/agents/UPSTREAM.md) 及对应目录。

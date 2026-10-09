@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailcat"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"tailscale.com/tailcfg"
 )
 
@@ -27,7 +27,7 @@ func TestPairingLinkPreservesCapability(t *testing.T) {
 	if got, err = ParseLink(string(addr)); err != nil || got != addr {
 		t.Fatal("raw code rejected")
 	}
-	for _, bad := range []string{"", "https://example.com", "gorex://connect?v=2&address=" + string(addr), "gorex://connect?v=1&address=broken", "gorex://connect?v=1&address=" + string(addr) + "&address=" + string(addr), strings.Repeat("a", 4097)} {
+	for _, bad := range []string{"", "https://example.com", "gorex://connect?v=1&address=" + string(addr), "retty://connect?v=2&address=" + string(addr), "retty://connect?v=1&address=broken", "retty://connect?v=1&address=" + string(addr) + "&address=" + string(addr), strings.Repeat("a", 4097)} {
 		if _, err := ParseLink(bad); err == nil {
 			t.Fatalf("accepted invalid pairing link")
 		}
@@ -55,13 +55,13 @@ func TestHostnameRelayKeepsAuthentication(t *testing.T) {
 }
 
 // This opt-in test also supplies a private desktop fixture for the XCTest run.
-// Its isolated server cannot alter sessions in an installed GoRex app.
+// Its isolated server cannot alter sessions in an installed Retty app.
 func TestTailcatSessionLifecycle(t *testing.T) {
-	if os.Getenv("GOREX_REMOTE_E2E") != "1" {
-		t.Skip("set GOREX_REMOTE_E2E=1 for live Tailcat transport")
+	if os.Getenv("RETTY_REMOTE_E2E") != "1" {
+		t.Skip("set RETTY_REMOTE_E2E=1 for live Tailcat transport")
 	}
 	dir := t.TempDir()
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	serverDone := make(chan error, 1)
 	go func() { serverDone <- rex.Serve() }()
 	deadline := time.Now().Add(10 * time.Second)
@@ -151,7 +151,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	}
 	stream := client.Stream(existing.ID, 48, 20)
 	defer stream.Close()
-	if _, err := stream.Write([]byte("printf '\\nGOREX_PHONE_INPUT_OK\\n'\r")); err != nil {
+	if _, err := stream.Write([]byte("printf '\\nRETTY_PHONE_INPUT_OK\\n'\r")); err != nil {
 		t.Fatal(err)
 	}
 	received := make(chan string, 1)
@@ -161,7 +161,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 		for {
 			n, err := stream.Read(buf)
 			output.Write(buf[:n])
-			if strings.Contains(output.String(), "\r\nGOREX_PHONE_INPUT_OK\r\n") || err != nil {
+			if strings.Contains(output.String(), "\r\nRETTY_PHONE_INPUT_OK\r\n") || err != nil {
 				received <- output.String()
 				return
 			}
@@ -169,7 +169,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	}()
 	select {
 	case output := <-received:
-		if !strings.Contains(output, "\r\nGOREX_PHONE_INPUT_OK\r\n") {
+		if !strings.Contains(output, "\r\nRETTY_PHONE_INPUT_OK\r\n") {
 			t.Fatal("remote input never reached shell")
 		}
 	case <-time.After(20 * time.Second):
@@ -211,7 +211,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 		}
 	}
 
-	if fixture := os.Getenv("GOREX_IOS_FIXTURE"); fixture != "" {
+	if fixture := os.Getenv("RETTY_IOS_FIXTURE"); fixture != "" {
 		data, _ := json.Marshal(struct{ Link, Existing, Created, Directory string }{bridge.Link(), existing.ID, created.ID, dir})
 		if err := os.WriteFile(fixture, data, 0600); err != nil {
 			t.Fatal(err)
@@ -262,7 +262,7 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 			for {
 				n, err := stream.Read(buf)
 				output.Write(buf[:n])
-				if strings.Contains(output.String(), "\r\nGOREX_IPHONE_KEYBOARD_OK\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_EDIT_abZd") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_SELECTION_selection word\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_IME_你好\r\n") && strings.Contains(output.String(), "\r\nGOREX_IPHONE_RECONNECTED_OK\r\n") {
+				if strings.Contains(output.String(), "\r\nRETTY_IPHONE_KEYBOARD_OK\r\n") && strings.Contains(output.String(), "\r\nRETTY_IPHONE_EDIT_abZd") && strings.Contains(output.String(), "\r\nRETTY_IPHONE_SELECTION_selection word\r\n") && strings.Contains(output.String(), "\r\nRETTY_IPHONE_IME_你好\r\n") && strings.Contains(output.String(), "\r\nRETTY_IPHONE_RECONNECTED_OK\r\n") {
 					keyboard <- true
 					return
 				}

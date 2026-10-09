@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 )
 
 func TestRenderLogIsBoundedTimingMetadata(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	path := filepath.Join(dir, "render.log")
 	logRenderEvent("fixture-session", terminal.RenderEvent{Kind: "slow_sync", Duration: 1600 * time.Millisecond})
 	data, err := os.ReadFile(path)

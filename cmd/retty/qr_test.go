@@ -1,4 +1,4 @@
-//go:build gorex_cli && (darwin || linux)
+//go:build retty_cli && (darwin || linux)
 
 package main
 
@@ -10,7 +10,7 @@ import (
 )
 
 func TestTerminalQRPreservesEveryModuleAndQuietZone(t *testing.T) {
-	code, err := qrcode.New("gorex://connect?v=1&address=fixture-not-a-live-capability", qrcode.Low)
+	code, err := qrcode.New("retty://connect?v=1&address=fixture-not-a-live-capability", qrcode.Low)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +40,7 @@ func TestTerminalQRPreservesEveryModuleAndQuietZone(t *testing.T) {
 		}
 	}
 	var plain, forced bytes.Buffer
-	link := "gorex://connect?v=1&address=fixture-not-a-live-capability"
+	link := "retty://connect?v=1&address=fixture-not-a-live-capability"
 	if err := printConnectionLink(&plain, link, false); err != nil || plain.String() != link+"\n" {
 		t.Fatal("redirected output no longer carries a single connection link")
 	}

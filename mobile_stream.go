@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/egoist/mygo"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"time"
 )
 

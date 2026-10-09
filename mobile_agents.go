@@ -1,8 +1,8 @@
 package main
 
 import (
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 )
 
 type mobileAgentNotice struct{ ID, Desktop, Session, Title, Body string }

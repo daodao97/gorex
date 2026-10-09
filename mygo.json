@@ -1,27 +1,31 @@
 {
-  "name": "GoRex",
-  "identifier": "dev.gorex.app",
+  "name": "Retty",
+  "identifier": "com.daodao.retty",
   "version": "0.1.0",
-  "copyright": "A replica of Superlogical's Rex, built with MyGo",
+  "copyright": "Retty — Reconnect TTY / Relay TTY. Inspired by Rex, built with MyGo.",
   "out": "build",
+  "icon": "resources/icon.png",
   "macos": {
     "minimumSystemVersion": "13.0"
   },
   "urlSchemes": [
-    "gorex"
+    "retty"
   ],
   "ios": {
     "minimumSystemVersion": "15.0",
     "infoPlist": {
-      "NSCameraUsageDescription": "扫描 GoRex 桌面端的二维码以连接终端会话。"
+      "NSCameraUsageDescription": "扫描 Retty 桌面端的二维码以连接终端会话。"
     },
     "launchScreen": {
-      "title": "GoRex",
+      "title": "Retty",
       "backgroundColor": "#111315",
       "foregroundColor": "#ffffff"
     },
     "buildNumber": "1",
     "developmentTeam": "XNDA84PBM3",
+    "entitlements": {
+      "keychain-access-groups": ["$(AppIdentifierPrefix)*", "com.apple.token"]
+    },
     "pushNotifications": true
   }
 }

@@ -31,7 +31,7 @@ func codexEnv(env []string, bridge bool) ([]string, string, error) {
 	if bridge {
 		mode = "1"
 	}
-	return append(clean, "PATH="+dir+string(os.PathListSeparator)+path, "GOREX_CODEX_BIN="+dir, "GOREX_CODEX_BRIDGE="+mode), dir, nil
+	return append(clean, "PATH="+dir+string(os.PathListSeparator)+path, "RETTY_CODEX_BIN="+dir, "RETTY_CODEX_BRIDGE="+mode), dir, nil
 }
 
 const codexLauncher = `#!/bin/sh
@@ -48,12 +48,12 @@ while :; do
   fi
   case "$remaining" in *:*) remaining=${remaining#*:} ;; *) break ;; esac
 done
-codex_exe=${GOREX_CODEX_EXE-}
+codex_exe=${RETTY_CODEX_EXE-}
 if [ -z "$codex_exe" ]; then
   codex_exe=$(PATH=$real_path command -v codex) || exit 127
 fi
 
-[ "${GOREX_CODEX_BRIDGE-0}" = 1 ] || exec "$codex_exe" "$@"
+[ "${RETTY_CODEX_BRIDGE-0}" = 1 ] || exec "$codex_exe" "$@"
 
 # Preserve explicit server connections, daemon management and utility commands.
 for arg do
@@ -63,8 +63,8 @@ for arg do
   esac
 done
 # Failure to attach notifications must not prevent ordinary CLI startup.
-if [ -x "$GOREX_HOOK" ] &&
-   "$GOREX_HOOK" -codex-bridge "$launcher_dir" "$$" "$codex_exe"; then
+if [ -x "$RETTY_HOOK" ] &&
+   "$RETTY_HOOK" -codex-bridge "$launcher_dir" "$$" "$codex_exe"; then
   endpoint=$(cat "$launcher_dir/endpoint")
   if [ -n "$endpoint" ]; then
     # Remote TUI mode otherwise defaults to the daemon's startup directory.

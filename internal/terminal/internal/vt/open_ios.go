@@ -87,7 +87,7 @@ extern void ghostty_terminal_selection_format_alloc(void);
 extern void ghostty_terminal_set(void);
 extern void ghostty_terminal_vt_write(void);
 extern void ghostty_type_json(void);
-static uintptr_t gorex_vt_symbol(const char *name) {
+static uintptr_t retty_vt_symbol(const char *name) {
  if (!strcmp(name,"ghostty_focus_encode")) return (uintptr_t)&ghostty_focus_encode;
  if (!strcmp(name,"ghostty_formatter_format_alloc")) return (uintptr_t)&ghostty_formatter_format_alloc;
  if (!strcmp(name,"ghostty_formatter_free")) return (uintptr_t)&ghostty_formatter_free;
@@ -182,7 +182,7 @@ func open(string) (uintptr, error) { return 1, nil }
 func sym(_ uintptr, name string) (uintptr, error) {
 	s := C.CString(name)
 	defer C.free(unsafe.Pointer(s))
-	address := uintptr(C.gorex_vt_symbol(s))
+	address := uintptr(C.retty_vt_symbol(s))
 	if address == 0 {
 		return 0, fmt.Errorf("vt: missing linked symbol %s", name)
 	}

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 var renderLogMu sync.Mutex

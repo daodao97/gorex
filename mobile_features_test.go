@@ -2,11 +2,11 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
 	"io"
 	"net"
+	"retty/internal/agents"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 	"strings"
 	"testing"
 	"time"

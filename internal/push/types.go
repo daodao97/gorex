@@ -1,4 +1,4 @@
-// Package push binds GoRex's paired devices to task reminders. APNs transport
+// Package push binds Retty's paired devices to task reminders. APNs transport
 // and native notification delivery are provided by MyGo; this package owns only
 // subscription, receipt and session policies.
 package push
@@ -6,7 +6,7 @@ package push
 import (
 	"encoding/hex"
 	"errors"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 	"strings"
 	"time"
 )
@@ -34,7 +34,7 @@ func (r Registration) Validate() error {
 		return errors.New("too many notification receipts")
 	}
 	for _, id := range r.Receipts {
-		if !strings.HasPrefix(id, "gorex-agent-") || len(id) > 64 {
+		if !strings.HasPrefix(id, "retty-agent-") || len(id) > 64 {
 			return errors.New("invalid notification receipt")
 		}
 	}

@@ -1,10 +1,10 @@
 import XCTest
 
-final class GoRexUITests: XCTestCase {
+final class RettyUITests: XCTestCase {
     func testBackgroundConnectionRetention() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(bundleIdentifier: "dev.gorex.app")
-        app.launchEnvironment["GOREX_UI_TEST"] = "1"
+        let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")
+        app.launchEnvironment["RETTY_UI_TEST"] = "1"
         app.terminate()
         app.launch()
         XCTAssertTrue(app.buttons["扫码连接桌面"].waitForExistence(timeout: 15))
@@ -69,8 +69,8 @@ final class GoRexUITests: XCTestCase {
 
     func testRemoteSessionFlow() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(bundleIdentifier: "dev.gorex.app")
-        app.launchEnvironment["GOREX_UI_TEST"] = "1"
+        let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")
+        app.launchEnvironment["RETTY_UI_TEST"] = "1"
         app.terminate()
         app.launch()
         XCTAssertTrue(app.buttons["扫码连接桌面"].waitForExistence(timeout: 15))
@@ -163,7 +163,7 @@ final class GoRexUITests: XCTestCase {
         screenshot("keyboard-accessory-compact")
         // Edit earlier characters directly in the terminal; no composer is
         // involved, and arrows remain available without opening More.
-        app.typeText("printf 'GOREX_IPHONE_EDIT_abcd'")
+        app.typeText("printf 'RETTY_IPHONE_EDIT_abcd'")
         app.buttons["←"].tap()
         app.buttons["←"].tap()
         app.typeText(XCUIKeyboardKey.delete.rawValue)
@@ -172,7 +172,7 @@ final class GoRexUITests: XCTestCase {
         app.buttons["→"].tap()
         app.typeText("\n")
         // The accessory must preserve the native nine-key candidate session.
-        app.typeText("printf 'GOREX_IPHONE_IME_")
+        app.typeText("printf 'RETTY_IPHONE_IME_")
         for _ in 0..<8 where !nineKey(app, "MNO").exists {
             app.buttons["Next keyboard"].tap()
         }
@@ -189,7 +189,7 @@ final class GoRexUITests: XCTestCase {
         for _ in 0..<8 where !app.keys["q"].exists { app.buttons["Next keyboard"].tap() }
         XCTAssertTrue(app.keys["q"].exists)
         app.typeText("\\n'\n")
-        app.typeText("printf 'GOREX_IPHONE_KEYBOARD_OX")
+        app.typeText("printf 'RETTY_IPHONE_KEYBOARD_OX")
         app.typeText(XCUIKeyboardKey.delete.rawValue)
         app.typeText("K\\n'\n")
         screenshot("existing-terminal-keyboard")
@@ -223,7 +223,7 @@ final class GoRexUITests: XCTestCase {
         XCTAssertTrue(terminal.exists, "Reconnect did not return to the existing terminal")
         terminal.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        app.typeText("printf 'GOREX_IPHONE_RECONNECTED_OK\\n'\n")
+        app.typeText("printf 'RETTY_IPHONE_RECONNECTED_OK\\n'\n")
         screenshot("terminal-auto-reconnected")
         XCTAssertTrue(app.keyboards.firstMatch.exists, "Ctrl+C dismissed the keyboard")
         app.typeText("printf '\\033[2J\\033[Hselection word\\n'\n")
@@ -252,7 +252,7 @@ final class GoRexUITests: XCTestCase {
         app.buttons["复制"].tap()
         terminal.tap()
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10))
-        app.typeText("printf '\\nGOREX_IPHONE_SELECTION_%s\\n' '")
+        app.typeText("printf '\\nRETTY_IPHONE_SELECTION_%s\\n' '")
         app.buttons["更多"].tap()
         XCTAssertTrue(app.buttons["粘贴"].isHittable)
         app.buttons["粘贴"].tap()
@@ -297,8 +297,8 @@ final class GoRexUITests: XCTestCase {
 
     func testRemotePushRegistration() throws {
         continueAfterFailure = false
-        let app = XCUIApplication(bundleIdentifier: "dev.gorex.app")
-        app.launchEnvironment["GOREX_UI_TEST"] = "1"
+        let app = XCUIApplication(bundleIdentifier: "com.daodao.retty")
+        app.launchEnvironment["RETTY_UI_TEST"] = "1"
         app.terminate()
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")

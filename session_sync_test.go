@@ -11,7 +11,7 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
@@ -49,7 +49,7 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 	phoneStream := phone.ViewStream(created.ID)
 	defer phoneStream.Close()
 	go io.Copy(io.Discard, phoneStream)
-	if _, err := phoneStream.Write([]byte("export GOREX_CONTINUATION=mobile; printf 'phone-%s\\n' created\n")); err != nil {
+	if _, err := phoneStream.Write([]byte("export RETTY_CONTINUATION=mobile; printf 'phone-%s\\n' created\n")); err != nil {
 		t.Fatal(err)
 	}
 	refresh(a)
@@ -78,7 +78,7 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 	})
 	a.selectTab(1)
 	tt.Frame()
-	tt.Type("printf 'desktop-%s\\n' \"$GOREX_CONTINUATION\"")
+	tt.Type("printf 'desktop-%s\\n' \"$RETTY_CONTINUATION\"")
 	tt.Key(0, ui.KeyEnter)
 	waitFor(t, tt, "desktop input continuing the mobile shell", func() bool {
 		return strings.Contains(p.term.Text(), "desktop-mobile")
@@ -162,7 +162,7 @@ func TestMobileSessionEndRejectsStaleResultsAndLists(t *testing.T) {
 }
 
 func TestMobileEndSessionThroughIconControls(t *testing.T) {
-	if os.Getenv("GOREX_MOBILE_RECOVERY_E2E") != "1" {
+	if os.Getenv("RETTY_MOBILE_RECOVERY_E2E") != "1" {
 		t.Skip("requires UI-thread dispatch")
 	}
 	a, desktop := newTestApp(t)

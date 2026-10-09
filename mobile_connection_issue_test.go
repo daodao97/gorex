@@ -6,18 +6,18 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/agents"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/agents"
+	"retty/internal/remote"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 func TestMobileSessionRecoverySharesHomeUIAndKeepsCachedList(t *testing.T) {
 	registerFonts()
 	for _, size := range [][2]int{{320, 568}, {390, 750}, {750, 390}} {
 		m := &mobileApp{link: "fixture", reconnecting: true, sessions: []rex.SessionInfo{
-			{ID: "agent", Title: "修复 CLI 配色问题 | gorex", Dir: "/work/github/quickgui/gorex", Program: "codex", Agent: rex.AgentState{ID: "codex", State: agents.Running}},
-			{ID: "shell", Title: "zsh", Dir: "/work/github/quickgui/gorex", Program: "zsh"},
+			{ID: "agent", Title: "修复 CLI 配色问题 | retty", Dir: "/work/github/quickgui/retty", Program: "codex", Agent: rex.AgentState{ID: "codex", State: agents.Running}},
+			{ID: "shell", Title: "zsh", Dir: "/work/github/quickgui/retty", Program: "zsh"},
 		}}
 		m.hello.Host.Name, m.hello.Host.Home = "MacBook Pro (2)", "/work"
 		tt := ui.NewTester(m.view, size[0], size[1])

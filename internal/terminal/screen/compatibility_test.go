@@ -1,10 +1,10 @@
-//go:build !gorex_cli
+//go:build !retty_cli
 
 package screen
 
 import (
-	"gorex/internal/terminal"
 	"io"
+	"retty/internal/terminal"
 	"strings"
 	"testing"
 )

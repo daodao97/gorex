@@ -17,7 +17,7 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
-	t.Setenv("GOREX_DIR", dir)
+	t.Setenv("RETTY_DIR", dir)
 	go Serve()
 	var c *Client
 	for i := 0; i < 100; i++ {

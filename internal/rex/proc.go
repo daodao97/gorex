@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 // procInfo is what inspect finds of a process.

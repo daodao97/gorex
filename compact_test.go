@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/terminal"
+	"retty/internal/terminal"
 )
 
 // Check the rendered separator pixels, including nested splits and a

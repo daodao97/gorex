@@ -11,9 +11,9 @@ import (
 )
 
 // An environment-based command stays stable across app moves/upgrades. It is
-// a no-op outside GoRex, and contains neither a session ID nor a secret.
+// a no-op outside Retty, and contains neither a session ID nor a secret.
 func HookCommand(agent string) string {
-	return `if [ -n "$GOREX_HOOK" ] && [ -x "$GOREX_HOOK" ]; then "$GOREX_HOOK" -agent-hook ` + agent + `; fi`
+	return `if [ -n "$RETTY_HOOK" ] && [ -x "$RETTY_HOOK" ]; then "$RETTY_HOOK" -agent-hook ` + agent + `; fi`
 }
 
 func HookPath(agent string) (string, error) {
@@ -127,7 +127,7 @@ func readHookConfig(b []byte) (map[string]any, error) {
 }
 
 // MergeHooks preserves all foreign handlers and settings, even when a
-// matcher group mixes GoRex and user hooks. Running it twice is idempotent.
+// matcher group mixes Retty and user hooks. Running it twice is idempotent.
 func MergeHooks(agent string, b []byte, install bool) ([]byte, error) {
 	events := HookEvents(agent)
 	if len(events) == 0 {
@@ -183,7 +183,7 @@ func MergeHooks(agent string, b []byte, install bool) ([]byte, error) {
 	return append(result, '\n'), err
 }
 
-// SetHooks changes only GoRex's entries. The first original file is backed
+// SetHooks changes only Retty's entries. The first original file is backed
 // up alongside it; malformed JSON and concurrent edits are never replaced.
 func SetHooks(agent string, install bool) error {
 	path, err := HookPath(agent)
@@ -211,12 +211,12 @@ func SetHooks(agent string, install bool) error {
 		return err
 	}
 	if len(original) > 0 {
-		backup, err := os.OpenFile(path+".gorex-backup", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		backup, err := os.OpenFile(path+".retty-backup", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err == nil {
 			_, writeErr := backup.Write(original)
 			closeErr := backup.Close()
 			if writeErr != nil {
-				os.Remove(path + ".gorex-backup")
+				os.Remove(path + ".retty-backup")
 				return writeErr
 			}
 			if closeErr != nil {
@@ -226,7 +226,7 @@ func SetHooks(agent string, install bool) error {
 			return err
 		}
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".gorex-hooks-*")
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".retty-hooks-*")
 	if err != nil {
 		return err
 	}

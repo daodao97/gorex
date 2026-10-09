@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"gorex/internal/agents"
+	"retty/internal/agents"
 )
 
 func TestAgentStateLifecycleAndConcurrentQuestions(t *testing.T) {
@@ -150,14 +150,14 @@ func TestCodexNativeStopCannotCompleteOrReopenTurns(t *testing.T) {
 }
 
 func TestSessionInjectsDistinctAgentCredentials(t *testing.T) {
-	t.Setenv("GOREX_DIR", t.TempDir())
-	t.Setenv("GOREX_AGENT_TOKEN", "parent-token")
+	t.Setenv("RETTY_DIR", t.TempDir())
+	t.Setenv("RETTY_AGENT_TOKEN", "parent-token")
 	dir := t.TempDir()
 	var tokens []string
 	for _, id := range []string{"one", "two"} {
 		capture := filepath.Join(dir, id)
-		ss, err := newSession(id, CreateOptions{Dir: dir, Env: []string{"GOREX_AGENT_TOKEN=extra-token"},
-			Command: []string{"/bin/sh", "-c", `umask 077; printf '%s\n' "$GOREX_SESSION" "$GOREX_AGENT_TOKEN" "$GOREX_AGENT_SOCKET" "$GOREX_HOOK" > "$1"; sleep 10`, "hook-test", capture}})
+		ss, err := newSession(id, CreateOptions{Dir: dir, Env: []string{"RETTY_AGENT_TOKEN=extra-token"},
+			Command: []string{"/bin/sh", "-c", `umask 077; printf '%s\n' "$RETTY_SESSION" "$RETTY_AGENT_TOKEN" "$RETTY_AGENT_SOCKET" "$RETTY_HOOK" > "$1"; sleep 10`, "hook-test", capture}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,8 +183,8 @@ func TestSessionInjectsDistinctAgentCredentials(t *testing.T) {
 }
 
 func TestAgentHookSocketAuthenticationAndRouting(t *testing.T) {
-	t.Setenv("GOREX_AGENT_SERVER_TOKEN", "")
-	dir, err := os.MkdirTemp("/tmp", "gorex-agent-")
+	t.Setenv("RETTY_AGENT_SERVER_TOKEN", "")
+	dir, err := os.MkdirTemp("/tmp", "retty-agent-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,9 +220,9 @@ func TestAgentHookSocketAuthenticationAndRouting(t *testing.T) {
 			t.Fatalf("unauthorized report accepted: %+v", tc)
 		}
 	}
-	t.Setenv("GOREX_SESSION", ss.id)
-	t.Setenv("GOREX_AGENT_TOKEN", ss.agentToken)
-	t.Setenv("GOREX_AGENT_SOCKET", path)
+	t.Setenv("RETTY_SESSION", ss.id)
+	t.Setenv("RETTY_AGENT_TOKEN", ss.agentToken)
+	t.Setenv("RETTY_AGENT_SOCKET", path)
 	RunAgentHook("codex", strings.NewReader(`{"session_id":"cli-thread","hook_event_name":"PermissionRequest","tool_name":"Bash"}`))
 	ss.mu.Lock()
 	got := ss.agent.state
@@ -232,7 +232,7 @@ func TestAgentHookSocketAuthenticationAndRouting(t *testing.T) {
 	}
 	RunAgentHook("codex", strings.NewReader(strings.Repeat("x", (1<<20)+1)))
 	RunAgentHook("codex", strings.NewReader("bad json"))
-	t.Setenv("GOREX_AGENT_TOKEN", "")
+	t.Setenv("RETTY_AGENT_TOKEN", "")
 	RunAgentHook("codex", strings.NewReader(`{"session_id":"cli-thread","hook_event_name":"Stop"}`))
 	ss.mu.Lock()
 	after := ss.agent.state

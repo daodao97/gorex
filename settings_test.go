@@ -63,7 +63,7 @@ func TestSettingsNavigationSearchAndDefaults(t *testing.T) {
 	if !strings.Contains(strings.Join(tt.Texts(), " "), "所有设置均使用默认值") {
 		t.Fatal("modified filter has no empty state")
 	}
-	for _, section := range []string{"Appearance", "Terminal settings", "Connections", "About GoRex", "Appearance"} {
+	for _, section := range []string{"Appearance", "Terminal settings", "Connections", "About Retty", "Appearance"} {
 		if err := tt.Click(section); err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +117,7 @@ func saveSettingsImage(t *testing.T, tt *ui.Tester, name string) {
 func TestLegacyLayoutSettingsIgnored(t *testing.T) {
 	previous := prefs
 	t.Cleanup(func() { prefs = previous })
-	t.Setenv("GOREX_DIR", t.TempDir())
+	t.Setenv("RETTY_DIR", t.TempDir())
 	for _, layout := range []bool{false, true} {
 		data, _ := json.Marshal(map[string]any{
 			"compactMode": layout, "hideHost": layout, "hideSessionHeader": layout,

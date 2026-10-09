@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gorex/internal/rex"
 	"image"
 	"image/color"
 	"image/png"
@@ -13,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"retty/internal/rex"
 	"strings"
 	"testing"
 	"time"
@@ -127,7 +127,7 @@ func TestImageHeadersAreBoundedBeforeReadingBody(t *testing.T) {
 	}
 }
 func TestBridgeStillForwardsLegacyControlAndOpaqueTerminalBytes(t *testing.T) {
-	dir, err := os.MkdirTemp("/tmp", "gorex-image-proxy-")
+	dir, err := os.MkdirTemp("/tmp", "retty-image-proxy-")
 	if err != nil {
 		t.Fatal(err)
 	}

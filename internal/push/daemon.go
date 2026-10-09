@@ -9,11 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/sys/unix"
-	"gorex/internal/rex"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"retty/internal/rex"
 	"time"
 )
 
@@ -23,7 +23,7 @@ func serviceSocket(dir string) string {
 		return p
 	}
 	sum := sha256.Sum256([]byte(dir))
-	return filepath.Join(os.TempDir(), fmt.Sprintf("gorex-push-%d-%x.sock", os.Getuid(), sum[:8]))
+	return filepath.Join(os.TempDir(), fmt.Sprintf("retty-push-%d-%x.sock", os.Getuid(), sum[:8]))
 }
 
 type serviceRequest struct {

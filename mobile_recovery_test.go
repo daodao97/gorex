@@ -12,15 +12,15 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/remote"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 // The recovery integration test needs real UI-thread dispatch even though it
 // renders offscreen. Ordinary unit tests continue without starting AppKit.
 func TestMain(tests *testing.M) {
-	if os.Getenv("GOREX_MOBILE_RECOVERY_E2E") != "1" {
+	if os.Getenv("RETTY_MOBILE_RECOVERY_E2E") != "1" {
 		os.Exit(tests.Run())
 	}
 	code := 1
@@ -110,8 +110,8 @@ func TestMobileFailedPartialSnapshotKeepsScreenAndDoesNotReplayInput(t *testing.
 // Uses only a private fixture: no user's terminal, daemon or desktop bridge is
 // interrupted. Exercise the real Tailcat, control polling and viewer recovery.
 func TestMobileRecoveryAcrossDesktopBridgeRestart(t *testing.T) {
-	if os.Getenv("GOREX_MOBILE_RECOVERY_E2E") != "1" {
-		t.Skip("set GOREX_MOBILE_RECOVERY_E2E=1 for live Tailcat and UI dispatch")
+	if os.Getenv("RETTY_MOBILE_RECOVERY_E2E") != "1" {
+		t.Skip("set RETTY_MOBILE_RECOVERY_E2E=1 for live Tailcat and UI dispatch")
 	}
 	app, _ := newTestApp(t)
 	existing, err := app.client.List()

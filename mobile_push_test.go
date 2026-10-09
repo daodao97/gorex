@@ -2,8 +2,8 @@ package main
 
 import (
 	"github.com/egoist/mygo"
-	"gorex/internal/agents"
-	"gorex/internal/rex"
+	"retty/internal/agents"
+	"retty/internal/rex"
 	"slices"
 	"testing"
 	"time"
@@ -64,15 +64,15 @@ func TestMobileLegacyReceiptsUseCompletionIdentity(t *testing.T) {
 func TestMobileSeenReceiptsSurviveColdLaunchAndMergeEarlyNotification(t *testing.T) {
 	now := time.Now()
 	m := &mobileApp{}
-	m.rememberNotice("gorex-agent-early")
-	m.mergeNoticeReceipts(map[string]time.Time{"gorex-agent-old": now, "gorex-agent-expired": now.Add(-8 * 24 * time.Hour)})
-	if m.rememberNotice("gorex-agent-old") || m.rememberNotice("gorex-agent-early") {
+	m.rememberNotice("retty-agent-early")
+	m.mergeNoticeReceipts(map[string]time.Time{"retty-agent-old": now, "retty-agent-expired": now.Add(-8 * 24 * time.Hour)})
+	if m.rememberNotice("retty-agent-old") || m.rememberNotice("retty-agent-early") {
 		t.Fatal("cold launch lost notification receipts")
 	}
-	if _, exists := m.noticeReceipts["gorex-agent-expired"]; exists {
+	if _, exists := m.noticeReceipts["retty-agent-expired"]; exists {
 		t.Fatal("expired receipt retained")
 	}
-	event := mygo.NotificationEvent{Source: mygo.NotificationRemote, Data: map[string]string{"desktop": "desktop", "session": "pane", "event": "gorex-agent-old"}}
+	event := mygo.NotificationEvent{Source: mygo.NotificationRemote, Data: map[string]string{"desktop": "desktop", "session": "pane", "event": "retty-agent-old"}}
 	if m.presentNotification(event) != 0 {
 		t.Fatal("previously seen remote reminder repeated after cold launch")
 	}

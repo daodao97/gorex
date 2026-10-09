@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
-	"gorex/internal/terminal"
+	"retty/internal/remote"
+	"retty/internal/rex"
+	"retty/internal/terminal"
 )
 
 func TestMobileHomeReusesDesktopConnectionAndExplicitDisconnectClosesIt(t *testing.T) {

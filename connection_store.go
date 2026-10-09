@@ -3,9 +3,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"gorex/internal/rex"
 	"os"
 	"path/filepath"
+	"retty/internal/rex"
 	"sync"
 )
 

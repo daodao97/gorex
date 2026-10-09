@@ -10,7 +10,7 @@ import (
 	"time"
 	"unicode"
 
-	"gorex/internal/rex"
+	"retty/internal/rex"
 )
 
 type ConnectedDevice struct {

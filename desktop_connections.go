@@ -12,8 +12,8 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/remote"
-	"gorex/internal/rex"
+	"retty/internal/remote"
+	"retty/internal/rex"
 )
 
 // A host owns its transport; tabs never borrow another computer's client.

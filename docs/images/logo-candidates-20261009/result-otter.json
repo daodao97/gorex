@@ -1,0 +1,24 @@
+[
+  {
+    "label": "B1",
+    "provider": "built-in image_gen.imagegen",
+    "model": null,
+    "source_path": "/Users/daodao/.codex/generated_images/01a11f96-37f7-7fc2-9414-357ff1aeb90b/exec-145037cf-6518-47c8-b5dc-aa4b63b7fe6f.png",
+    "path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/B1.png",
+    "dimensions": [
+      1254,
+      1254
+    ]
+  },
+  {
+    "label": "B2",
+    "provider": "built-in image_gen.imagegen",
+    "model": null,
+    "source_path": "/Users/daodao/.codex/generated_images/01a11f96-37f7-7fc2-9414-357ff1aeb90b/exec-0f51f866-1b61-40b9-b44f-8ed97f251755.png",
+    "path": "/Users/daodao/work/github/quickgui/gorex/docs/images/logo-candidates-20261009/B2.png",
+    "dimensions": [
+      1254,
+      1254
+    ]
+  }
+]

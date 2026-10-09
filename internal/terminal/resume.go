@@ -1,6 +1,6 @@
 package terminal
 
-import "gorex/internal/terminal/internal/vt"
+import "retty/internal/terminal/internal/vt"
 
 type readingPosition struct {
 	offset, distance int

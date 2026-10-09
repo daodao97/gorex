@@ -29,7 +29,7 @@ func TestHookMergePreservesUserConfiguration(t *testing.T) {
 	ours["hooks"] = append(ours["hooks"].([]any), map[string]any{"type": "command", "command": "mixed-user-stop"})
 	mixed, _ := json.Marshal(config)
 	removed, err := MergeHooks("claude", mixed, false)
-	if err != nil || !bytes.Contains(removed, []byte("mixed-user-stop")) || bytes.Contains(removed, []byte("GOREX_HOOK")) {
+	if err != nil || !bytes.Contains(removed, []byte("mixed-user-stop")) || bytes.Contains(removed, []byte("RETTY_HOOK")) {
 		t.Fatalf("uninstall lost foreign hook: %s, %v", removed, err)
 	}
 	removed, err = MergeHooks("claude", installed, false)
@@ -71,7 +71,7 @@ func TestInstallHooksBackupOverridesAndRemoval(t *testing.T) {
 			if s := InspectHooks(agent); !s.Installed || !s.Present || s.Error != "" {
 				t.Fatalf("not installed: %+v", s)
 			}
-			backup, _ := os.ReadFile(path + ".gorex-backup")
+			backup, _ := os.ReadFile(path + ".retty-backup")
 			if !bytes.Equal(backup, original) {
 				t.Fatal("original backup changed")
 			}
@@ -101,16 +101,16 @@ func TestInstallHooksBackupOverridesAndRemoval(t *testing.T) {
 	}
 }
 
-func TestHookCommandIsSilentOutsideGoRex(t *testing.T) {
+func TestHookCommandIsSilentOutsideRetty(t *testing.T) {
 	cmd := exec.Command("/bin/sh", "-c", HookCommand("claude"))
 	cmd.Env = []string{"PATH=/usr/bin:/bin"}
 	if output, err := cmd.CombinedOutput(); err != nil || len(output) != 0 {
-		t.Fatalf("outside GoRex: %q/%v", output, err)
+		t.Fatalf("outside Retty: %q/%v", output, err)
 	}
 	path := filepath.Join(t.TempDir(), "hook ' with spaces")
 	os.WriteFile(path, []byte("#!/bin/sh\n[ \"$1\" = '-agent-hook' ] && [ \"$2\" = 'codex' ]\n"), 0o700)
 	cmd = exec.Command("/bin/sh", "-c", HookCommand("codex"))
-	cmd.Env = []string{"GOREX_HOOK=" + path}
+	cmd.Env = []string{"RETTY_HOOK=" + path}
 	if output, err := cmd.CombinedOutput(); err != nil || strings.TrimSpace(string(output)) != "" {
 		t.Fatalf("quoted executable: %q/%v", output, err)
 	}
