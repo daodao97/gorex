@@ -96,6 +96,21 @@ func TestFileLinksThroughAppAndEditorSettings(t *testing.T) {
 		t.Fatalf("app Command click failed: %v (%s)", opened, a.err)
 	}
 	saveSettingsImage(t, tt, "file-links-compact")
+	// Chinese punctuation and the enclosing parenthesis belong to the prose.
+	iconPath := filepath.Join(dir, "assets", "branding", "retty-terminal-v3.png")
+	if err := os.MkdirAll(filepath.Dir(iconPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(iconPath, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p.term.Feed([]byte("\x1b[H\x1b[2J(assets/branding/retty-terminal-v3.png)，使用新版"))
+	tt.Frame()
+	before := len(opened)
+	tt.ClickAtWith(ui.Cmd, r.X+20, r.Y+7)
+	if want := (&url.URL{Scheme: "cursor", Host: "file", Path: iconPath}).String(); len(opened) != before+1 || opened[len(opened)-1] != want || a.err != "" {
+		t.Fatalf("Chinese prose file opening = %v (%s), want %q", opened, a.err, want)
+	}
 	// Codex-style painting inserts a hard break in a long file:// path.
 	// Verify the complete filename reaches the application's file resolver.
 	cols, _ := p.term.Size()

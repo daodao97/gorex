@@ -16,6 +16,14 @@ func TestFileAndURLMatches(t *testing.T) {
 		{"see ~/work/中文.go#L8C2", "中文", Link{Path: "~/work/中文.go", Line: 8, Column: 2}},
 		{`File "/tmp/my project/中文.go":13:2`, "project", Link{Path: "/tmp/my project/中文.go", Line: 13, Column: 2}},
 		{"(../README.md),", "README", Link{Path: "../README.md"}},
+		{"已保存新版图标 (assets/branding/retty-terminal-v3.png)，使用新版", "retty", Link{Path: "assets/branding/retty-terminal-v3.png"}},
+		{"retty-terminal-v3.prompt.txt)也已保存。", "retty", Link{Path: "retty-terminal-v3.prompt.txt"}},
+		{"已保存（assets/branding/中文.png），继续", "中文", Link{Path: "assets/branding/中文.png"}},
+		{"见：src/main.go:42:5，错误", "main", Link{Path: "src/main.go", Line: 42, Column: 5}},
+		{"错误 (src/main.ts(12,3))，继续", "main", Link{Path: "src/main.ts", Line: 12, Column: 3}},
+		{"已保存 (assets/icon_(copy).png)，继续", "icon", Link{Path: "assets/icon_(copy).png"}},
+		{`文件 "assets/图标（新版），副本.png"，已保存`, "新版", Link{Path: "assets/图标（新版），副本.png"}},
+		{"文档（https://example.com/a_(b)），继续", "example", Link{URL: "https://example.com/a_(b)"}},
 		{"Makefile:4", "Make", Link{Path: "Makefile", Line: 4}},
 		{"目录 /tmp/project/", "project", Link{Path: "/tmp/project/"}},
 		{"🙂 中文 https://example.com/a_(b)?q=1.", "example", Link{URL: "https://example.com/a_(b)?q=1"}},
@@ -39,6 +47,22 @@ func TestFileAndURLMatches(t *testing.T) {
 				t.Fatalf("got %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestFileLinkProseBoundaries(t *testing.T) {
+	text := []rune("已保存 (assets/branding/retty-terminal-v3.png)，继续")
+	cols := make([]int, len(text))
+	for i := range cols {
+		cols[i] = i
+	}
+	for i, r := range text {
+		if !strings.ContainsRune("()，", r) {
+			continue
+		}
+		if got := matchLink(text, cols, i); got.valid() {
+			t.Errorf("punctuation %q matched %+v", r, got.Link)
+		}
 	}
 }
 
@@ -172,6 +196,15 @@ func TestCommandClickTUIPaintedFileContinuations(t *testing.T) {
 					t.Fatalf("got %+v, want %+v", got, want)
 				}
 			}
+			for _, suffix := range []string{"),", ")，继续", ")也已保存。", "），继续"} {
+				term.Feed([]byte("\x1b[H\x1b[2JSaved to: (" + first + "\r\n  " + last + suffix))
+				tt.Frame()
+				for _, cell := range [][2]int{{12, 0}, {4, 1}, {len(last), 1}} {
+					if got := click(cell[0], cell[1]); got != want {
+						t.Fatalf("suffix %q: got %+v, want %+v", suffix, got, want)
+					}
+				}
+			}
 		})
 	}
 	// A TUI can use cursor-addressed painting, without any wrap flag/newline.
@@ -183,6 +216,13 @@ func TestCommandClickTUIPaintedFileContinuations(t *testing.T) {
 	for row := range 3 {
 		if got := click(4, row); got != want {
 			t.Fatalf("three-row path = %+v, want %+v", got, want)
+		}
+	}
+	term.Feed([]byte("\x1b[H\x1b[2J(" + first + "\x1b[2;1H" + middle + "\x1b[3;1Hfinal.png(12,3))，继续"))
+	tt.Frame()
+	for row := range 3 {
+		if got := click(4, row); got != want {
+			t.Fatalf("wrapped compiler location = %+v, want %+v", got, want)
 		}
 	}
 	for _, tc := range []struct {

@@ -21,7 +21,11 @@ type linkMatch struct {
 	cellA, cellB, row int
 }
 
-var pathTokenPattern = regexp.MustCompile(`"[^"\r\n]+"(?::[0-9]+(?::[0-9]+)?)?|'[^'\r\n]+'(?::[0-9]+(?::[0-9]+)?)?|[^\s"'<>` + "`" + `]+`)
+// Unquoted references in Chinese prose end at these sentence delimiters.
+// Quoted filenames may still contain them literally.
+const linkProseDelimiters = "，。；：！？、（）【】《》「」『』"
+
+var pathTokenPattern = regexp.MustCompile(`"[^"\r\n]+"(?::[0-9]+(?::[0-9]+)?)?|'[^'\r\n]+'(?::[0-9]+(?::[0-9]+)?)?|[^\s"'<>` + "`" + linkProseDelimiters + `]+`)
 var pathLocationPattern = regexp.MustCompile(`:([0-9]+)(?::([0-9]+))?:?$|\(([0-9]+)(?:,([0-9]+))?\)$|#L([0-9]+)(?:C([0-9]+))?$`)
 
 func matchLink(text []rune, cols []int, col int) linkMatch {
@@ -37,7 +41,7 @@ func matchLink(text []rune, cols []int, col int) linkMatch {
 		return cols[m.start] <= col && col <= last
 	}
 	for _, bounds := range urlPattern.FindAllStringIndex(s, -1) {
-		u := trimURL(s[bounds[0]:bounds[1]])
+		u := trimURL(trimLinkToken(s[bounds[0]:bounds[1]]))
 		start := utf8.RuneCountInString(s[:bounds[0]])
 		m := linkMatch{Link: Link{URL: u}, start: start, end: start + utf8.RuneCountInString(u)}
 		if contains(m) {
@@ -48,6 +52,7 @@ func matchLink(text []rune, cols []int, col int) linkMatch {
 		raw := s[bounds[0]:bounds[1]]
 		prefix := len(raw) - len(strings.TrimLeft(raw, "([{*"))
 		raw = raw[prefix:]
+		raw = trimLinkToken(raw)
 		raw = strings.TrimRight(raw, ",;.!]")
 		// A surrounding closing parenthesis is punctuation, but file.ts(4,2)
 		// is a compiler location and must be parsed before trimming it.
@@ -92,6 +97,26 @@ func matchLink(text []rune, cols []int, col int) linkMatch {
 		}
 	}
 	return linkMatch{}
+}
+
+// A closing wrapper may directly precede prose without whitespace, as in
+// "(image.png)已保存". Keep balanced filename brackets and compiler locations.
+func trimLinkToken(raw string) string {
+	if strings.HasPrefix(raw, `"`) || strings.HasPrefix(raw, "'") {
+		return raw
+	}
+	var depth [3]int
+	for i, r := range raw {
+		if bracket := strings.IndexRune("([{", r); bracket >= 0 {
+			depth[bracket]++
+		} else if bracket := strings.IndexRune(")]}", r); bracket >= 0 {
+			if depth[bracket] == 0 {
+				return raw[:i]
+			}
+			depth[bracket]--
+		}
+	}
+	return raw
 }
 
 func (m linkMatch) valid() bool { return m.URL != "" || m.Path != "" }
@@ -171,7 +196,7 @@ func (v *view) hardWrappedFileAt(col, row int) linkMatch {
 				a++
 			}
 			b := a
-			for b < len(next) && !unicode.IsSpace(next[b]) {
+			for b < len(next) && !unicode.IsSpace(next[b]) && !strings.ContainsRune(linkProseDelimiters, next[b]) {
 				b++
 			}
 			if a == b || nc[a] > 4 || !fileContinuation(string(next[a:b])) {
@@ -224,6 +249,13 @@ func unfinishedFileAtEdge(text []rune, cols []int) bool {
 }
 
 func fileContinuation(s string) bool {
+	s = trimURL(trimLinkToken(s))
+	if loc := pathLocationPattern.FindStringIndex(s); loc != nil {
+		s = s[:loc[0]]
+	}
+	if s == "" {
+		return false
+	}
 	if strings.Contains(s, "://") || strings.HasPrefix(s, "/") ||
 		strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") || strings.HasPrefix(s, "~/") {
 		return false
@@ -238,14 +270,14 @@ func fileContinuation(s string) bool {
 
 // urlPattern finds the URLs programs print as text, which a Command+click
 // opens as it does hyperlinks.
-var urlPattern = regexp.MustCompile(`(?:https?|ftp|file)://[^\s"'<>` + "`" + `\x00-\x1f]+|mailto:[^\s"'<>` + "`" + `]+`)
+var urlPattern = regexp.MustCompile(`(?:https?|ftp|file)://[^\s"'<>` + "`" + linkProseDelimiters + `\x00-\x1f]+|mailto:[^\s"'<>` + "`" + linkProseDelimiters + `]+`)
 
 // urlAt returns the URL of text, a row whose runes are in columns cols, at
 // column col, or "".
 func urlAt(text []rune, cols []int, col int) string {
 	s := string(text)
 	for _, m := range urlPattern.FindAllStringIndex(s, -1) {
-		u := trimURL(s[m[0]:m[1]])
+		u := trimURL(trimLinkToken(s[m[0]:m[1]]))
 		start := len([]rune(s[:m[0]]))
 		end := start + len([]rune(u))
 		if start < len(cols) && cols[start] <= col && col <= cols[end-1] {
