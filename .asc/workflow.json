@@ -1,0 +1,93 @@
+{
+  "env": {
+    "GOWORK": "off",
+    "ASC_TELEMETRY_DISABLED": "1"
+  },
+  "workflows": {
+    "package": {
+      "description": "Build and verify Retty's App Store IPA in its fixed output directory.",
+      "steps": [
+        {
+          "name": "context",
+          "run": "python3 scripts/ios-release.py context",
+          "outputs": {
+            "BUILD_NUMBER": "$.buildNumber",
+            "VERSION": "$.version"
+          }
+        },
+        {
+          "name": "package",
+          "run": "RETTY_BUILD_NUMBER='${steps.context.BUILD_NUMBER}' RETTY_VERSION='${steps.context.VERSION}' python3 scripts/ios-release.py package",
+          "outputs": {
+            "IPA_SHA256": "$.ipaSha256"
+          }
+        }
+      ]
+    },
+    "check": {
+      "description": "Verify the current fixed IPA, matching symbols, signing and release manifest.",
+      "steps": [
+        {
+          "name": "check",
+          "run": "python3 scripts/ios-release.py check",
+          "outputs": {
+            "IPA_SHA256": "$.ipaSha256"
+          }
+        }
+      ]
+    },
+    "upload": {
+      "description": "Verify and upload the already packaged IPA, then wait for that exact build.",
+      "steps": [
+        {
+          "name": "check",
+          "run": "python3 scripts/ios-release.py check",
+          "outputs": {
+            "IPA_SHA256": "$.ipaSha256"
+          }
+        },
+        {
+          "name": "upload",
+          "run": "RETTY_EXPECTED_SHA256='${steps.check.IPA_SHA256}' python3 scripts/ios-release.py upload",
+          "outputs": {
+            "APP_ID": "$.appId",
+            "BUILD_NUMBER": "$.buildNumber",
+            "VERSION": "$.version",
+            "IPA_SHA256": "$.ipaSha256"
+          }
+        },
+        {
+          "name": "wait",
+          "run": "RETTY_EXPECTED_SHA256='${steps.upload.IPA_SHA256}' RETTY_APP_ID='${steps.upload.APP_ID}' python3 scripts/ios-release.py wait",
+          "outputs": {
+            "BUILD_ID": "$.buildId"
+          }
+        }
+      ]
+    },
+    "testflight": {
+      "description": "Package, upload, wait, then assign the exact build to an explicitly named TestFlight group.",
+      "steps": [
+        {
+          "name": "group",
+          "run": "python3 scripts/ios-release.py require-group"
+        },
+        { "workflow": "package" },
+        {
+          "workflow": "upload",
+          "with": { "RETTY_EXPECTED_SHA256": "${steps.package.IPA_SHA256}" }
+        },
+        {
+          "name": "distribute",
+          "run": "RETTY_BUILD_ID='${steps.wait.BUILD_ID}' RETTY_EXPECTED_SHA256='${steps.upload.IPA_SHA256}' python3 scripts/ios-release.py distribute"
+        }
+      ]
+    },
+    "status": {
+      "description": "Read the processing status for the exact packaged version and build number.",
+      "steps": [
+        { "name": "status", "run": "python3 scripts/ios-release.py status" }
+      ]
+    }
+  }
+}

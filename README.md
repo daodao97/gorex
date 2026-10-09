@@ -143,7 +143,12 @@ GOWORK=off ./scripts/build-cli.sh --platform all
 # iOS 真机：Xcode + 自己团队的证书、App ID 和设备 profile
 GOWORK=off ./scripts/build-ios.sh \
   -ios-team YOUR_TEAM_ID -ios-device YOUR_DEVICE_UDID
+
+# App Store / TestFlight：统一发布工作流，固定产物目录
+./scripts/release-ios.sh package
 ```
+
+iOS 发布流程使用固定版本的 [App Store Connect CLI](https://github.com/rorkai/App-Store-Connect-CLI)，成品始终在 `build/app-store/ios-arm64/`；API 认证、离线 build number、校验、上传和 TestFlight 命令见 [开发说明](docs/development.md#app-store-connect--testflight)。
 
 iOS 需要为 `com.daodao.retty` 配置匹配的 App ID 和 provisioning profile；后台任务通知还需要启用 Push Notifications。已有安装后沿用原团队和 profile 覆盖更新。APNs key 只在发送端配置：
 

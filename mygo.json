@@ -15,6 +15,7 @@
     "retty"
   ],
   "ios": {
+    "capabilities": ["camera"],
     "minimumSystemVersion": "15.0",
     "infoPlist": {
       "NSCameraUsageDescription": "扫描 Retty 桌面端的二维码以连接终端会话。"

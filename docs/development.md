@@ -47,7 +47,9 @@ GOWORK=off go vet -tags mygo_noinspector ./...
 GOWORK=off go test . ./internal/rex ./internal/remote -race
 GOWORK=off go test . -run '^TestName$' -count=1
 ./scripts/check-mygo.sh
-bash -n scripts/build-ios.sh scripts/test-ios.sh scripts/check-mygo.sh
+bash -n scripts/build-ios.sh scripts/test-ios.sh scripts/check-mygo.sh scripts/asc.sh scripts/release-ios.sh
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts -p 'test_ios_release.py'
+./scripts/asc.sh workflow validate --output json
 ```
 
 需要界面测试截图时：
@@ -218,6 +220,60 @@ GOWORK=off ./scripts/build-ios.sh -ios-simulator
 ```
 
 上面生成的是模拟器包，不能装到真机。构建后如有跟踪文件变化，用 `git diff` 检查，不要将临时生成的静态库、签名文件或私密 fixture 提交。
+
+### App Store Connect / TestFlight
+
+统一使用 `./scripts/release-ios.sh` 和仓库中的 `.asc/workflow.json`。MyGo 负责 Ghostty/Go/UIKit 生产构建、archive、App Store Connect 导出和本地校验；[App Store Connect CLI](https://github.com/rorkai/App-Store-Connect-CLI) 负责工作流编排、远端 build number、上传、处理状态和 TestFlight。MyGo 不调用 ASC，也不持有上传凭据。
+
+`scripts/asc.sh` 自动下载 `.asc/toolchain.json` 固定的 ASC 5.14.0 并核对 SHA-256，缓存到 `.mygo/tools/asc/asc`，不依赖全局安装版本。最终目录固定如下，不再按任务、日期或版本新建打包目录：
+
+| 产物 | 固定位置 |
+| --- | --- |
+| IPA | `build/app-store/ios-arm64/Export/Retty.ipa` |
+| Archive / dSYM | `build/app-store/ios-arm64/Retty.xcarchive/` |
+| MyGo 校验报告 | `build/app-store/ios-arm64/BuildReport.json`、`ExportReport.json` |
+| 版本、SHA-256、工具版本、源码提交 | `build/app-store/Release.json` |
+| 构建日志 / 上传回执 | `build/app-store/Build.log`、`Upload.json` |
+
+MyGo 在内部临时 staging 目录完成校验后原子替换固定的 `ios-arm64/`；失败保留上次完整产物。不要去掉这种内部隔离，也不要把临时目录当成最终交付路径。工作流用文件锁避免同时覆盖发布包；上传和恢复步骤核对 IPA SHA-256，拒绝使用被另一轮打包替换的产物。已记录的成功上传回执可复用，后续等待/分组不会重新上传。
+
+本地签名先在 Xcode → Settings → Accounts 登录既有 Team；出现 `missing Xcode-Token` / `No Accounts` 时重新登录，不删除证书或正常应用。工作流强制 `GOWORK=off`、既有 Team 和 `app-store-connect` 导出，取消真机开发 profile 的环境覆盖，不安装或启动真实应用。
+
+ASC API 认证独立于 Xcode 登录。只在首次配置时用已有 App Store Connect API key 登录，私钥放在仓库外；默认使用系统 Keychain，`.asc/` 的认证和运行状态不提交：
+
+```sh
+./scripts/asc.sh auth login --name Retty \
+  --key-id YOUR_KEY_ID --issuer-id YOUR_ISSUER_ID \
+  --private-key /private/path/AuthKey_YOUR_KEY_ID.p8 --network
+./scripts/asc.sh auth status --validate
+./scripts/asc.sh workflow validate --output json
+
+# 默认通过 ASC 查询此版本的下一可用 build number，然后只打包
+./scripts/release-ios.sh package
+
+# 离线打包时显式指定尚未上传的 build number
+./scripts/release-ios.sh package BUILD_NUMBER:3
+
+# 核对当前包；上传既有包并等待这个确切版本/build；查询这个包的处理状态
+./scripts/release-ios.sh check
+./scripts/release-ios.sh upload
+./scripts/release-ios.sh status
+
+# 一次完成打包、上传、等待、加入指定 TestFlight 组
+./scripts/release-ios.sh testflight TESTFLIGHT_GROUP:Internal
+
+# 预览或恢复同一轮流程；恢复时不再传新的 KEY:VALUE
+./scripts/release-ios.sh testflight TESTFLIGHT_GROUP:Internal --dry-run
+./scripts/release-ios.sh upload --resume RUN_ID
+```
+
+API key 为 individual 类型时，登录使用 `--key-type individual` 并省略 issuer。应用默认按 `mygo.json` 的 Bundle ID 精确查找；可用 `ASC_APP_ID` 指定已有 App Store Connect app ID，脚本仍核对 Bundle ID，防止传错应用。营销版本统一来自 `mygo.json.version`，工作流不修改这个文件。build number 查询不是远端原子预留，不要在其他机器同时发布同一个版本。
+
+`ExportReport.json` 必须通过分发签名、App Store profile、生产推送权限及符号检查；工作流额外确认 profile 包含实际分发签名证书、禁用权限没有链接进 IPA、包与发布清单一致。`BuildReport.json` 检查的是 archive 中的开发签名，不能代替分发检查。TestFlight 分组需要显式指定，流程不会默认通知测试者或提交 beta/App Store 审核。
+
+`ios.capabilities` 仅启用 `camera`，用于扫码。MyGo 不编译闲置的位置、麦克风、照片授权和 Face ID 接口，普通 Keychain 存储不引用生物识别接口；因此 Retty 只需相机用途说明。通知权限仍由用户主动开启。若新增受保护功能，需同步启用对应 capability 并填写实际用途说明。
+
+Retty 的 Tailcat 隧道包含 Apple 系统之外的加密实现。目前省略两个出口加密键，上传后在 App Store Connect 如实完成加密问卷。不要仅为了通过构建声明豁免。确认属于豁免时才设置 `ITSAppUsesNonExemptEncryption=false`；需要文稿时，等 Apple 批准后设置 `true` 和匹配的 `ITSEncryptionExportComplianceCode`。MyGo 会拒绝 `true` 配空/缺失代码、错误类型或自相矛盾的键，避免再次出现 `Invalid Export Compliance Code []`；本地检查无法证明代码与远端文稿匹配。参见 [Apple 加密声明说明](https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption) 与 [确认并上传加密文稿](https://developer.apple.com/help/app-store-connect/manage-app-information/determine-and-upload-app-encryption-documentation)。
 
 ## 隔离的远程连接与真机测试
 

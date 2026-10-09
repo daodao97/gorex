@@ -6,3 +6,6 @@ mygo_windows_*.syso
 /tests/ios/Fixture.swift
 /go.work
 /go.work.sum
+/.asc/*
+!/.asc/workflow.json
+!/.asc/toolchain.json
