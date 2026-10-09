@@ -20,6 +20,11 @@ import (
 // remain compatible with older servers; incompatible changes raise the minimum.
 const ProtocolVersion = 6
 
+// Size leases are negotiated with additive attach/response fields. Legacy
+// peers keep their version 6 behavior without requiring a service restart.
+const sizeLockLease = 30 * time.Second
+const sizeLockRenewInterval = 5 * time.Second
+
 // Version 6 adds the mobile size lock: Attach.Owner, "lockedResize",
 // "unlockSize" and "resync" requests, and SessionInfo.SizeLock. Older clients keep resizing as before; a locked
 // session ignores their resize requests until it is unlocked.
@@ -151,6 +156,9 @@ type Attach struct {
 	// named Device, at Cols×Rows, before the snapshot is made.
 	Owner  string `json:"owner,omitempty"`
 	Device string `json:"device,omitempty"`
+	// SizeLease requests an expiring lock renewed by "renewSize" requests.
+	// A client renews only when the attach response acknowledges this field.
+	SizeLease bool `json:"size_lease,omitempty"`
 }
 
 // Dir returns the directory of the server's socket, log and state.

@@ -170,12 +170,13 @@ func (s *Server) handle(conn net.Conn) {
 		}
 		if a.Owner != "" {
 			// Before the answer: a client that attached holds the lock.
-			ss.lockSize(a.Owner, a.Device, a.Cols, a.Rows)
+			ss.lockSize(a.Owner, a.Device, a.Cols, a.Rows, conn, a.SizeLease)
+			defer ss.releaseSizeAttachment(a.Owner, conn)
 		}
-		if a.ScreenFrames {
-			conn.Write([]byte(`{"ok":true,"screen_frames":true}` + "\n"))
-		} else {
-			conn.Write([]byte(`{"ok":true}` + "\n"))
+		answer, _ := json.Marshal(attachResponse{OK: true, ScreenFrames: a.ScreenFrames, SizeLease: a.Owner != "" && a.SizeLease})
+		if _, err := conn.Write(append(answer, '\n')); err != nil {
+			conn.Close()
+			return
 		}
 		// What the reader buffered past the first line is input.
 		if n := r.Buffered(); n > 0 {
@@ -317,6 +318,15 @@ func (s *Server) do(req Request) (any, error) {
 			return nil, err
 		}
 		ss.unlockSizeOwned(req.Owner, req.Cols, req.Rows)
+		return nil, nil
+	case "renewSize":
+		ss, err := s.session(req.SID)
+		if err != nil {
+			return nil, err
+		}
+		if !ss.renewSizeLock(req.Owner) {
+			return nil, errSizeUnlocked
+		}
 		return nil, nil
 	case "resync":
 		ss, err := s.session(req.SID)

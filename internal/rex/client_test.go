@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -236,6 +237,66 @@ func TestStreamCloseCancelsResize(t *testing.T) {
 	case req := <-requests:
 		t.Fatalf("resize sent after close: %+v", req)
 	case <-time.After(2 * resizeDelay):
+	}
+}
+
+func TestSizeLeaseHeartbeatStopsWhenStreamCloses(t *testing.T) {
+	s, requests := resizeStream(t)
+	s.lockOwner, s.locked = "phone", true
+	ctx, cancel := context.WithCancel(context.Background())
+	s.leaseCancel = cancel
+	done := make(chan struct{})
+	go func() { s.renewSizeLock(ctx, 10*time.Millisecond); close(done) }()
+	select {
+	case req := <-requests:
+		if req.Op != "renewSize" || req.Owner != "phone" || req.SID != "test" || req.Cols != 0 || req.Rows != 0 {
+			t.Fatalf("heartbeat changed geometry or lost ownership: %+v", req)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("quiet active session did not renew")
+	}
+	s.Close()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("heartbeat continued after closing its view")
+	}
+	// Discard any request already in flight at Close, then verify no new work.
+	for len(requests) > 0 {
+		<-requests
+	}
+	select {
+	case req := <-requests:
+		t.Fatalf("inactive view kept renewing: %+v", req)
+	case <-time.After(30 * time.Millisecond):
+	}
+}
+
+func TestSizeLeaseNegotiationWithLegacyServer(t *testing.T) {
+	for _, leased := range []bool{false, true} {
+		t.Run(fmt.Sprint(leased), func(t *testing.T) {
+			data, peer := net.Pipe()
+			c := &Client{dial: func(context.Context) (net.Conn, error) { return data, nil }}
+			attached := make(chan Attach, 1)
+			go func() {
+				var req Attach
+				json.NewDecoder(peer).Decode(&req)
+				attached <- req
+				json.NewEncoder(peer).Encode(attachResponse{OK: true, ScreenFrames: true, SizeLease: leased})
+			}()
+			s := c.LockStream("session", "phone", "iPhone", 48, 35)
+			t.Cleanup(func() { s.Close(); peer.Close() })
+			s.attach()
+			if req := <-attached; !req.SizeLease || req.Owner != "phone" {
+				t.Fatalf("lease not requested: %+v", req)
+			}
+			s.mu.Lock()
+			enabled := s.leaseCancel != nil
+			s.mu.Unlock()
+			if enabled != leased {
+				t.Fatal("heartbeat started without the server acknowledging lease support")
+			}
+		})
 	}
 }
 

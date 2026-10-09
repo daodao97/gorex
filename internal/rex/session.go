@@ -51,6 +51,9 @@ type session struct {
 	// sizeLock is the device that took the size with lockSize; while it
 	// is set, only that lock's own resizes reach the PTY.
 	sizeLock, sizeLockDevice string
+	sizeLockConn             net.Conn
+	sizeLockUntil            time.Time
+	sizeLockTimer            *time.Timer
 	done                     chan struct{}
 }
 
@@ -177,6 +180,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 		}
 		s.mu.Lock()
 		s.exited, s.code = true, code
+		s.clearSizeLockLocked()
 		for a := range s.clients {
 			a.finish()
 		}
@@ -312,18 +316,24 @@ func (s *session) input(p []byte) {
 func (s *session) resize(cols, rows int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.expireSizeLockLocked(time.Now())
 	if s.sizeLock != "" {
 		return false
 	}
 	return s.resizeLocked(cols, rows)
 }
 
-// lockSize gives the terminal's size to a device until unlockSize. The
-// device's later resizes go through lockedResize.
-func (s *session) lockSize(owner, device string, cols, rows int) {
+// lockSize gives the terminal's size to this attachment. Leased owners must
+// renew while active; a disconnected attachment releases even a legacy lock.
+func (s *session) lockSize(owner, device string, cols, rows int, conn net.Conn, leased bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.clearSizeLockLocked()
 	s.sizeLock, s.sizeLockDevice = owner, device
+	s.sizeLockConn = conn
+	if leased {
+		s.renewSizeLockLocked()
+	}
 	if cols > 0 && rows > 0 {
 		s.resizeLocked(cols, rows)
 	}
@@ -334,6 +344,7 @@ func (s *session) lockSize(owner, device string, cols, rows int) {
 func (s *session) lockedResize(owner string, cols, rows int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.expireSizeLockLocked(time.Now())
 	if s.sizeLock != owner {
 		return false
 	}
@@ -354,10 +365,61 @@ func (s *session) unlockSizeOwned(owner string, cols, rows int) {
 	if owner != "" && s.sizeLock != owner {
 		return
 	}
-	s.sizeLock, s.sizeLockDevice = "", ""
+	s.clearSizeLockLocked()
 	if cols > 0 && rows > 0 {
 		s.resizeLocked(cols, rows)
 	}
+}
+
+// releaseSizeAttachment checks the connection too: an old attachment closing
+// must not release a newer attachment, even if it reused the same owner ID.
+func (s *session) releaseSizeAttachment(owner string, conn net.Conn) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if owner != "" && s.sizeLock == owner && s.sizeLockConn == conn {
+		s.clearSizeLockLocked()
+	}
+}
+
+func (s *session) renewSizeLock(owner string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.expireSizeLockLocked(time.Now())
+	if owner == "" || s.sizeLock != owner || s.sizeLockUntil.IsZero() {
+		return false
+	}
+	s.renewSizeLockLocked()
+	return true
+}
+
+func (s *session) renewSizeLockLocked() {
+	s.sizeLockUntil = time.Now().Add(sizeLockLease)
+	if s.sizeLockTimer == nil {
+		s.sizeLockTimer = time.AfterFunc(sizeLockLease, func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			s.expireSizeLockLocked(time.Now())
+		})
+	} else {
+		s.sizeLockTimer.Reset(sizeLockLease)
+	}
+}
+
+func (s *session) expireSizeLockLocked(now time.Time) {
+	// An old timer callback may already be waiting for mu when a renewal or
+	// replacement arrives. Its deadline must not clear the renewed owner.
+	if !s.sizeLockUntil.IsZero() && !now.Before(s.sizeLockUntil) {
+		s.clearSizeLockLocked()
+	}
+}
+
+func (s *session) clearSizeLockLocked() {
+	if s.sizeLockTimer != nil {
+		s.sizeLockTimer.Stop()
+		s.sizeLockTimer = nil
+	}
+	s.sizeLock, s.sizeLockDevice = "", ""
+	s.sizeLockConn, s.sizeLockUntil = nil, time.Time{}
 }
 
 func (s *session) resizeLocked(cols, rows int) bool {
@@ -479,6 +541,7 @@ func (s *session) kill() {
 // info describes the session and what runs in its foreground.
 func (s *session) info() SessionInfo {
 	s.mu.Lock()
+	s.expireSizeLockLocked(time.Now())
 	in := SessionInfo{
 		ID: s.id, Shell: s.shell, Created: s.created,
 		Title: s.vt.Title(), LastOutput: s.lastOutput, LastInput: s.lastInput,

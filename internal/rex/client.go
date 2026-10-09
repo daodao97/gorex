@@ -295,6 +295,7 @@ type Stream struct {
 	lockOwner, lockDevice           string
 	locked, lockLost                bool
 	lockedAt                        time.Time
+	leaseCancel                     context.CancelFunc
 	beforeAttach                    <-chan struct{}
 	releaseDone                     chan struct{}
 	screenFrames                    bool
@@ -395,15 +396,18 @@ func (s *Stream) attach() {
 	}
 	conn, err := dial(ctx)
 	var frames bool
+	var leased bool
 	if err == nil {
 		conn.SetDeadline(time.Now().Add(15 * time.Second))
 		// Every stream asks for frames: a window decoding a locked
 		// session at the lock's size follows their geometry.
 		// The lock is taken with the attach, so its snapshot already has
 		// the device's size.
-		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: true, Owner: owner, Device: device})
+		b, _ := json.Marshal(Attach{Op: "attach", SID: s.sid, Cols: cols, Rows: rows, ScreenFrames: true, Owner: owner, Device: device, SizeLease: owner != ""})
 		if _, err = conn.Write(append(b, '\n')); err == nil {
-			frames, err = readAttachOK(conn)
+			var answer attachResponse
+			answer, err = readAttachOK(conn)
+			frames, leased = answer.ScreenFrames, answer.SizeLease && owner != ""
 		}
 		conn.SetDeadline(time.Time{})
 		if err != nil {
@@ -423,8 +427,41 @@ func (s *Stream) attach() {
 	} else {
 		s.conn, s.sentCols, s.sentRows, s.screenFrames = conn, cols, rows, frames
 		s.locked, s.lockedAt = owner != "", time.Now()
+		if leased {
+			ctx, cancel := context.WithCancel(context.Background())
+			s.leaseCancel = cancel
+			go s.renewSizeLock(ctx, sizeLockRenewInterval)
+		}
 	}
 	s.cond.Broadcast()
+}
+
+// Only an attached, active view renews. Closing the stream stops renewal even
+// if the explicit unlock cannot arrive before iOS suspends the application.
+func (s *Stream) renewSizeLock(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.c.Closed():
+			return
+		case <-ticker.C:
+		}
+		s.mu.Lock()
+		closed, lost, owner := s.closed, s.lockLost, s.lockOwner
+		s.mu.Unlock()
+		if closed || lost || ctx.Err() != nil {
+			return
+		}
+		if err := s.c.call(Request{Op: "renewSize", SID: s.sid, Owner: owner}, nil); err != nil && err.Error() == errSizeUnlocked.Error() {
+			s.mu.Lock()
+			s.lockLost = true
+			s.mu.Unlock()
+			return
+		}
+	}
 }
 
 // sync tells the server the terminal's size, once attached, when it was
@@ -458,35 +495,38 @@ func (s *Stream) sync() error {
 	return nil
 }
 
-// readOK reads the server's answer to an attach, a byte at a time so as
-// to read nothing past it.
-func readAttachOK(conn net.Conn) (bool, error) {
+type attachResponse struct {
+	ScreenFrames bool   `json:"screen_frames,omitempty"`
+	SizeLease    bool   `json:"size_lease,omitempty"`
+	OK           bool   `json:"ok"`
+	Error        string `json:"error,omitempty"`
+}
+
+// readAttachOK reads the server's answer a byte at a time, leaving the first
+// screen frame untouched for the stream's reader.
+func readAttachOK(conn net.Conn) (attachResponse, error) {
+	var res attachResponse
 	var line []byte
 	b := make([]byte, 1)
 	for {
 		if _, err := conn.Read(b); err != nil {
-			return false, err
+			return res, err
 		}
 		if b[0] == '\n' {
 			break
 		}
 		line = append(line, b[0])
 		if len(line) > 4096 {
-			return false, errors.New("rex: bad answer")
+			return res, errors.New("rex: bad answer")
 		}
 	}
-	var res struct {
-		ScreenFrames bool   `json:"screen_frames"`
-		OK           bool   `json:"ok"`
-		Error        string `json:"error"`
-	}
 	if err := json.Unmarshal(line, &res); err != nil {
-		return false, err
+		return res, err
 	}
 	if !res.OK {
-		return false, errors.New(res.Error)
+		return res, errors.New(res.Error)
 	}
-	return res.ScreenFrames, nil
+	return res, nil
 }
 
 func (s *Stream) wait() (net.Conn, error) {
@@ -656,6 +696,9 @@ func (s *Stream) resizeSettled() {
 func (s *Stream) Close() error {
 	s.mu.Lock()
 	s.closed = true
+	if s.leaseCancel != nil {
+		s.leaseCancel()
+	}
 	if s.resizeTimer != nil {
 		s.resizeTimer.Stop()
 	}
