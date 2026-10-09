@@ -137,7 +137,13 @@ jobs:
           done
           codesign --verify --deep --strict "$app"
           images=(build/darwin-universal/*.dmg)
+          [[ ${#images[@]} -eq 1 ]]
+          version=$(python3 -c 'import json; print(json.load(open("mygo.json"))["version"])')
           for image in "${images[@]}"; do
+            # GitHub rewrites spaces in asset names; checksum filenames must stay identical after download.
+            target="build/darwin-universal/Retty-$version-macos-universal.dmg"
+            mv "$image" "$target"
+            image="$target"
             hdiutil verify "$image"
             (cd "$(dirname "$image")" && shasum -a 256 "$(basename "$image")") > "$image.sha256"
           done

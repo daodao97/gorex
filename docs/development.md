@@ -143,7 +143,7 @@ GitHub Actions 的 **Build macOS DMG** 工作流在推送 `main` 或手动运行
 
 ### 下载后提示已损坏
 
-先区分 DMG 无法挂载，还是复制到 Applications 后应用无法打开。前者用 `hdiutil verify "Retty 0.1.0.dmg"` 检查镜像；Release 下载同时用 `shasum -a 256 -c "Retty 0.1.0.dmg.sha256"` 比较校验值，校验失败需重新下载。
+先区分 DMG 无法挂载，还是复制到 Applications 后应用无法打开。前者用 `hdiutil verify Retty-0.1.0-macos-universal.dmg` 检查镜像；Release 下载同时用 `shasum -a 256 -c Retty-0.1.0-macos-universal.dmg.sha256` 比较校验值，校验失败需重新下载。
 
 当前 ad hoc 包没有 Apple 公证，浏览器下载带有 quarantine 标记，macOS 可能拦截应用并提示“已损坏”。如果确认来源是本仓库构建、包的 SHA-256 和签名完整性验证通过，可将应用拖入 Applications 后，仅移除这个应用的下载隔离标记：
 

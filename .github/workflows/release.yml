@@ -95,7 +95,7 @@ jobs:
           from pathlib import Path
           folder = Path('release')
           assets = [f'retty-{platform}.tar.gz' for platform in ['linux-amd64', 'linux-arm64', 'darwin-amd64', 'darwin-arm64']]
-          assets.append(f'Retty {os.environ["RELEASE_VERSION"]}.dmg')
+          assets.append(f'Retty-{os.environ["RELEASE_VERSION"]}-macos-universal.dmg')
           expected = set(assets + [f'{name}.sha256' for name in assets])
           actual = {path.name for path in folder.iterdir()}
           if actual != expected:
