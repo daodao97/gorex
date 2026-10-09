@@ -8,10 +8,21 @@ import (
 )
 
 type desktopRecent struct {
-	Link string
-	Name string
-	ID   string `json:",omitempty"`
-	OS   string `json:",omitempty"`
+	Link  string
+	Name  string
+	Alias string `json:",omitempty"`
+	ID    string `json:",omitempty"`
+	OS    string `json:",omitempty"`
+}
+
+func (d desktopRecent) displayName() string {
+	if d.Alias != "" {
+		return d.Alias
+	}
+	if d.Name != "" {
+		return d.Name
+	}
+	return "桌面"
 }
 
 func sameDesktop(a, b desktopRecent) bool {
@@ -51,6 +62,9 @@ func mergeDesktopHistory(first, second []desktopRecent) []desktopRecent {
 					}
 					if kept.OS == "" {
 						history[i].OS = entry.OS
+					}
+					if kept.Alias == "" {
+						history[i].Alias = entry.Alias
 					}
 					duplicate = true
 					break

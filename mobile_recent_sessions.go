@@ -100,7 +100,20 @@ func (m *mobileApp) applyLoadedConnectionHistory(history []desktopRecent, sessio
 	if m.historyEpoch != epoch {
 		return
 	}
+	// A delayed Keychain read must not restore an alias cleared in settings.
+	history = slices.Clone(history)
+	for i, saved := range history {
+		for _, current := range m.history {
+			if m.deviceNameTouched[current.ID] || m.deviceNameTouched[current.Link] {
+				if saved.Link == current.Link || sameDesktop(saved, current) {
+					history[i].Alias = ""
+					break
+				}
+			}
+		}
+	}
 	m.history = mergeDesktopHistory(m.history, history)
+	m.persistDesktopHistory()
 	// Resolve old link-based identities before discarding rotated links.
 	for i, session := range sessions {
 		for _, previous := range history {
@@ -220,10 +233,10 @@ func (m *mobileApp) recentSessionsView(c *ui.Context) {
 				if i > 0 {
 					mobileListDivider(c)
 				}
-				row := mobileListRow(c, "recent-session-"+entry.Desktop+"-"+entry.Session, "进入最近会话 "+entry.Desktop+" "+entry.Session, 64).Disabled(m.busy || m.scanning || m.reconnecting).Value(m.recentSessionTitle(entry) + " · " + desktop.Name)
+				row := mobileListRow(c, "recent-session-"+entry.Desktop+"-"+entry.Session, "进入最近会话 "+entry.Desktop+" "+entry.Session, 64).Disabled(m.busy || m.scanning || m.reconnecting).Value(m.recentSessionTitle(entry) + " · " + desktop.displayName())
 				row.Children(func() {
 					mobileSessionIcon(c, entry.Program)
-					mobileListText(c, mobileListTextOptions{Title: m.recentSessionTitle(entry), Subtitle: desktop.Name})
+					mobileListText(c, mobileListTextOptions{Title: m.recentSessionTitle(entry), Subtitle: desktop.displayName()})
 					mobileListChevron(c)
 				})
 				if row.Clicked() {

@@ -10,18 +10,33 @@ import (
 func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 	if m.navigation.Path() != "/sessions" {
 		m.sessionSettingsOpen = false
+		m.deviceNameOpen = false
 	}
 	ui.DialogBase(c, &m.sessionSettingsOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
-		panel.Label("显示与提醒面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12)
+		panel.Label("会话列表设置面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12)
 		ui.Row(c).FillWidth().Height(40).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "显示与提醒").FontSize(17).Bold().Grow(1)
-			if ui.ButtonBase(c).Label("关闭显示与提醒").Role(ui.RoleButton).Size(40, 40).Radius(20).Background(c.Theme().Background).Children(func() {
+			ui.Text(c, "会话列表设置").FontSize(17).Bold().Grow(1)
+			if ui.ButtonBase(c).Label("关闭会话列表设置").Role(ui.RoleButton).Size(40, 40).Radius(20).Background(c.Theme().Background).Children(func() {
 				ui.Icon(c, icon("x")).Size(16, 16).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
 				m.sessionSettingsOpen = false
 			}
 		})
+		if ui.ButtonBase(c).Label("重命名连接设备").Role(ui.RoleButton).FillWidth().MinHeight(72).Padding(12).Radius(12).Background(c.Theme().Background).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(32, 32).Shrink(0).Radius(10).Background(c.Theme().Surface).Center().Children(func() {
+				ui.Icon(c, icon("monitor")).Size(17, 17).TextColor(c.Theme().TextMuted)
+			})
+			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+				ui.Text(c, "设备名称").FontSize(15)
+				ui.Text(c, m.connectedDevice().displayName()).FontSize(12).TextColor(c.Theme().TextMuted).FillWidth().SingleLine().Ellipsis("…")
+			})
+			ui.Icon(c, icon("pencil")).Size(16, 16).Shrink(0).TextColor(c.Theme().TextMuted)
+		}).Clicked() {
+			m.deviceNameDraft = m.connectedDevice().Alias
+			m.sessionSettingsOpen, m.deviceNameOpen = false, true
+			c.Blur()
+		}
 		enabled := !m.pushDisabled
 		if mobileSettingSwitch(c, &enabled, "后台任务提醒", "bell", "任务提醒", "完成或需要确认时通知").Changed() {
 			m.setPushEnabled(enabled)
@@ -42,6 +57,7 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 		}
 		m.connectionDiagnosticsAction(c)
 	})
+	m.deviceNameDialog(c)
 }
 
 func mobileSettingSwitch(c *ui.Context, enabled *bool, label, glyph, title, description string) ui.Element {

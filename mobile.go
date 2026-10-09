@@ -86,6 +86,9 @@ type mobileApp struct {
 	connectionDiagnosticsOpen          bool
 	connectionDiagnosticsCopied        bool
 	sessionSettingsOpen                bool
+	deviceNameOpen                     bool
+	deviceNameDraft                    string
+	deviceNameTouched                  map[string]bool
 	// sizeLock, a setting, makes an opened session take the PTY's size
 	// (and the desktop's pane show it) while the phone session is active.
 	// lockLost tells that a window did, for the open session.
@@ -204,6 +207,7 @@ func (m *mobileApp) disconnect(forget bool) {
 	m.agentPrevious = nil
 	m.editingOpen = false
 	m.sessionSettingsOpen = false
+	m.deviceNameOpen = false
 	m.endingOpen, m.closingSession = false, ""
 	if m.cancel != nil {
 		m.cancel()
@@ -725,14 +729,14 @@ func (m *mobileApp) connectView(c *ui.Context) {
 						mobileListDivider(c)
 					}
 					status := m.presence[entry.Link].state.label()
-					label := "重新连接 " + entry.Name
+					label := "重新连接 " + entry.displayName()
 					if m.isConnectedDesktop(entry) {
-						status, label = "已连接", "打开桌面 "+entry.Name
+						status, label = "已连接", "打开桌面 "+entry.displayName()
 					}
 					selecting := m.historySelection != nil
 					checked := m.historySelection[entry.Link]
 					if selecting {
-						label = "选择连接 " + entry.Name
+						label = "选择连接 " + entry.displayName()
 					}
 					row := mobileListRow(c, "desktop-"+entry.Link, label, 56).Value(status).Disabled(m.busy || m.scanning || m.reconnecting)
 					if selecting {
@@ -745,14 +749,14 @@ func (m *mobileApp) connectView(c *ui.Context) {
 							platform := desktopPlatformProgram(entry.OS)
 							mobileListIcon(c, platform.Glyph, colorsOf(c).iconMuted).Role(ui.RoleImage).Label(platform.Name + " icon")
 						}
-						mobileListText(c, mobileListTextOptions{Title: entry.Name})
+						mobileListText(c, mobileListTextOptions{Title: entry.displayName()})
 						ui.Row(c).Gap(5).Shrink(0).AlignItems(ui.Center).Children(func() {
 							color := c.Theme().TextMuted
 							if m.presence[entry.Link].state == desktopOnline {
 								color = colorsOf(c).busy.Mix(color, 0.25)
 							}
 							ui.Box(c).Size(6, 6).Radius(3).Background(color)
-							ui.Text(c, status).Label("设备状态 " + entry.Name + " " + status).FontSize(12).TextColor(c.Theme().TextMuted)
+							ui.Text(c, status).Label("设备状态 " + entry.displayName() + " " + status).FontSize(12).TextColor(c.Theme().TextMuted)
 						})
 						if !selecting {
 							mobileListChevron(c)
@@ -801,8 +805,8 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			statusColor, status = colorsOf(c).attention, "桌面连接已中断"
 		}
 		ui.Box(c).Label(status).Size(6, 6).Shrink(0).Radius(3).Background(statusColor)
-		ui.Text(c, m.hello.Host.Name).FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
-		if ui.ButtonBase(c).Label("显示与提醒设置").Role(ui.RoleButton).Size(44, 44).Children(func() {
+		ui.Text(c, m.connectedDevice().displayName()).FontSize(13).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+		if ui.ButtonBase(c).Label("会话列表设置").Role(ui.RoleButton).Size(44, 44).Children(func() {
 			ui.Icon(c, icon("settings-2")).Size(17, 17).TextColor(c.Theme().TextMuted)
 			if m.pushError != "" && !m.pushDisabled {
 				ui.Box(c).Absolute().Right(9).Top(9).Size(5, 5).Radius(3).Background(colorsOf(c).attention)
