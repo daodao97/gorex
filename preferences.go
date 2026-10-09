@@ -347,6 +347,8 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 		ui.Text(c, "Retty").FontSize(17).FontWeight(600).TextColor(theme.Text).Margin(12, 0)
 		ui.Text(c, "Reconnect TTY · Relay TTY").FontSize(13).TextColor(theme.TextMuted)
 		ui.Text(c, "换个屏幕，接着工作。电脑、手机与服务器上的持久终端会话。").FontSize(12).TextColor(theme.TextMuted).Margin(16, 0)
+		ui.Text(c, "开源地址").FontSize(11).TextColor(theme.TextMuted).Margin(12, 0, 6, 0)
+		ui.Link(c, "https://github.com/daodao97/retty", "https://github.com/daodao97/retty").FontSize(12).FillWidth()
 		return
 	}
 	if a.agentHookError != "" && (a.settingsSection == 2 || query != "") {
