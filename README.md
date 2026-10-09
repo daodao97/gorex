@@ -330,6 +330,31 @@ The Gemini and Qwen hook mappings and timeout units follow their official refere
 | ⌘K | Clear |
 | ⌥⌘Q | Quit and end all sessions |
 
+## Headless server (CLI)
+
+Linux and macOS servers can host sessions without installing the desktop UI.
+Download the matching CLI archive, keep its Ghostty VT library beside the binary,
+and run `./gorex serve` to start a resident background gateway. The command
+returns while the gateway stays available after closing the terminal or SSH.
+Paste the printed `gorex://connect?...` link into the
+desktop application's connection settings to open or create server terminals.
+Phones use the same link and session protocol.
+
+`gorex stop` stops the gateway and preserves its background session server and shells;
+starting it again reuses the saved identity and sessions. `gorex link` prints the
+saved link, and `gorex status` lists local sessions without starting a service.
+CLI state uses a separate `GoRexServer` user config directory by default.
+Use `gorex serve --foreground` with systemd for boot startup and supervision.
+
+```sh
+GOWORK=off ./scripts/build-cli.sh --platform linux/amd64
+GOWORK=off ./scripts/build-cli.sh --platform all
+```
+
+The **Build CLI** GitHub Actions workflow produces Linux/macOS amd64/arm64
+archives, including the pinned VT library and SHA-256 checksums. See
+[CLI installation and systemd setup](docs/cli.md).
+
 ## Enable Agent status
 
 Open Settings (⌘,) → Agent and enable the integrations for Claude Code, Codex, Gemini CLI or Qwen Code.

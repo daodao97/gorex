@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"gorex/internal/agents"
-	"gorex/internal/terminal"
 )
 
 // scrollback is about how many bytes of output a session keeps above its
@@ -36,8 +35,8 @@ type session struct {
 	// vt is the session's screen, kept by the terminal emulator of the
 	// app's terminals without a view: a window attaching gets a snapshot
 	// of it at its size, as the session shows it now.
-	vt         *terminal.Terminal
-	vtIn       *io.PipeWriter
+	vt         sessionScreen
+	vtIn       io.Closer
 	output     uint64
 	bells      atomic.Int64
 	clients    map[*attached]struct{}
@@ -149,8 +148,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 	}
 	// The emulator's Conn reads nothing, and what it would answer programs
 	// is dropped: the windows' terminals answer them.
-	pr, pw := io.Pipe()
-	vt, err := terminal.New(terminal.Options{Conn: discard{pr}, Scrollback: scrollback, OnBell: func() { s.bells.Add(1) }})
+	vt, input, err := newSessionScreen(cols, rows, func() { s.bells.Add(1) })
 	if err != nil {
 		p.hangup()
 		cleanupShell()
@@ -160,7 +158,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 	if name == "zsh" {
 		vt.Feed([]byte(promptRedraw))
 	}
-	s.vt, s.vtIn = vt, pw
+	s.vt, s.vtIn = vt, input
 	read := make(chan struct{})
 	go func() {
 		s.read()

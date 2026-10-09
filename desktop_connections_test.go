@@ -215,6 +215,7 @@ func TestDesktopMirrorRecoversWhileControlRemainsConnected(t *testing.T) {
 	a.openDesktopSession(h, in, true)
 	p := a.tab().Focus
 	tt.Frame()
+	waitFor(t, tt, "initial mirror snapshot ready", func() bool { return p.remoteView.inputReady() })
 	tt.Type("export MIRROR_STATE=kept; printf 'mirror-%s\\n' ready")
 	tt.Key(0, ui.KeyEnter)
 	waitFor(t, tt, "initial mirror", func() bool { return strings.Contains(p.term.Text(), "mirror-ready") })

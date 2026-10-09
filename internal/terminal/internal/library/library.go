@@ -16,8 +16,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
-
-	"github.com/egoist/mygo"
 )
 
 // nativeLibraries is the format of mygo-plugin.json.
@@ -72,9 +70,7 @@ func Find(manifest []byte) (string, error) {
 		return "", err
 	}
 	var dirs []string
-	if dir, err := mygo.App.Path(mygo.PathResources); err == nil {
-		dirs = append(dirs, dir)
-	}
+	dirs = append(dirs, resourceDirs()...)
 	if exe, err := os.Executable(); err == nil {
 		dirs = append(dirs, filepath.Dir(exe))
 	}
@@ -88,7 +84,7 @@ func Find(manifest []byte) (string, error) {
 			return p, nil
 		}
 	}
-	if mygo.App.IsPackaged() {
+	if packaged() {
 		return "", fmt.Errorf("terminal: %s is missing from the app: build it with mygo build", f.Name)
 	}
 	if cached == "" {

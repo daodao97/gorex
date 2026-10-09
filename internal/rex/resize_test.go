@@ -1,4 +1,4 @@
-//go:build darwin || linux
+//go:build !gorex_cli && (darwin || linux)
 
 package rex
 

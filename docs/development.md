@@ -73,6 +73,23 @@ env -u MYGO_ENV -u MYGO_READY_SOCKET \
 GOREX_DIR="$PWD/.mygo/server-debug" GOWORK=off go run . -server
 ```
 
+## CLI 服务器构建
+
+```sh
+./scripts/check-mygo.sh
+GOWORK=off ./scripts/build-cli.sh --platform all
+GOWORK=off CGO_ENABLED=0 go test -tags gorex_cli \
+  ./cmd/gorex ./internal/rex ./internal/remote ./internal/terminal/screen
+GOWORK=off CGO_ENABLED=0 GOREX_CLI_E2E=1 go test -tags gorex_cli \
+  ./cmd/gorex -run '^TestCLIServerLifecycle$' -count=1 -timeout 3m
+```
+
+`cmd/gorex` 使用 `gorex_cli` 标签，独立于 MyGo UI，不使用桌面生产标志；打包脚本验证依赖里没有图形运行时，并将固定 manifest 的 Ghostty VT 动态库校验后放在二进制旁。`build/cli/` 包含 Linux/macOS × amd64/arm64 的 tar.gz 和 SHA-256 文件。Linux CLI 不依赖 X11、Wayland 或 GUI 会话，当前动态库依赖 glibc，不提供 musl/Alpine 构建。
+
+隔离的 CLI E2E 使用自己的数据目录、服务进程和 shell，验证真实加密隧道、新建会话、输入回显、双端尺寸接管、网关退出保留会话及重连身份。在 Linux 覆盖 `serve` 命令返回后网关继续运行、重复启动复用 PID、`stop` 保留会话及后台 daemon 启动；macOS 使用 `--foreground` 和测试自行启动的会话服务，避免注册测试 launchd job。可用 `GOREX_CLI_BINARY=/absolute/path/gorex` 指向已打包的二进制，无需测试内重复构建。
+
+`gorex serve`（或 `gorex`、`gorex start`）默认启动后台常驻加密网关并返回，复用已有实例。`gorex stop` 只停止网关，不向会话服务发送 `shutdown`；`--foreground` 用于 systemd 等进程管理器，SIGINT/SIGTERM 同样保留会话。管理 socket 为 0600，锁覆盖启动/运行/清理过程，阻止并发实例争用连接身份。默认状态目录是用户配置目录的 `GoRexServer`，与已安装桌面应用隔离。用同一份数据目录重启网关会保留 identity 和当前服务；不要为了更新 CLI 结束已有 Agent 任务。安装、运行和 systemd 用户服务示例见 [cli.md](cli.md)。
+
 ## 桌面生产构建
 
 完整打包包含配置、图标和资源，输出到 `build/darwin-arm64/`：

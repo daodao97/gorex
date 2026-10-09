@@ -17,7 +17,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egoist/mygo"
 	"github.com/tailscale/tailcat"
 	"gorex/internal/rex"
 )
@@ -223,13 +222,8 @@ func diagnosticCause(err error) string {
 	if err == nil {
 		return "ok"
 	}
-	var native *mygo.NetworkError
-	if errors.As(err, &native) {
-		switch native.Kind {
-		case "offline", "timeout", "canceled", "failed":
-			return "system_network_" + native.Kind
-		}
-		return "system_network_failed"
+	if cause := systemNetworkCause(err); cause != "" {
+		return cause
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return "deadline_exceeded"

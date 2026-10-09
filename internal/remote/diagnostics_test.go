@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/egoist/mygo"
 	"github.com/tailscale/tailcat"
 	"tailscale.com/tailcfg"
 )
@@ -27,8 +26,6 @@ func TestDiagnosticErrorCodesNeverIncludeErrorText(t *testing.T) {
 		{&net.DNSError{Name: "secret-token", Err: "secret-token", IsTimeout: true}, "dns_timeout"},
 		{fmt.Errorf("secret-token: %w", syscall.ECONNREFUSED), "connection_refused"},
 		{x509.HostnameError{Host: "secret-token"}, "tls_certificate_invalid"},
-		{&mygo.NetworkError{Kind: "timeout"}, "system_network_timeout"},
-		{&mygo.NetworkError{Kind: "secret-token"}, "system_network_failed"},
 		{errors.New("gorex://connect?address=secret-token / session content"), "unclassified_error"},
 	} {
 		if got := diagnosticCause(tt.err); got != tt.code {
