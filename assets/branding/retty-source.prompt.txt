@@ -1,0 +1,7 @@
+Generated with built-in imagegen; edited from the preceding connected-ribbon concept.
+
+Use case: precise-object-edit / logo-brand.
+Input image: the previous Retty icon, edit target.
+Change only the symbol geometry. Keep the full-bleed almost-black graphite square background, subtle material finish, luminous soft mint-green palette, clean minimal style and generous padding.
+Replace the connected ribbon with a highly recognizable classic terminal prompt: exactly two separate glyphs, ">" and "_". A simple right-facing chevron on the left, formed by two straight thick diagonal strokes with a clear angular point and lightly softened corners; a separate short horizontal underscore cursor at the lower right, with a very visible air gap between the glyphs. The cursor is about half the chevron height in length, with the same stroke thickness. The underscore bottom aligns optically with the chevron bottom. Never connect the underscore to the chevron. No return loop, no extra foot, no letter R or abstract monogram. Make the complete >_ group compact, optically centered, approximately 55% of canvas width and 40% of height. Both glyphs mint green, restrained tonal depth. At small sizes it must read instantly as a terminal prompt.
+Single finished square opaque production source artwork, full bleed, no corner mask, no outer margins or device mockup, no labels. Preserve the existing background and colors.

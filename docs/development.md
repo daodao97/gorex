@@ -96,7 +96,7 @@ GOWORK=off CGO_ENABLED=0 RETTY_CLI_E2E=1 go test -tags retty_cli \
 
 ### 原生应用图标
 
-选定的 R 与终端光标图案保存在 `assets/branding/retty-source.png`。修改母图后执行：
+选定的深色底、薄荷绿 `>_` 终端图案保存在 `assets/branding/retty-source.png`，生成提示词保存在同目录的 `retty-source.prompt.txt`。修改母图后执行：
 
 ```sh
 GOWORK=off go run ./tools/mkicon
