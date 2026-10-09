@@ -6,7 +6,10 @@
   "out": "build",
   "icon": "resources/icon.png",
   "macos": {
-    "minimumSystemVersion": "13.0"
+    "minimumSystemVersion": "13.0",
+    "infoPlist": {
+      "CFBundleIconName": "RettyAppIcon"
+    }
   },
   "urlSchemes": [
     "retty"

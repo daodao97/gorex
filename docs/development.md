@@ -100,9 +100,9 @@ GOWORK=off CGO_ENABLED=0 RETTY_CLI_E2E=1 go test -tags retty_cli \
 GOWORK=off go run ./tools/mkicon
 ```
 
-这会导出两份 1024 × 1024 资源：`resources/icon.png` 使用 macOS 原生图标网格的圆角轮廓和透明留白；`resources/ios/app-icon.png` 为不透明、铺满画布的 iOS 底图，圆角由系统处理。不要直接把桌面图标用于手机，否则 MyGo 的透明区域白色填充会产生白边。
+这会导出两份 1024 × 1024 资源：`resources/icon.png` 使用 macOS 原生图标网格的圆角轮廓和透明留白，供 ICNS 回退；`resources/ios/app-icon.png` 为不透明、铺满画布的 iOS 底图，圆角由系统处理。在 macOS 上运行时，还通过 Xcode 的 `actool` 编译 `resources/darwin/Assets.car`，`macos.infoPlist.CFBundleIconName` 选择其中的 `RettyAppIcon`，让 macOS 26 使用铺满图标的系统蒙版，避免给透明 ICNS 加白色外框。不要直接把桌面 ICNS 底图用于手机，否则 MyGo 的透明区域白色填充会产生白边。
 
-`scripts/build-ios.sh` 在自己的临时配置中选择 iOS 图标，仍编译仓库的主包并使用固定 MyGo，结束时删除该临时配置，不修改桌面的 `mygo.json`。覆盖更新手机时，可用 `IOS_PROVISIONING_PROFILE` 指定既有 profile 的名称或 UUID，并用 `IOS_SIGNING_IDENTITY` 指定其已有证书；脚本仅为这次构建启用手动签名，不改变正常配置。
+`scripts/build-ios.sh` 在自己的临时配置中选择 iOS 图标，仍编译仓库的主包并使用固定 MyGo，结束时删除该临时配置，不修改桌面的 `mygo.json`。覆盖更新手机时，可用 `IOS_PROVISIONING_PROFILE` 指定既有 profile 的名称或 UUID，并用 `IOS_SIGNING_IDENTITY` 指定其已有证书；脚本仅为这次构建启用手动签名，不改变正常配置。手动签名也必须保留 `ios.entitlements` 中的既有 Keychain 访问组，安装前对比新旧应用实际签名的 entitlements。
 
 完整打包包含配置、图标和资源，输出到 `build/darwin-arm64/`：
 

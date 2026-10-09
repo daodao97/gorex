@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"image"
 	"image/color"
@@ -15,7 +16,9 @@ import (
 	"log"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/vector"
@@ -63,7 +66,73 @@ func exportIcons() error {
 	squircle(inset, inset, width).Draw(mask, mask.Bounds(), image.NewUniform(color.White), image.Point{})
 	mac := image.NewNRGBA(art.Bounds())
 	draw.DrawMask(mac, mac.Bounds(), art, image.Point{}, mask, image.Point{}, draw.Src)
-	return writePNG("resources/icon.png", mac)
+	if err := writePNG("resources/icon.png", mac); err != nil {
+		return err
+	}
+	// Tahoe reads a full-bleed asset catalog; keep the inset ICNS for fallback.
+	if runtime.GOOS == "darwin" {
+		return exportMacCatalog(ios)
+	}
+	return nil
+}
+
+func exportMacCatalog(src image.Image) error {
+	work, err := os.MkdirTemp("", "retty-icon-catalog-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(work)
+	catalog := filepath.Join(work, "Retty.xcassets")
+	set := filepath.Join(catalog, "RettyAppIcon.appiconset")
+	if err := os.MkdirAll(set, 0o755); err != nil {
+		return err
+	}
+	info := map[string]any{"author": "xcode", "version": 1}
+	var images []map[string]string
+	for _, points := range []int{16, 32, 128, 256, 512} {
+		for _, scale := range []int{1, 2} {
+			name := fmt.Sprintf("icon_%dx%d", points, points)
+			if scale == 2 {
+				name += "@2x"
+			}
+			name += ".png"
+			px := points * scale
+			img := image.NewRGBA(image.Rect(0, 0, px, px))
+			xdraw.CatmullRom.Scale(img, img.Bounds(), src, src.Bounds(), draw.Src, nil)
+			if err := writePNG(filepath.Join(set, name), img); err != nil {
+				return err
+			}
+			images = append(images, map[string]string{"idiom": "mac", "size": fmt.Sprintf("%dx%d", points, points), "scale": fmt.Sprintf("%dx", scale), "filename": name})
+		}
+	}
+	for path, contents := range map[string]any{
+		filepath.Join(catalog, "Contents.json"): map[string]any{"info": info},
+		filepath.Join(set, "Contents.json"):     map[string]any{"info": info, "images": images},
+	} {
+		data, err := json.MarshalIndent(contents, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, append(data, '\n'), 0o644); err != nil {
+			return err
+		}
+	}
+	out := filepath.Join(work, "compiled")
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return err
+	}
+	cmd := exec.Command("xcrun", "actool", "--compile", out, "--platform", "macosx", "--minimum-deployment-target", "13.0", "--app-icon", "RettyAppIcon", "--output-partial-info-plist", filepath.Join(out, "partial.plist"), catalog)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("compile macOS icon catalog: %w\n%s", err, output)
+	}
+	data, err := os.ReadFile(filepath.Join(out, "Assets.car"))
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll("resources/darwin", 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile("resources/darwin/Assets.car", data, 0o644)
 }
 
 func writePNG(path string, img image.Image) error {
