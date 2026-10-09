@@ -18,7 +18,7 @@ var programBitmaps = map[string]*ui.Bitmap{}
 
 // programIcon shares vector and raster logos across tabs, the command palette
 // and mobile lists. Raster logos keep their original colors.
-func programIcon(c *ui.Context, name string) *ui.Element {
+func programIcon(c *ui.Context, name string) ui.Element {
 	if strings.HasPrefix(name, "agent:") && strings.HasSuffix(name, ".png") {
 		bitmap := programBitmaps[name]
 		if bitmap == nil {

@@ -136,7 +136,10 @@ type Options struct {
 	OnSplit func(down bool)
 	// OnPaste runs on the UI thread and can handle clipboard data externally.
 	// Returning true suppresses the normal bracketed text paste.
-	OnPaste func(*ui.Context) bool
+	OnPaste func(ui.Services) bool
+	// OnSubmit runs on the UI thread after an unmodified Return key is
+	// released. Its terminal key events have already been queued.
+	OnSubmit func(ui.Services)
 }
 
 // CursorStyle is the shape of the cursor.

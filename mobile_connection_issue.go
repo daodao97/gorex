@@ -115,7 +115,7 @@ func (m *mobileApp) connectionActions(c *ui.Context) {
 }
 
 func (m *mobileApp) connectionDialog(c *ui.Context) {
-	ui.DialogBase(c, &m.connectionDetailsOpen, func(back, panel *ui.Element) {
+	ui.DialogBase(c, &m.connectionDetailsOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, .35))
 		panel.Width(340).MaxWidthPercent(95).Padding(20).Radius(18).Background(c.Theme().Surface).Column().Gap(12)
 		title, body := "正在恢复连接", "恢复后将继续当前会话，可先阅读已有内容。"

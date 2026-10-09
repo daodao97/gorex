@@ -3,8 +3,8 @@ package main
 import (
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/mobile"
 )
 
 var mobileKeyboardActions = []ui.InputAction{
@@ -39,56 +39,44 @@ func keyboardModifier(id string) ui.Modifiers {
 }
 
 func (m *mobileApp) keyboardActions() []ui.InputAction {
-	actions := append([]ui.InputAction(nil), mobileKeyboardActions...)
-	actions[6].Items = append([]ui.InputAction(nil), actions[6].Items...)
-	decorate := func(a *ui.InputAction) {
-		if mod := keyboardModifier(a.ID); mod != 0 {
-			a.Selected = m.keyboardModifiers&mod != 0
-			a.Locked = m.keyboardLocked&mod != 0
-		}
-	}
-	for i := range actions {
-		decorate(&actions[i])
-		for j := range actions[i].Items {
-			decorate(&actions[i].Items[j])
-		}
-	}
-	return actions
+	return m.keyboardLatch.Decorate(mobileKeyboardActions, keyboardModifier)
 }
 
 func (m *mobileApp) clearKeyboardModifiers() {
-	if m.keyboardModifiers == 0 && m.keyboardLocked == 0 {
-		return
+	if m.keyboardLatch.Clear() {
+		m.invalidate()
 	}
-	m.keyboardModifiers, m.keyboardLocked = 0, 0
-	m.invalidate()
 }
 func (m *mobileApp) consumeKeyboardModifiers() {
-	m.keyboardModifiers = m.keyboardLocked
+	m.keyboardLatch.Consume()
 	m.invalidate()
 }
 
-func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
+// Accessory and Return actions run outside a build pass, so they use the
+// window's persistent services rather than a build-scoped Context.
+func (m *mobileApp) dismissKeyboard(s ui.Services) {
+	m.keyboardMore = false
+	m.clearKeyboardModifiers()
+	s.Blur()
+	mygo.App.DismissKeyboard()
+	s.Invalidate()
+}
+
+func (m *mobileApp) keyboardAction(s ui.Services, id string) {
 	if m.term == nil || m.background || m.needsRecovery() {
 		return
 	}
-	lock := strings.HasPrefix(id, "lock:")
 	if mod := keyboardModifier(strings.TrimPrefix(id, "lock:")); mod != 0 {
-		if lock {
-			m.keyboardModifiers |= mod
-			m.keyboardLocked |= mod
-		} else if m.keyboardModifiers&mod != 0 {
-			m.keyboardModifiers &^= mod
-			m.keyboardLocked &^= mod
+		if strings.HasPrefix(id, "lock:") {
+			m.keyboardLatch.Lock(mod)
 		} else {
-			m.keyboardModifiers |= mod
+			m.keyboardLatch.Tap(mod)
 		}
-		c.Invalidate()
+		s.Invalidate()
 		return
 	}
 	if key, ok := map[string]ui.Key{"escape": ui.KeyEscape, "tab": ui.KeyTab, "up": ui.KeyUp, "down": ui.KeyDown, "left": ui.KeyLeft, "right": ui.KeyRight}[id]; ok {
-		mods := m.keyboardModifiers
-		if m.term.SendKey(key, mods) {
+		if m.term.SendKey(key, m.keyboardLatch.Active()) {
 			m.consumeKeyboardModifiers()
 		}
 		return
@@ -97,68 +85,15 @@ func (m *mobileApp) keyboardAction(c *ui.Context, id string) {
 	case "newline":
 		m.term.InsertNewline()
 	case "paste":
-		m.pasteClipboard(c)
-	case "more":
-		m.keyboardMore = !m.keyboardMore
+		m.pasteClipboard(s)
 	case "dismiss":
-		m.keyboardMore = false
-		m.clearKeyboardModifiers()
-		c.Blur()
-		mobile.HideKeyboard()
+		m.dismissKeyboard(s)
 	}
-	c.Invalidate()
+	s.Invalidate()
 }
 
-// Native buttons own iOS gestures. Desktop/headless previews expose the same
-// state transitions through pointer long-press events for regression testing.
+// Native buttons own iOS gestures. Desktop/headless previews draw the same
+// actions with MyGo's Go accessory bar, which sends the same IDs.
 func (m *mobileApp) keyboardPreview(c *ui.Context) {
-	button := func(action ui.InputAction) {
-		b := ui.ButtonBase(c).Label(action.Label).Role(ui.RoleButton).KeepFocus().Height(44).MinWidth(44).Grow(1).Shrink(1).Radius(8)
-		if b.Pressed() || action.Selected {
-			b.Background(c.Theme().SurfacePressed)
-		}
-		b.Children(func() {
-			label := action.Label
-			if action.ID == "option" {
-				label = "⌥"
-			}
-			if action.ID == "cmd" {
-				label = "⌘"
-			}
-			if action.ID == "shift" {
-				label = "⇧"
-			}
-			ui.Text(c, label).FontSize(13)
-		})
-		if action.LongPressID != "" {
-			b.HandleInput(func(ev ui.InputEvent) bool {
-				if ev.Kind == ui.InputLongPress {
-					m.keyboardAction(c, action.LongPressID)
-					return true
-				}
-				return false
-			})
-		}
-		if b.Clicked() {
-			m.keyboardAction(c, action.ID)
-		}
-	}
-	actions := m.keyboardActions()
-	ui.Column(c).FillWidth().Padding(0, 8).Background(c.Theme().Surface).Children(func() {
-		if m.keyboardMore {
-			items := actions[6].Items
-			for i := 0; i < len(items); i += 6 {
-				ui.Row(c).FillWidth().Gap(2).Children(func() {
-					for _, a := range items[i:min(i+6, len(items))] {
-						button(a)
-					}
-				})
-			}
-		}
-		ui.Row(c).FillWidth().Gap(2).Children(func() {
-			for _, a := range actions {
-				button(a)
-			}
-		})
-	})
+	ui.InputAccessoryBar(c, m.keyboardActions(), &m.keyboardMore, func(id string) { m.keyboardAction(c.Services(), id) })
 }

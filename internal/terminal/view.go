@@ -21,7 +21,7 @@ import (
 // scrollback, as does the wheel, unless the program takes the mouse. Hold
 // Shift to select while a program takes the mouse, and Command (Control
 // elsewhere) to open a hyperlink (OSC 8) on click.
-func View(c *ui.Context, t *Terminal) *ui.Element {
+func View(c *ui.Context, t *Terminal) ui.Element {
 	v := t.viewOf(c)
 	e := ui.Box(c).Focusable().FocusRing(false).Cursor(ui.CursorText).Clip().Role(ui.RoleTextField).Label("Terminal")
 	v.build(c, e)
@@ -58,9 +58,9 @@ func (t *Terminal) viewOf(c *ui.Context) *view {
 		t.v.shaped.init(4096)
 	}
 	v := t.v
-	if v.c != c {
-		v.c = c
-		draw := c.Invalidate
+	if v.services != c.Services() {
+		v.services = c.Services()
+		draw := v.services.Invalidate
 		t.draw.Store(&draw)
 	}
 	return v
@@ -69,8 +69,8 @@ func (t *Terminal) viewOf(c *ui.Context) *view {
 // view is what a frame of the terminal needs from frame to frame. Main
 // thread only.
 type view struct {
-	t *Terminal
-	c *ui.Context
+	t        *Terminal
+	services ui.Services
 
 	theme              *Theme
 	applied            *Theme // the theme the emulator has
@@ -85,6 +85,7 @@ type view struct {
 	scale                            float32
 	cellW, cellH, baseline           int
 	ox, oy                           int
+	painted                          ui.Rect // the element's box when last painted
 	cols, rows                       int
 	fixedGrid, followCursor, reflow  bool
 	panX, panY, viewportW, viewportH int
@@ -134,7 +135,7 @@ type pendingKey struct {
 }
 
 // build updates the view as a frame builds.
-func (v *view) build(c *ui.Context, e *ui.Element) {
+func (v *view) build(c *ui.Context, e ui.Element) {
 	t := v.t
 	dark := c.Theme().Dark
 	focused := e.Focused()
@@ -263,7 +264,7 @@ func (v *view) menu(m *ui.Menu) {
 	}
 	t.mu.Unlock()
 	if m.Item("Copy").Shortcut(cmd, ui.KeyC).Disabled(!selected || text == "").Chosen() {
-		v.c.WriteClipboard(text)
+		v.services.WriteClipboard(text)
 	}
 	if m.Item("Paste").Shortcut(cmd, ui.KeyV).Chosen() {
 		v.paste()
@@ -432,7 +433,12 @@ func (v *view) keyUp(ev ui.InputEvent) bool {
 		}
 		v.sendKey(vt.KeyEvent{Action: action, Key: p.key, Mods: vtMods(p.mods), Text: text, Unshifted: p.unshifted})
 	}
-	return v.encodeKey(vt.KeyEvent{Action: vt.KeyRelease, Key: k, Mods: vtMods(ev.Mods), Unshifted: unshifted}, false)
+	handled := v.encodeKey(vt.KeyEvent{Action: vt.KeyRelease, Key: k, Mods: vtMods(ev.Mods), Unshifted: unshifted}, false)
+	if ev.Key == ui.KeyEnter && ev.Mods == 0 && v.t.opts.OnSubmit != nil {
+		v.t.opts.OnSubmit(v.services)
+		return true
+	}
+	return handled
 }
 
 // typed sends text typed or committed by an input method.
@@ -533,15 +539,15 @@ func (v *view) copy() {
 	}
 	t.mu.Unlock()
 	if ok && text != "" {
-		v.c.WriteClipboard(text)
+		v.services.WriteClipboard(text)
 	}
 }
 
 func (v *view) paste() {
-	if v.t.opts.OnPaste != nil && v.t.opts.OnPaste(v.c) {
+	if v.t.opts.OnPaste != nil && v.t.opts.OnPaste(v.services) {
 		return
 	}
-	if text := v.c.ReadClipboard(); text != "" {
+	if text := v.services.ReadClipboard(); text != "" {
 		v.t.Paste(text)
 	}
 }
@@ -564,7 +570,7 @@ func (v *view) selectAll() {
 		}
 	}
 	t.mu.Unlock()
-	v.c.Invalidate()
+	v.services.Invalidate()
 }
 
 // cellAt returns the cell under a point of the element, in DIPs, within
@@ -592,11 +598,11 @@ func (v *view) pointerEvent(ev ui.InputEvent) bool {
 			if t.opts.OnOpenLink != nil {
 				t.opts.OnOpenLink(opened)
 			} else if opened.URL != "" {
-				v.c.OpenURL(opened.URL)
+				v.services.OpenURL(opened.URL)
 			}
 		}
 		if copied != "" {
-			v.c.WriteClipboard(copied)
+			v.services.WriteClipboard(copied)
 		}
 	}()
 	if v.screen() == nil || v.cellW == 0 {

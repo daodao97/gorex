@@ -72,7 +72,7 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 	}
 	name := programOf(s.ID).Name
 	tip := name + " · " + agentStateLabel(s)
-	e := ui.Box(c).Key("agent-state-"+p.SID).Size(13, 16).Shrink(0).Center().
+	e := ui.Box(c.Key("agent-state-"+p.SID)).Size(13, 16).Shrink(0).Center().
 		Role(ui.RoleButton).Label(label).Tooltip(tip + " · 点击定位窗格").Cursor(ui.CursorPointer)
 	e.Children(func() {
 		switch s.State {

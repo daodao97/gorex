@@ -14,16 +14,17 @@ func TestRemoteInputCaretMatchesPaintedCursorOnResize(t *testing.T) {
 			t.Fatal(err)
 		}
 		term.Feed([]byte("\x1b[?1049h\x1b[2J\x1b[58;1H> 输入内容\x1b[58;9H\x1b[2 q"))
-		var element *ui.Element
 		tt := ui.NewTester(func(c *ui.Context) {
 			ui.Column(c).Fill().Children(func() {
 				ui.Box(c).Height(54).FillWidth()
-				element = View(c, term).Fill().AutoFocus()
+				View(c, term).Fill().AutoFocus()
 			})
 		}, 393, 680)
 		check := func() {
 			t.Helper()
-			v, b := term.v, element.Bounds()
+			// Elements expire with their build pass; compare with the painted box.
+			v := term.v
+			b := v.painted
 			r, _, _, _ := v.cursorRect(b.X+float32(v.ox)/v.scale, b.Y+float32(v.oy)/v.scale, float32(v.cellW)/v.scale, float32(v.cellH)/v.scale)
 			caret, active := tt.TextCaret()
 			if !active || r.H == 0 || caret.X != r.X || caret.Y != r.Y || caret.H != r.H {

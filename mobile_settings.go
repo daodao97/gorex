@@ -11,7 +11,7 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 	if m.navigation.Path() != "/sessions" {
 		m.sessionSettingsOpen = false
 	}
-	ui.DialogBase(c, &m.sessionSettingsOpen, func(back, panel *ui.Element) {
+	ui.DialogBase(c, &m.sessionSettingsOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
 		panel.Label("显示与提醒面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12)
 		ui.Row(c).FillWidth().Height(40).AlignItems(ui.Center).Children(func() {
@@ -43,7 +43,7 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 	})
 }
 
-func mobileSettingSwitch(c *ui.Context, enabled *bool, label, glyph, title, description string) *ui.Element {
+func mobileSettingSwitch(c *ui.Context, enabled *bool, label, glyph, title, description string) ui.Element {
 	switchRow := ui.SwitchBase(c, enabled).Label(label).FillWidth().MinHeight(72).Padding(12).Radius(12).Background(c.Theme().Background).Gap(12).AlignItems(ui.Center)
 	on := float32(0)
 	if *enabled {

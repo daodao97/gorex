@@ -16,7 +16,7 @@ const (
 )
 
 func (a *App) view(c *ui.Context) {
-	a.ctx = c
+	a.services = c.Services()
 	a.runPosted()
 	k := colorsOf(c)
 	a.focusedWin = a.win == nil || a.win.IsFocused()
@@ -53,7 +53,7 @@ func (a *App) view(c *ui.Context) {
 
 // iconButton is a borderless button of an icon, with a face on hover;
 // label names it for screen readers and its tooltip.
-func iconButton(c *ui.Context, k *colors, name, label string, size, iconSize float32) *ui.Element {
+func iconButton(c *ui.Context, k *colors, name, label string, size, iconSize float32) ui.Element {
 	b := ui.Box(c).Size(size, size).Center().Radius(size / 2.6).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label(label)
 	if b.Pressed() {
 		b.Background(k.pressed)
@@ -90,7 +90,7 @@ func (a *App) tabContent(c *ui.Context, k *colors, t *Tab) {
 }
 
 // node lays out a node of the tree of splits.
-func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) *ui.Element {
+func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) ui.Element {
 	if n.Pane != nil {
 		return a.paneCard(c, k, t, n.Pane)
 	}
@@ -105,13 +105,13 @@ func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) *ui.Element {
 	first, second, ratio := n.A, n.B, n.Ratio
 	box.Children(func() {
 		a.node(c, k, t, first).Grow(ratio).Basis(0).MinWidth(0).MinHeight(0)
-		space := ui.Box(c).Key("divider-space").Shrink(0)
+		space := ui.Box(c.Key("divider-space")).Shrink(0)
 		if n.Vertical {
 			space.Height(compactGap)
 		} else {
 			space.Width(compactGap)
 		}
-		div := ui.Box(c).Key("divider").Role(ui.RoleSplitter).Label("Divider")
+		div := ui.Box(c.Key("divider")).Role(ui.RoleSplitter).Label("Divider")
 		// Only one point takes layout space. The absolute pointer
 		// target spans both panes and stays centered on that line.
 		offset := compactGap*(0.5-ratio) - compactHit/2
@@ -163,8 +163,8 @@ func (a *App) node(c *ui.Context, k *colors, t *Tab, n *Node) *ui.Element {
 }
 
 // paneCard draws a pane with its optional search field and terminal.
-func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) *ui.Element {
-	card := ui.Column(c).Key(p.ID).Clip().MinWidth(0).MinHeight(0).Background(terminalBackground(c))
+func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
+	card := ui.Column(c.Key(p.ID)).Clip().MinWidth(0).MinHeight(0).Background(terminalBackground(c))
 	card.Transition(ui.ElementTransition{Colors: true, Duration: 160 * time.Millisecond})
 	card.Children(func() {
 		if p.find.open {
@@ -173,7 +173,7 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) *ui.Element {
 		if p.locked {
 			a.sizeLockBar(c, k, p)
 		}
-		body := ui.Box(c).Key("terminal-body").Grow(1).MinHeight(0)
+		body := ui.Box(c.Key("terminal-body")).Grow(1).MinHeight(0)
 		body.Children(func() {
 			if p.term == nil {
 				return
@@ -246,7 +246,7 @@ func (a *App) statusOf(c *ui.Context, p *Pane) status {
 // activityDot is the dot of a program printing: a solid dot in a soft
 // halo. It does not animate, as drawing frames all along would cost more
 // than it tells.
-func activityDot(c *ui.Context, col ui.Color, size float32) *ui.Element {
+func activityDot(c *ui.Context, col ui.Color, size float32) ui.Element {
 	e := ui.Box(c).Size(size+6, size+6).Margin(0, 0, 0, 1).Tooltip("Printing")
 	e.Draw(func(p *ui.Painter, r ui.Rect) {
 		cx, cy := r.X+r.W/2, r.Y+r.H/2

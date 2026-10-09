@@ -35,7 +35,7 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 		Background(k.track).AlignItems(ui.Center).DragWindow().Children(func() {
 		a.tabStrip(c, k)
 		a.phonePairButton(c, k, 28)
-		b := ui.Box(c).Key("compact-new-tab").Width(28).FillHeight().Shrink(0).
+		b := ui.Box(c.Key("compact-new-tab")).Width(28).FillHeight().Shrink(0).
 			Center().Role(ui.RoleButton).Label("New Tab").Focusable().Cursor(ui.CursorPointer).
 			BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder).Tooltip("New Tab  ⌘T")
 		if b.Hovered() {

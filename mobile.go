@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"gorex/internal/mobile"
 	"gorex/internal/remote"
 	"gorex/internal/rex"
 	"gorex/internal/terminal"
@@ -79,7 +79,7 @@ type mobileApp struct {
 	imagePasteBusy                     bool
 	imagePasteCancel                   context.CancelFunc
 	imagePasteEpoch                    int
-	keyboardModifiers, keyboardLocked  ui.Modifiers
+	keyboardLatch                      ui.ModifierLatch
 	connectionIssue                    *mobileConnectionIssue
 	connectionDetailsOpen              bool
 	sessionSettingsOpen                bool
@@ -251,7 +251,7 @@ func (m *mobileApp) detach() {
 	m.stream = nil
 	m.selected = rex.SessionInfo{}
 	m.lockOwner, m.lockSuspended, m.lockSeen = "", false, false
-	mobile.HideKeyboard()
+	mygo.App.DismissKeyboard()
 }
 
 func (m *mobileApp) disconnect(forget bool) {
@@ -340,7 +340,7 @@ func (m *mobileApp) startConnection(recovering bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	m.cancel = cancel
 	link := m.link
-	device := mobile.DeviceInfo()
+	device := mobileDevice()
 	if snapshot := m.pushSnapshot.Load(); snapshot != nil {
 		device = *snapshot
 	}
@@ -496,7 +496,8 @@ func (m *mobileApp) scan() {
 	m.scanning = true
 	m.error = ""
 	generation := m.generation
-	mobile.Scan(func(raw string, err error) {
+	go func() {
+		raw, err := mygo.Scanner.ScanCode(context.Background(), mygo.ScanOptions{Prompt: "扫描 GoRex 桌面端的二维码", CancelLabel: "取消"})
 		mygo.RunOnMain(func() {
 			m.scanning = false
 			if m.generation != generation {
@@ -504,13 +505,34 @@ func (m *mobileApp) scan() {
 				return
 			}
 			if err != nil {
-				m.error = err.Error()
+				m.error = scanError(err)
 			} else if raw != "" {
 				m.connect(raw)
 			}
 			m.invalidate()
 		})
-	})
+	}()
+}
+
+// scanError explains a failed scan; closing the scanner is not a failure.
+func scanError(err error) string {
+	switch {
+	case errors.Is(err, mygo.ErrScanCanceled):
+		return ""
+	case errors.Is(err, mygo.ErrUnsupported):
+		return "请在 iPhone 上扫码，或粘贴桌面连接码"
+	case errors.Is(err, mygo.ErrCameraDenied):
+		return "请在系统设置中允许 GoRex 使用相机，或粘贴连接码"
+	case errors.Is(err, mygo.ErrCameraUnavailable):
+		return "相机不可用，请粘贴桌面连接码"
+	}
+	return "暂时无法打开相机"
+}
+
+// mobileDevice names this phone to desktops.
+func mobileDevice() rex.DeviceInfo {
+	d := mygo.App.Device()
+	return rex.DeviceInfo{Name: d.Name, OS: strings.TrimSpace(d.System + " " + d.Version)}
 }
 
 func (m *mobileApp) openSession(s rex.SessionInfo) {
@@ -548,6 +570,7 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 	options.Font, options.Theme, options.DarkTheme = terminal.Font{Family: termFont.Family, Size: 13, LineHeight: 1.2}, lightTerm, darkTerm
 	options.AdaptiveColors, options.OptionAsAlt, options.SelectOnDrag, options.CopyRawText = true, true, true, true
 	options.ActiveCursor, options.InputContext, options.OnPaste = true, true, m.pasteClipboard
+	options.OnSubmit = m.dismissKeyboard
 	term, err := terminal.New(options)
 	if err != nil {
 		stream.Close()
@@ -698,8 +721,8 @@ func (m *mobileApp) syncNavigation() {
 
 // Keep the full touch target while letting the title sit beside the visible
 // chevron. Header text passes pointer events through the overlapping area.
-func mobileBackButton(c *ui.Context) *ui.Element {
-	button := ui.ButtonBase(c).Key("mobile-back").Label("返回").Role(ui.RoleButton).Size(44, 44).Margin(0, -20, 0, 0).Justify(ui.Start).Radius(12)
+func mobileBackButton(c *ui.Context) ui.Element {
+	button := ui.ButtonBase(c.Key("mobile-back")).Label("返回").Role(ui.RoleButton).Size(44, 44).Margin(0, -20, 0, 0).Justify(ui.Start).Radius(12)
 	if button.Pressed() {
 		button.Background(c.Theme().SurfacePressed)
 	}
@@ -751,7 +774,7 @@ func (m *mobileApp) errorView(c *ui.Context) {
 		return
 	}
 	if m.error != "" {
-		ui.Text(c, m.error).Key("connection-status").TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4).Margin(0, 16, 12, 16)
+		ui.Text(c.Key("connection-status"), m.error).TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4).Margin(0, 16, 12, 16)
 	}
 }
 
@@ -847,7 +870,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 		})
 		m.recentSessionsView(c)
 		if m.error != "" {
-			ui.Text(c, m.error).Key("connection-status").TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4)
+			ui.Text(c.Key("connection-status"), m.error).TextColor(c.Theme().Danger).FontSize(14).LineHeight(1.4)
 		}
 		ui.Text(c, "通过 Tailcat 加密连接").FontSize(12).TextColor(c.Theme().TextMuted).TextAlign(ui.Center).FillWidth()
 	})
@@ -887,7 +910,7 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			m.sessionSettingsOpen = true
 		}
 	})
-	ui.Scroll(c).Key("mobile-sessions").Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(8, 16, 16, 16).Gap(12).Children(func() {
+	ui.Scroll(c.Key("mobile-sessions")).Grow(1).MinHeight(0).FillWidth().TrackScroll(&m.scroll).HideScrollbars().Padding(8, 16, 16, 16).Gap(12).Children(func() {
 		m.connectionFeedback(c)
 		if !m.needsRecovery() && m.connectionIssue == nil {
 			m.errorView(c)
@@ -900,7 +923,7 @@ func (m *mobileApp) createView(c *ui.Context) {
 	m.header(c, "新建会话", func() {
 		if !m.busy {
 			m.creating = false
-			mobile.HideKeyboard()
+			mygo.App.DismissKeyboard()
 		}
 	}, false)
 	ui.Column(c).Padding(20).Gap(16).FillWidth().Children(func() {
@@ -908,7 +931,7 @@ func (m *mobileApp) createView(c *ui.Context) {
 		ui.TextInput(c, &m.directory).Label("工作目录").Placeholder(m.hello.Host.Home).FillWidth().Height(50).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Return: ui.ReturnDone, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone})
 		ui.Text(c, "在桌面电脑上启动默认 Shell。").FontSize(14).TextColor(c.Theme().TextMuted)
 		if ui.PrimaryButton(c, "创建并打开").Height(50).FillWidth().Disabled(m.busy).Clicked() {
-			mobile.HideKeyboard()
+			mygo.App.DismissKeyboard()
 			m.create()
 		}
 		if m.busy {
@@ -936,13 +959,13 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	if m.imagePasteBusy {
 		ui.Text(c, "正在粘贴图片…").FontSize(13).Padding(6, 16).TextColor(c.Theme().TextMuted)
 	}
-	var element *ui.Element
+	var element ui.Element
 	ui.Box(c).Grow(1).MinHeight(0).FillWidth().Padding(4).Background(c.Theme().Background).Children(func() {
 		keyboard := ui.KeyboardText
-		if m.keyboardModifiers != 0 {
+		if m.keyboardLatch.Active() != 0 {
 			keyboard = ui.KeyboardASCII
 		}
-		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().InputOptions(ui.InputOptions{Keyboard: keyboard, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputModifiers(m.keyboardModifiers, m.consumeKeyboardModifiers).InputAccessory(m.keyboardActions(), func(id string) { m.keyboardAction(c, id) })
+		element = terminal.View(c, m.term).Key("mobile-terminal").Fill().InputOptions(ui.InputOptions{Keyboard: keyboard, Return: ui.ReturnSend, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone, Dismiss: ui.KeyboardDismissOnDrag}).InputModifiers(m.keyboardLatch.Active(), m.consumeKeyboardModifiers).InputAccessory(m.keyboardActions(), func(id string) { m.keyboardAction(c.Services(), id) })
 	})
 	if !element.Focused() {
 		m.clearKeyboardModifiers()
@@ -958,7 +981,7 @@ func (m *mobileApp) terminalView(c *ui.Context) {
 	m.selectionMenu(c, element)
 }
 
-func (m *mobileApp) selectionMenu(c *ui.Context, element *ui.Element) {
+func (m *mobileApp) selectionMenu(c *ui.Context, element ui.Element) {
 	anchor, ok := m.term.SelectionAnchor()
 	if !ok {
 		return
@@ -971,7 +994,7 @@ func (m *mobileApp) selectionMenu(c *ui.Context, element *ui.Element) {
 	}
 	y = max(0, min(y, viewport.H-48))
 	ui.Overlay(c, func() {
-		ui.Row(c).Key("mobile-selection-menu").Absolute().Left(x).Top(y).Size(148, 44).KeepFocus().Radius(12).Background(c.Theme().Surface).Shadow(0, 2, 12, 0, ui.RGBA(0, 0, 0, .18)).Children(func() {
+		ui.Row(c.Key("mobile-selection-menu")).Absolute().Left(x).Top(y).Size(148, 44).KeepFocus().Radius(12).Background(c.Theme().Surface).Shadow(0, 2, 12, 0, ui.RGBA(0, 0, 0, .18)).Children(func() {
 			if ui.ButtonBase(c).Label("复制").Role(ui.RoleButton).KeepFocus().Height(44).Grow(1).Children(func() { ui.Text(c, "复制").FontSize(15) }).Clicked() {
 				if text, ok := m.term.SelectedText(); ok {
 					c.WriteClipboard(text)

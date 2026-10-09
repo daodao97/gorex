@@ -167,7 +167,7 @@ func (a *App) phonePairDialog(c *ui.Context, k *colors) {
 	if p == nil || !p.open {
 		return
 	}
-	ui.DialogBase(c, &p.open, func(backdrop, panel *ui.Element) {
+	ui.DialogBase(c, &p.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, .35))
 		panel.Width(360).MaxWidthPercent(95).Padding(24).Radius(20).Background(k.panel).Gap(18).Label("连接手机")
 		ui.Row(c).AlignItems(ui.Center).Children(func() {
@@ -190,7 +190,7 @@ func (a *App) phonePairDialog(c *ui.Context, k *colors) {
 			}
 		}
 		if len(p.qr) > 0 {
-			ui.Box(c).Key("phone-qr").Label("手机连接二维码").Size(288, 288).Background(ui.Hex("#ffffff")).Draw(func(painter *ui.Painter, r ui.Rect) { paintQR(painter, r, p.qr) })
+			ui.Box(c.Key("phone-qr")).Label("手机连接二维码").Size(288, 288).Background(ui.Hex("#ffffff")).Draw(func(painter *ui.Painter, r ui.Rect) { paintQR(painter, r, p.qr) })
 			ui.Text(c, "二维码包含会话访问凭据，请仅用自己的设备扫描。").FontSize(12).TextColor(k.textMuted).LineHeight(1.4)
 			ui.Row(c).Gap(8).Children(func() {
 				if ui.Button(c, "复制连接码").Height(44).Grow(1).Clicked() {

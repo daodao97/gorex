@@ -10,7 +10,7 @@ import (
 	"slices"
 )
 
-func (m *mobileApp) pasteClipboard(c *ui.Context) bool {
+func (m *mobileApp) pasteClipboard(s ui.Services) bool {
 	if m.term == nil || m.reconnecting || m.background || m.imagePasteBusy {
 		return true
 	}
@@ -30,7 +30,7 @@ func (m *mobileApp) pasteClipboard(c *ui.Context) bool {
 		}
 		m.pasteClipboardImage(image)
 	} else {
-		m.term.Paste(c.ReadClipboard())
+		m.term.Paste(s.ReadClipboard())
 	}
 	return true
 }

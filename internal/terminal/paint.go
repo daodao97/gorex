@@ -134,6 +134,7 @@ func (v *view) paint(p *ui.Painter, r ui.Rect) {
 			t.opts.OnRenderEvent(*event)
 		}
 	}()
+	v.painted = r
 	v.layout(r, p.Scale())
 	bg := v.theme.Background
 	t.mu.Lock()

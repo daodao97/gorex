@@ -56,11 +56,11 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 	if width < 720 {
 		sideWidth, contentPad = 152, 18
 	}
-	ui.DialogBase(c, &a.settingsOpen, func(backdrop, panel *ui.Element) {
+	ui.DialogBase(c, &a.settingsOpen, func(backdrop, panel ui.Element) {
 		backdrop.Background(theme.Background)
 		panel.Label("Settings").Size(width, height).Radius(0).Background(theme.Background).Clip()
 		ui.Row(c).Fill().Children(func() {
-			ui.Column(c).Key("settings-sidebar").Width(sideWidth).FillHeight().Shrink(0).
+			ui.Column(c.Key("settings-sidebar")).Width(sideWidth).FillHeight().Shrink(0).
 				Background(side).BorderWidth(0, 1, 0, 0).BorderColor(theme.Border).Children(func() {
 				ui.Box(c).FillWidth().Height(48).DragWindow()
 				ui.Column(c).FillWidth().Padding(8, 12, 0, 12).Gap(12).Children(func() {
@@ -84,7 +84,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 				ui.Scroll(c).Grow(1).MinHeight(0).Padding(12).Gap(5).Children(func() {
 					for i, section := range settingsSections {
 						active := a.settingsSection == i && strings.TrimSpace(a.settingsQuery) == "" && !a.settingsModifiedOnly
-						b := ui.ButtonBase(c).Key(section.label).Label(section.label).FillWidth().Height(30).
+						b := ui.ButtonBase(c.Key(section.label)).Label(section.label).FillWidth().Height(30).
 							Padding(0, 9).Gap(9).Radius(7).AlignItems(ui.Center).Justify(ui.Start)
 						if active {
 							b.Background(selected)
@@ -104,7 +104,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 					ui.Checkbox(c, &a.settingsModifiedOnly, "仅显示已修改").Label("Only modified settings").FontSize(11)
 				})
 			})
-			ui.Column(c).Key("settings-main").Grow(1).MinWidth(0).FillHeight().Children(func() {
+			ui.Column(c.Key("settings-main")).Grow(1).MinWidth(0).FillHeight().Children(func() {
 				title := settingsSections[a.settingsSection].title
 				if strings.TrimSpace(a.settingsQuery) != "" {
 					title = "搜索结果"
@@ -116,7 +116,7 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 						ui.Text(c, title).FontSize(19).FontWeight(600).TextColor(theme.Text)
 					})
 				})
-				ui.Scroll(c).Key(fmt.Sprintf("settings-content-%d", a.settingsSection)).Grow(1).MinHeight(0).
+				ui.Scroll(c.Key(fmt.Sprintf("settings-content-%d", a.settingsSection))).Grow(1).MinHeight(0).
 					FillWidth().Padding(0, contentPad, 28, contentPad).Children(func() {
 					ui.Column(c).FillWidth().MaxWidth(640).AlignSelf(ui.Center).Children(func() { a.settingsContent(c, &theme) })
 				})
@@ -320,7 +320,7 @@ func (a *App) setAgentCompletionNotifications(show bool) {
 	saveSettings()
 }
 
-func settingsSwitch(c *ui.Context, value *bool, label string) *ui.Element {
+func settingsSwitch(c *ui.Context, value *bool, label string) ui.Element {
 	sw := ui.Switch(c, value).Label(label)
 	if sw.Focused() {
 		sw.ScrollIntoView()
@@ -365,7 +365,7 @@ func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 			ui.Text(c, name).FontSize(14).FontWeight(600).TextColor(theme.Text).Margin(12, 0, 14, 0)
 			group = key
 		}
-		ui.Row(c).Key(item.id).FillWidth().Padding(14, 0).Gap(20).AlignItems(ui.Center).Children(func() {
+		ui.Row(c.Key(item.id)).FillWidth().Padding(14, 0).Gap(20).AlignItems(ui.Center).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
 				ui.Text(c, item.title).FontSize(13).FontWeight(500).TextColor(theme.Text)
 				ui.Text(c, item.detail).FontSize(11.5).TextColor(theme.TextMuted)

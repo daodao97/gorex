@@ -127,8 +127,9 @@ type App struct {
 	// view without a window, as in tests.
 	postMu sync.Mutex
 	posted []func()
-	// ctx is the context of the view, for the menus it builds.
-	ctx *ui.Context
+	// services are the window's, for menus and terminal callbacks that run
+	// outside a build pass.
+	services ui.Services
 }
 
 func (a *App) post(fn func()) {
@@ -139,9 +140,11 @@ func (a *App) post(fn func()) {
 
 // later changes the tree of tabs and panes once the frame building now
 // is built, as closing what it is building would pull it from under it.
-func (a *App) later(c *ui.Context, fn func()) {
+func (a *App) later(c *ui.Context, fn func()) { a.laterFrom(c.Services(), fn) }
+
+func (a *App) laterFrom(s ui.Services, fn func()) {
 	a.post(fn)
-	c.Invalidate()
+	s.Invalidate()
 }
 
 // runPosted makes the changes posted since the last frame.
@@ -214,7 +217,7 @@ func (a *App) newPane(dir string, cols, rows int) *Pane {
 // attach makes the pane's terminal, attached to its session.
 func (a *App) attach(p *Pane, cols, rows int) {
 	onSplit := func(down bool) {
-		a.later(a.ctx, func() { a.splitPane(p, down) })
+		a.laterFrom(a.services, func() { a.splitPane(p, down) })
 	}
 	if p.SID == "" {
 		term, err := terminal.New(terminal.Options{Conn: nopConn{}, Transparent: true, Font: termFont, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OnSplit: onSplit, CopyRawText: prefs.CopyRawText})

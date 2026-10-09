@@ -22,7 +22,7 @@ func desktopPlatform(host rex.HostInfo) string {
 	}
 }
 
-func mobileSessionIcon(c *ui.Context, name string) *ui.Element {
+func mobileSessionIcon(c *ui.Context, name string) ui.Element {
 	prog := programOf(name)
 	color := programIconColor(c, prog)
 	if prog.Glyph == "square-terminal" {

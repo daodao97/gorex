@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/egoist/mygo"
-	"gorex/internal/mobile"
 	"gorex/internal/rex"
 	"sort"
 	"strings"
@@ -183,7 +182,7 @@ func (m *mobileApp) persistNoticeReceipts() {
 	}
 }
 func (m *mobileApp) refreshPushSnapshot() {
-	info := mobile.DeviceInfo()
+	info := mobileDevice()
 	if m.pushDeviceID != "" && (m.pushToken != "" || m.pushDisabled || m.notificationDenied) {
 		ids := make([]string, 0, len(m.noticeReceipts))
 		for id := range m.noticeReceipts {

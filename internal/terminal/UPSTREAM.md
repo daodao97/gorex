@@ -51,3 +51,9 @@ history scrolling automatically, based on terminal modes rather than program
 identity. Their off-screen history is not in the terminal's scrollback.
 Primary-screen drags keep SelectOnDrag behavior; Shift always forces local
 terminal selection, and alternate screens without mouse tracking select locally.
+
+MyGo's checked-element migration (`ui.Element` values, build-scoped
+`Context`) is carried here as upstream did: the view keeps `ui.Services`
+rather than a `*ui.Context`, and `OnPaste`/`OnSubmit` receive services,
+because input handlers run outside a build pass. `view.painted` records the
+box of the last paint for caret tests, as elements expire with their pass.

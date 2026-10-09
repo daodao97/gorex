@@ -54,6 +54,9 @@ func TestMobileNewSessionTabCompletesCommand(t *testing.T) {
 	// Keep typing after the shell has replaced the prefix with its completion.
 	tt.Type("argument")
 	tt.Key(0, ui.KeyEnter)
+	if tt.Focused("Terminal") || m.keyboardMore {
+		t.Fatal("submitted command kept the keyboard open")
+	}
 	waitFor(t, tt, "completed command execution", func() bool {
 		return strings.Contains(m.term.Text(), "COMPLETION_EXECUTED:argument")
 	})
@@ -63,11 +66,12 @@ func TestMobileModifierArmingLockingAndSessionIsolation(t *testing.T) {
 	registerFonts()
 	conn, peer := net.Pipe()
 	defer peer.Close()
-	term, err := terminal.New(terminal.Options{Conn: conn, OptionAsAlt: true, Font: terminal.Font{Family: termFont.Family, Size: 13}, Theme: lightTerm})
+	m := &mobileApp{client: &rex.Client{}, selected: rex.SessionInfo{ID: "fixture"}}
+	term, err := terminal.New(terminal.Options{Conn: conn, OptionAsAlt: true, Font: terminal.Font{Family: termFont.Family, Size: 13}, Theme: lightTerm, OnSubmit: m.dismissKeyboard})
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := &mobileApp{client: &rex.Client{}, term: term, selected: rex.SessionInfo{ID: "fixture"}}
+	m.term = term
 	defer m.detach()
 	var current *ui.Context
 	tt := ui.NewTester(func(c *ui.Context) { current = c; m.view(c) }, 390, 750)
@@ -84,16 +88,16 @@ func TestMobileModifierArmingLockingAndSessionIsolation(t *testing.T) {
 	tt.Click("Ctrl")
 	tt.Type("c")
 	take("\x03")
-	if m.keyboardModifiers != 0 || m.keyboardLocked != 0 {
+	if m.keyboardLatch.Active() != 0 || m.keyboardLatch.Locked() != 0 {
 		t.Fatal("one-shot Ctrl persisted")
 	}
-	m.keyboardAction(current, "lock:ctrl")
+	m.keyboardAction(current.Services(), "lock:ctrl")
 	tt.Frame()
 	tt.Type("d")
 	take("\x04")
 	tt.Type("r")
 	take("\x12")
-	if m.keyboardModifiers != ui.Ctrl || m.keyboardLocked != ui.Ctrl {
+	if m.keyboardLatch.Active() != ui.Ctrl || m.keyboardLatch.Locked() != ui.Ctrl {
 		t.Fatal("locked Ctrl released")
 	}
 	tt.Click("Ctrl")
@@ -114,24 +118,35 @@ func TestMobileModifierArmingLockingAndSessionIsolation(t *testing.T) {
 	if mobileKeyboardActions[1].Selected || mobileKeyboardActions[1].Locked {
 		t.Fatal("modifier state mutated action definitions")
 	}
-	m.keyboardAction(current, "lock:ctrl")
+	tt.Click("换行")
+	take("\x1b\r")
+	if !tt.Focused("Terminal") {
+		t.Fatal("inserting a newline dismissed the keyboard")
+	}
+	tt.Key(0, ui.KeyEnter)
+	take("\r")
+	if tt.Focused("Terminal") || m.keyboardMore {
+		t.Fatal("sending did not dismiss the keyboard and accessory panel")
+	}
+	tt.Click("Terminal")
+	m.keyboardAction(current.Services(), "lock:ctrl")
 	tt.Frame()
 	tt.Click("收起")
-	if m.keyboardModifiers != 0 || m.keyboardLocked != 0 {
+	if m.keyboardLatch.Active() != 0 || m.keyboardLatch.Locked() != 0 {
 		t.Fatal("hidden keyboard retained a modifier")
 	}
 	// Background/recovery boundaries must not carry held control keys into
 	// another live session, even if the keyboard remains mounted by UIKit.
 	m.client = nil
-	m.keyboardAction(current, "lock:option")
+	m.keyboardAction(current.Services(), "lock:option")
 	m.enterBackground()
-	if m.keyboardModifiers != 0 || m.keyboardLocked != 0 {
+	if m.keyboardLatch.Active() != 0 || m.keyboardLatch.Locked() != 0 {
 		t.Fatal("background retained a modifier")
 	}
 	m.background = false
-	m.keyboardAction(current, "lock:ctrl")
+	m.keyboardAction(current.Services(), "lock:ctrl")
 	m.pauseConnection()
-	if m.keyboardModifiers != 0 || m.keyboardLocked != 0 {
+	if m.keyboardLatch.Active() != 0 || m.keyboardLatch.Locked() != 0 {
 		t.Fatal("recovery retained a modifier")
 	}
 }

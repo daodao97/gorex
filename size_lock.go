@@ -75,7 +75,7 @@ func (a *App) sizeLockBar(c *ui.Context, k *colors, p *Pane) {
 	if device == "" {
 		device = "iPhone"
 	}
-	ui.Row(c).Key("size-lock").Height(32).Padding(0, 8, 0, 12).Gap(8).
+	ui.Row(c.Key("size-lock")).Height(32).Padding(0, 8, 0, 12).Gap(8).
 		AlignItems(ui.Center).Background(k.panel).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).
 		Children(func() {
 			ui.Text(c, fmt.Sprintf("%s 正在使用此会话（%d×%d），窗格尺寸已锁定", device, p.info.Cols, p.info.Rows)).

@@ -9,7 +9,6 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"gorex/internal/mobile"
 	"gorex/internal/rex"
 )
 
@@ -265,7 +264,7 @@ func (m *mobileApp) sessionStream(sid string, lock bool) *rex.Stream {
 			cols, rows = m.term.Size()
 		}
 		m.lockOwner = newMobileLockOwner()
-		return m.client.LockStreamAfter(sid, m.lockOwner, mobile.DeviceInfo().Name, cols, rows, m.lockRelease)
+		return m.client.LockStreamAfter(sid, m.lockOwner, mobileDevice().Name, cols, rows, m.lockRelease)
 	}
 	return m.client.ViewStream(sid)
 }

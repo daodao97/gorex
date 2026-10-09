@@ -743,7 +743,7 @@ func TestExternalClipboardPasteHandlesSystemKeyboardAndMenu(t *testing.T) {
 	calls := 0
 	var term *Terminal
 	var err error
-	term, err = New(Options{Conn: conn, OnPaste: func(c *ui.Context) bool { calls++; term.Send([]byte("image")); return true }})
+	term, err = New(Options{Conn: conn, OnPaste: func(ui.Services) bool { calls++; term.Send([]byte("image")); return true }})
 	if err != nil {
 		t.Fatal(err)
 	}

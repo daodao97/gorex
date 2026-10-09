@@ -12,7 +12,7 @@ import (
 
 // tabStrip divides the title bar evenly between tabs and lets its gaps drag the window.
 func (a *App) tabStrip(c *ui.Context, k *colors) {
-	track := ui.Row(c).Key("tabs").Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
+	track := ui.Row(c.Key("tabs")).Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
 		Background(k.track).AlignItems(ui.Center).ClipX().DragWindow().Role(ui.RoleTabList).Label("Tabs")
 	track.Children(func() {
 		for i, t := range slices.Clone(a.tabs) {
@@ -26,7 +26,7 @@ func (a *App) tabItem(c *ui.Context, k *colors, i int, t *Tab) {
 	active := i == a.active
 	bottom := float32(1)
 	bg := k.track
-	e := ui.Row(c).Key(t.ID).Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
+	e := ui.Row(c.Key(t.ID)).Grow(1).Basis(0).MinWidth(0).Height(compactTitleH).
 		Padding(0, 8).Gap(6).AlignItems(ui.Center).Role(ui.RoleTab).Selected(active)
 	name, detail := t.label()
 	e.Label(name + " " + detail)
@@ -139,10 +139,10 @@ func (a *App) tabMenu(m *ui.Menu, t *Tab) {
 		a.newTab(a.currentDir())
 	}
 	if m.Item("Close Tab").Chosen() {
-		a.later(a.ctx, func() { a.closeTab(t) })
+		a.laterFrom(a.services, func() { a.closeTab(t) })
 	}
 	if m.Item("Close Other Tabs").Disabled(len(a.tabs) < 2).Chosen() {
-		a.later(a.ctx, func() {
+		a.laterFrom(a.services, func() {
 			for _, o := range slices.Clone(a.tabs) {
 				if o != t {
 					a.closeTab(o)
