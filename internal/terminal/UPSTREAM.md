@@ -61,3 +61,9 @@ box of the last paint for caret tests, as elements expire with their pass.
 The MyGo v0.3.6 fork upgrade (7cdc2f22b829) has no changes to the upstream
 terminal plugin relative to the previously pinned fork commit 0663ec5c09b1.
 The local terminal additions and Ghostty library pin remain applicable.
+
+The MyGo v0.3.7 fork upgrade (33911222f556) also leaves the upstream
+terminal plugin unchanged relative to 7cdc2f22b829. Retty keeps the same
+local terminal additions and Ghostty library pin; the UI changes add list
+sideways scrolling and text-line tracking, and fix unconstrained column
+growth and table column dragging.

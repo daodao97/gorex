@@ -58,8 +58,8 @@ github.com/creachadair/taskgroup v0.13.2 h1:3KyqakBuFsm3KkXi/9XIb0QcA8tEzLHLgaoi
 github.com/creachadair/taskgroup v0.13.2/go.mod h1:i3V1Zx7H8RjwljUEeUWYT30Lmb9poewSb2XI1yTwD0g=
 github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
 github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
-github.com/daodao97/mygo v0.0.0-20261009140832-7cdc2f22b829 h1:uQWeRmeOf+JcO0dhRfKG9ij0JwO10Fvvb8PvRCRdHZ0=
-github.com/daodao97/mygo v0.0.0-20261009140832-7cdc2f22b829/go.mod h1:1sRzZ6jEhKE7iuEQXjyoXDgxyxQ1uTgMHDcDKZvoDIU=
+github.com/daodao97/mygo v0.0.0-20261009202609-33911222f556 h1:fdFtFpFRCZpAxHGxwiEZdDpnFs4cyIznr2R7mraWAaE=
+github.com/daodao97/mygo v0.0.0-20261009202609-33911222f556/go.mod h1:1sRzZ6jEhKE7iuEQXjyoXDgxyxQ1uTgMHDcDKZvoDIU=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
