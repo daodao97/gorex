@@ -119,7 +119,7 @@ func TestMobileRecoveryAcrossDesktopBridgeRestart(t *testing.T) {
 		t.Fatal("fixture has no session", err)
 	}
 	dir := rex.Dir()
-	ctx, cancel := context.WithTimeout(context.Background(), 75*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 	bridge, err := remote.Start(ctx, rex.SocketPath(), remote.Options{StateDir: dir})
 	if err != nil {
@@ -187,5 +187,29 @@ func TestMobileRecoveryAcrossDesktopBridgeRestart(t *testing.T) {
 		return !m.reconnecting && m.term == retainedTerm && m.selected.ID == existing[0].ID && m.stream.inputReady()
 	}) {
 		t.Fatal("long background visit did not resume the retained terminal")
+	}
+	// Returning to home must not resume an old connection. Only clicking the
+	// recent session establishes a fresh connection to that session's desktop.
+	mygo.RunOnMain(func() {
+		m.goHome()
+		m.enterBackground()
+		m.enterForeground()
+	})
+	if !wait(time.Second, func() bool {
+		return m.home && m.client == nil && !m.busy && !m.reconnecting && m.navigation.Path() == "/connect"
+	}) {
+		t.Fatal("home restored the old connection without an explicit selection")
+	}
+	mygo.RunOnMain(func() {
+		tt.Click("进入最近会话 " + m.desktopKey() + " " + existing[0].ID)
+	})
+	if !wait(35*time.Second, func() bool {
+		return !m.busy && !m.reconnecting && m.client != nil && m.term != nil && m.selected.ID == existing[0].ID && m.stream.inputReady() && m.navigation.Path() == "/sessions/terminal"
+	}) {
+		t.Fatal("explicit recent-session selection did not reconnect to the original session")
+	}
+	after, err = app.client.List()
+	if err != nil || len(after) != len(existing) || after[0].ID != existing[0].ID || after[0].PID != existing[0].PID || after[0].Cols != existing[0].Cols || after[0].Rows != existing[0].Rows {
+		t.Fatal("on-demand reconnect changed the fixture session or its dimensions", err)
 	}
 }

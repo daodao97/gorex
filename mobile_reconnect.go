@@ -36,6 +36,12 @@ func (m *mobileApp) pauseConnection() {
 }
 
 func (m *mobileApp) connectionLost() {
+	if m.home && !m.background {
+		// No session is being viewed here; keep history available for an
+		// explicit selection instead of starting a home-page retry loop.
+		m.disconnect(false)
+		return
+	}
 	if m.reconnecting || m.background || m.link == "" {
 		return
 	}

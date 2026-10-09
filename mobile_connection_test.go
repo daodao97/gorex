@@ -198,6 +198,97 @@ func TestMobileBackgroundRetainsConnectionAndStopsForegroundWork(t *testing.T) {
 	}
 }
 
+func TestMobileHomeForegroundWaitsForExplicitSelection(t *testing.T) {
+	registerFonts()
+	for _, state := range []string{"healthy", "expired", "connecting"} {
+		t.Run(state, func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer peer.Close()
+			client := rex.NewClient(conn, nil)
+			defer client.Close()
+			link, other := recentTestLink(), recentTestLink()
+			m := &mobileApp{
+				home: true, client: client, link: link,
+				history:        []desktopRecent{{ID: "other", Name: "Other", Link: other}, {ID: "mac", Name: "Mac", Link: link}},
+				recentSessions: []mobileRecentSession{{Desktop: "mac", Session: "target", Title: "任务"}},
+				presence:       map[string]desktopPresence{link: {state: desktopOnline}, other: {state: desktopOnline}},
+			}
+			m.hello.Host.ID = "mac"
+			if state == "expired" {
+				client.Close()
+			}
+			canceled := false
+			if state == "connecting" {
+				m.busy, m.reconnecting = true, true
+				m.cancel = func() { canceled = true }
+			}
+			m.enterBackground()
+			generation := m.generation
+			m.enterForeground()
+			if !m.home || m.background || m.client != nil || m.busy || m.reconnecting || m.cancel != nil || m.retryTimer != nil || m.resumeLink != "" || m.resumeSID != "" {
+				t.Fatal("home resumed the suspended connection instead of waiting for a choice")
+			}
+			if m.generation <= generation || state == "connecting" && !canceled {
+				t.Fatal("home did not reject/cancel the old recovery work")
+			}
+			if len(m.history) != 2 || m.history[0].Link != other || len(m.recentSessions) != 1 || m.presence[link].state != desktopOnline {
+				t.Fatal("returning home changed recent desktops, sessions or cached availability")
+			}
+			// A completion queued before suspension must not revive the old
+			// connection or prune the cached shortcut with an outdated list.
+			m.finishRetainedConnection(client, generation, nil, nil)
+			tt := ui.NewTester(m.view, 390, 844)
+			if _, ok := tt.Find("连接状态"); ok {
+				t.Fatal("home showed recovery feedback before a desktop was selected")
+			}
+			for _, label := range []string{"重新连接 Mac", "重新连接 Other", "进入最近会话 mac target", "设备状态 Mac 在线"} {
+				if _, ok := tt.Find(label); !ok {
+					t.Fatalf("home lost %s", label)
+				}
+			}
+			select {
+			case <-client.Closed():
+			case <-time.After(time.Second):
+				t.Fatal("home retained a suspended control connection")
+			}
+		})
+	}
+}
+
+func TestMobileHomeCancelsRecoveryWithoutBlockingRecentHistory(t *testing.T) {
+	registerFonts()
+	for _, navigate := range []bool{false, true} {
+		t.Run(map[bool]string{false: "connection-loss", true: "back-during-recovery"}[navigate], func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer peer.Close()
+			client := rex.NewClient(conn, nil)
+			defer client.Close()
+			canceled, polled := false, false
+			m := &mobileApp{
+				home: !navigate, client: client, link: recentTestLink(), reconnecting: navigate,
+				cancel: func() { canceled = true }, pollCancel: func() { polled = true },
+				history: []desktopRecent{{Name: "Mac", Link: recentTestLink()}},
+			}
+			m.retryTimer = time.AfterFunc(time.Hour, func() {})
+			if navigate {
+				m.goHome()
+			} else {
+				m.connectionLost()
+			}
+			if !m.home || m.client != nil || m.busy || m.reconnecting || m.retryTimer != nil || !canceled || !polled {
+				t.Fatal("home kept automatic recovery work alive")
+			}
+			tt := ui.NewTester(m.view, 390, 844)
+			if _, ok := tt.Find("连接状态"); ok {
+				t.Fatal("home still displayed a recovery card")
+			}
+			if _, ok := tt.Find("重新连接 Mac"); !ok {
+				t.Fatal("recovery removed recent desktop history")
+			}
+		})
+	}
+}
+
 func TestMobileRetainedConnectionCheckUsesOnlyListAndHonorsDeadline(t *testing.T) {
 	conn, peer := net.Pipe()
 	client := rex.NewClient(conn, nil)

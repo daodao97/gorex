@@ -28,6 +28,11 @@ func (m *mobileApp) openDesktop(desktop desktopRecent) {
 }
 
 func (m *mobileApp) goHome() {
+	// Leaving a recovering page cancels its retries. A healthy connection may
+	// still be reused during this foreground visit until the app backgrounds.
+	if m.busy || m.reconnecting {
+		m.disconnect(false)
+	}
 	m.detach()
 	m.home, m.creating, m.error = true, false, ""
 	m.resumeSID = ""
@@ -95,6 +100,14 @@ func (m *mobileApp) enterForeground() {
 		return
 	}
 	m.background = false
+	if m.home {
+		// The home page only previews recent desktops. Do not validate or
+		// reconnect a suspended connection until the user chooses a desktop
+		// or session. Explicit notification/deep-link opens leave home first.
+		m.disconnect(false)
+		m.error = ""
+		return
+	}
 	if m.resumeLink == "" {
 		m.invalidate()
 		return
