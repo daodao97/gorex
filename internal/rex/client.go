@@ -168,7 +168,7 @@ func (c *Client) call(req Request, out any) error {
 		c.mu.Lock()
 		delete(c.pending, req.ID)
 		c.mu.Unlock()
-		return fmt.Errorf("rex: %s timed out", req.Op)
+		return fmt.Errorf("rex: %s timed out: %w", req.Op, context.DeadlineExceeded)
 	}
 	if res.Error != "" {
 		return errors.New(res.Error)

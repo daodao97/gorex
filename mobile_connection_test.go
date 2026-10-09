@@ -178,7 +178,7 @@ func TestMobileBackgroundRetainsConnectionAndStopsForegroundWork(t *testing.T) {
 	streamConn, streamPeer := net.Pipe()
 	defer streamPeer.Close()
 	transport := testMobileTransport{streamConn}
-	stream := newMobileStream(transport, nil)
+	stream := newSessionViewStream(transport, nil)
 	defer stream.Close()
 	polled, probed := false, false
 	m := &mobileApp{
@@ -252,7 +252,7 @@ func TestMobileResumeKeepsTerminalAndHomeAndIgnoresStaleResult(t *testing.T) {
 	defer client.Close()
 	streamConn, streamPeer := net.Pipe()
 	defer streamPeer.Close()
-	stream := newMobileStream(testMobileTransport{streamConn}, nil)
+	stream := newSessionViewStream(testMobileTransport{streamConn}, nil)
 	term, err := terminal.New(terminal.Options{Conn: stream, Font: terminal.Font{Family: termFont.Family, Size: 13}, Theme: lightTerm})
 	if err != nil {
 		t.Fatal(err)

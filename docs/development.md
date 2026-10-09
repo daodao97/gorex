@@ -2,6 +2,25 @@
 
 所有命令从 GoRex 仓库根目录执行。日常发布和回归使用 `GOWORK=off`，确保使用 `go.mod` 固定的 MyGo fork；只有调试 MyGo 本身时才使用本地 `go.work`。
 
+## MyGo 依赖
+
+GoRex 依赖 MyGo fork `github.com/daodao97/mygo` 的 `main` 分支：`go.mod` 用 `replace` 固定到 `main` 上某个提交的伪版本（`v0.0.0-<时间>-<提交>`）。
+
+- MyGo 的功能、修复和上游同步都先合并到 fork 的 `main` 并推送，再更新 GoRex。不要让 `go.mod` 指向功能分支、未推送的提交或本地路径（`replace ... => ../mygo`）。
+- 更新依赖：
+
+  ```sh
+  GOWORK=off go mod edit -replace github.com/egoist/mygo=github.com/daodao97/mygo@main
+  GOWORK=off go mod tidy
+  ./scripts/check-mygo.sh
+  ```
+
+- `go.work` 指向 `../mygo`，只用于同时修改 MyGo 和 GoRex。该目录必须停在 `main`，且与 `go.mod` 固定的提交一致；否则不加 `GOWORK=off` 的命令会悄悄使用另一份 MyGo 代码。`../mygo` 里的未提交或未推送改动不会进入 `GOWORK=off` 构建、GitHub Actions 和正式打包。
+- 改完 MyGo 后的顺序：在 `../mygo` 提交并推送 `main` → 更新 GoRex 伪版本 → `GOWORK=off` 跑完整检查。
+- `./scripts/check-mygo.sh` 只读检查以上约定（固定提交在 fork `main` 上、`go.work` 检出在 `main` 且与固定提交一致），提交 `go.mod` 改动前、发布前运行。
+- 升级 MyGo 后对照 `internal/terminal/UPSTREAM.md`，把 vendored terminal 的本地改动带到新 API 上。上游的 UI API 可能有破坏性变化（例如 #143 的 `ui.Element` 值句柄、`Context` 只在构建期间有效），先运行 `go tool mygo migrate-ui .` 预览并跑全部测试，不能只看编译通过。
+- terminal 及其 iOS 构建链（`scripts/build-ios.sh`、libghostty-vt）留在 GoRex；其他通用 iOS 原生桥接（扫码、设备信息、收起键盘、网络预热等）放在 MyGo，不要在 GoRex 里重新加 cgo/Objective-C。
+
 ## 保留真实任务环境
 
 生产构建使用 `go tool mygo build`，不要加 `-debug`。手工 `go build` 默认仍属于 MyGo 开发模式，必须显式加入 `-X github.com/egoist/mygo.production=1`；`mygo_noinspector` 只移除检查器，不能代替生产标志。不要依靠启动时临时设置 `MYGO_ENV` 来发布应用。
@@ -27,7 +46,8 @@ GOWORK=off go vet ./...
 GOWORK=off go vet -tags mygo_noinspector ./...
 GOWORK=off go test . ./internal/rex ./internal/remote -race
 GOWORK=off go test . -run '^TestName$' -count=1
-bash -n scripts/build-ios.sh scripts/test-ios.sh
+./scripts/check-mygo.sh
+bash -n scripts/build-ios.sh scripts/test-ios.sh scripts/check-mygo.sh
 ```
 
 需要界面测试截图时：
@@ -45,7 +65,7 @@ env -u MYGO_ENV -u MYGO_READY_SOCKET \
   GOREX_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev
 ```
 
-开发热更新会重新启动开发窗口；服务替换只能用于这种隔离环境。需要本地 MyGo 改动时可去掉 `GOWORK=off`，先检查 `go env GOWORK` 和 workspace 中的模块路径。不要用开发命令更新 `/Applications/GoRex.app`。
+开发热更新会重新启动开发窗口；服务替换只能用于这种隔离环境。需要本地 MyGo 改动时可去掉 `GOWORK=off`，先运行 `./scripts/check-mygo.sh` 确认 `../mygo` 在 `main` 上（见“MyGo 依赖”）。不要用开发命令更新 `/Applications/GoRex.app`。
 
 单独调试服务时另用一个数据目录，也不要与上面的开发窗口并行共用：
 

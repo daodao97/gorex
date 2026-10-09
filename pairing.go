@@ -169,14 +169,14 @@ func (a *App) phonePairDialog(c *ui.Context, k *colors) {
 	}
 	ui.DialogBase(c, &p.open, func(backdrop, panel ui.Element) {
 		backdrop.Background(ui.RGBA(0, 0, 0, .35))
-		panel.Width(360).MaxWidthPercent(95).Padding(24).Radius(20).Background(k.panel).Gap(18).Label("连接手机")
+		panel.Width(360).MaxWidthPercent(95).Padding(24).Radius(20).Background(k.panel).Gap(18).Label("连接此电脑")
 		ui.Row(c).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "连接手机").FontSize(22).Bold().Grow(1)
+			ui.Text(c, "连接此电脑").FontSize(22).Bold().Grow(1)
 			if iconButton(c, k, "x", "关闭连接二维码", 30, 16).Clicked() {
 				p.open = false
 			}
 		})
-		ui.Text(c, "在 iPhone 的 GoRex 中点“扫码连接”，继续桌面会话或新建终端。").FontSize(14).LineHeight(1.5).TextColor(k.textMuted)
+		ui.Text(c, "手机扫码，或在另一台电脑的“连接”设置中粘贴连接码。").FontSize(14).LineHeight(1.5).TextColor(k.textMuted)
 		if p.bridge != nil {
 			for _, d := range p.bridge.Devices() {
 				ui.Column(c).FillWidth().Gap(4).Padding(12).Radius(10).Background(k.hover).Children(func() {
@@ -191,7 +191,7 @@ func (a *App) phonePairDialog(c *ui.Context, k *colors) {
 		}
 		if len(p.qr) > 0 {
 			ui.Box(c.Key("phone-qr")).Label("手机连接二维码").Size(288, 288).Background(ui.Hex("#ffffff")).Draw(func(painter *ui.Painter, r ui.Rect) { paintQR(painter, r, p.qr) })
-			ui.Text(c, "二维码包含会话访问凭据，请仅用自己的设备扫描。").FontSize(12).TextColor(k.textMuted).LineHeight(1.4)
+			ui.Text(c, "二维码包含会话访问凭据，请仅在自己的设备上使用。").FontSize(12).TextColor(k.textMuted).LineHeight(1.4)
 			ui.Row(c).Gap(8).Children(func() {
 				if ui.Button(c, "复制连接码").Height(44).Grow(1).Clicked() {
 					c.WriteClipboard(p.link)

@@ -24,7 +24,7 @@ func (s testMobileTransport) HasScreenSize() bool   { return false }
 func TestMobileStreamSurvivesLossWithoutReplayingInput(t *testing.T) {
 	first, peer := net.Pipe()
 	failed := make(chan struct{}, 2)
-	stream := newMobileStream(testMobileTransport{first}, func() { failed <- struct{}{} })
+	stream := newSessionViewStream(testMobileTransport{first}, func() { failed <- struct{}{} })
 	defer stream.Close()
 	stream.geometry(111, 58)
 	output := make(chan string, 1)

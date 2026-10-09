@@ -114,6 +114,8 @@ func main() {
 		}
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
+		a.saveDesktopHistory()
+		a.flushDesktopHistory()
 		a.saveNow()
 		a.stopPhonePair()
 	})
@@ -171,6 +173,8 @@ func (a *App) open() {
 	})
 	a.win = win
 	win.OnFocus(a.closeViewedPaneNotice)
+	win.OnFocus(func() { a.focusedWin = true; a.syncRemotePaneActivity(); win.Invalidate() })
+	win.OnBlur(func() { a.focusedWin = false; a.syncRemotePaneActivity(); win.Invalidate() })
 	startDesktopPushPresence(win)
 	if !a.restore() {
 		home, _ := os.UserHomeDir()
@@ -182,19 +186,23 @@ func (a *App) open() {
 	win.OnClosed(func() {
 		a.stopPhonePair()
 		a.saveNow()
+		a.saveDesktopHistory()
 		a.quitting = true
 		for _, t := range a.tabs {
 			for _, p := range t.panes() {
 				p.closed = true
 				if p.term != nil {
-					p.term.Close() // detaches: the session goes on
+					a.closePaneTerminal(p) // detaches: the session goes on
 				}
 			}
 		}
+		a.waitRemoteSizeReleases()
+		a.closeDesktopConnections()
 		a.client.Close()
 		a.win = nil
 	})
 	a.restorePhonePair()
+	a.loadDesktopHistory()
 }
 
 func serverVersionError(version int) string {
@@ -228,6 +236,7 @@ func (a *App) saveNow() {
 // connection, for the next window.
 func (a *App) reset() {
 	a.tabs, a.active, a.focusReq = nil, 0, nil
+	a.activeRemote = nil
 	a.paletteOpen, a.renaming = false, nil
 	a.settingsOpen = false
 	a.saveDue, a.quitting, a.lastSnapshot, a.title = false, false, "", ""

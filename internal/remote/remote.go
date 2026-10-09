@@ -176,26 +176,39 @@ func (b *Bridge) Close() {
 // Connect owns a Tailcat client until closeTunnel is called. Every Rex stream
 // shares its tunnel; a separate TCP connection carries each terminal's bytes.
 func Connect(ctx context.Context, raw string) (*rex.Client, func(), error) {
-	return connect(ctx, raw, true)
+	return connect(ctx, raw, true, nil)
 }
 
-func connect(ctx context.Context, raw string, reportFailure bool) (*rex.Client, func(), error) {
-	addr, err := ParseLink(raw)
+func ConnectWithDiagnostics(ctx context.Context, raw string, diagnostics *Diagnostics) (*rex.Client, func(), error) {
+	return connect(ctx, raw, true, diagnostics)
+}
+
+func connect(ctx context.Context, raw string, reportFailure bool, diagnostics *Diagnostics) (*rex.Client, func(), error) {
+	var addr tailcat.Addr
+	err := diagnostics.Measure(StageLink, func() error {
+		var err error
+		addr, err = ParseLink(raw)
+		if err != nil {
+			return &ConnectionError{Kind: InvalidLink, Cause: err}
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, nil, &ConnectionError{Kind: InvalidLink, Cause: err}
+		return nil, nil, err
 	}
-	if err := prepareNetwork(ctx, addr); err != nil {
+	diagnostics.target(addr)
+	if err := diagnostics.Measure(StageNetwork, func() error { return prepareNetwork(ctx, addr) }); err != nil {
 		return nil, nil, err
 	}
 	if runtime.GOOS == "ios" {
 		addr = hostnameRelayAddr(addr)
 	}
 	logf := quiet
-	if os.Getenv("GOREX_DEBUG_TUNNEL") == "1" {
+	debugTunnel := os.Getenv("GOREX_DEBUG_TUNNEL") == "1"
+	if diagnostics != nil || debugTunnel {
 		logf = func(format string, args ...any) {
-			message := strings.ReplaceAll(fmt.Sprintf(format, args...), string(addr), "<desktop>")
-			if !strings.Contains(message, "NetworkMap:") {
-				log.Printf("GoRex tunnel: %s", message)
+			if event := diagnostics.TransportLog(format, args...); event != "" && debugTunnel {
+				log.Printf("GoRex tunnel: %s", event)
 			}
 		}
 	}
@@ -205,14 +218,18 @@ func connect(ctx context.Context, raw string, reportFailure bool) (*rex.Client, 
 		defer cancel()
 		return tunnel.DialTCPPort(ctx, Port)
 	}
-	client, err := rex.ConnectDial(ctx, dial)
+	var client *rex.Client
+	err = diagnostics.Measure(StageTunnel, func() error {
+		var err error
+		client, err = rex.ConnectDial(ctx, dial)
+		return err
+	})
 	if err != nil {
 		go tunnel.Close()
-		failure := &ConnectionError{Kind: Failure(err), Cause: err}
 		if reportFailure {
-			log.Printf("GoRex tunnel dial failed: %s", failure)
+			log.Printf("GoRex tunnel dial failed: %s", err)
 		}
-		return nil, nil, failure
+		return nil, nil, err
 	}
 	return client, func() {
 		// Send the final FIN/ACK before shutting down the userspace TCP stack.
@@ -226,7 +243,7 @@ func connect(ctx context.Context, raw string, reportFailure bool) (*rex.Client, 
 // Probe checks whether the saved capability reaches a responding GoRex server.
 // It sends only hello: no device registration, session list or terminal attach.
 func Probe(ctx context.Context, raw string) error {
-	client, closeTunnel, err := connect(ctx, raw, false)
+	client, closeTunnel, err := connect(ctx, raw, false, nil)
 	if err != nil {
 		return err
 	}
@@ -243,7 +260,7 @@ func probeClient(ctx context.Context, client *rex.Client) error {
 // Preview reads host and session display metadata without registering a phone
 // or attaching to a terminal. It shares the availability probe's short tunnel.
 func Preview(ctx context.Context, raw string) (rex.Hello, []rex.SessionInfo, error) {
-	client, closeTunnel, err := connect(ctx, raw, false)
+	client, closeTunnel, err := connect(ctx, raw, false, nil)
 	if err != nil {
 		return rex.Hello{}, nil, err
 	}

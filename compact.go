@@ -35,20 +35,32 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 		Background(k.track).AlignItems(ui.Center).DragWindow().Children(func() {
 		a.tabStrip(c, k)
 		a.phonePairButton(c, k, 28)
-		b := ui.Box(c.Key("compact-new-tab")).Width(28).FillHeight().Shrink(0).
-			Center().Role(ui.RoleButton).Label("New Tab").Focusable().Cursor(ui.CursorPointer).
-			BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder).Tooltip("New Tab  ⌘T")
-		if b.Hovered() {
-			b.Background(k.hover)
-		}
+		b := compactTitleButton(c.Key("compact-new-tab"), k, "plus", "New Tab").Tooltip("New Tab  ⌘T")
 		if b.Clicked() {
 			a.newTab(a.currentDir())
 		}
-		b.Children(func() { ui.Icon(c, icon("plus")).Size(14, 14).TextColor(k.iconMuted) })
+		compactTitleButton(c.Key("new-tab-host"), k, "chevron-down", "选择新会话电脑").Tooltip("选择电脑或打开已有会话").Menu(a.desktopTabMenu)
 	})
 }
 
+func compactTitleButton(c *ui.Context, k *colors, name, label string) ui.Element {
+	b := ui.Box(c).Width(28).FillHeight().Shrink(0).
+		Center().Role(ui.RoleButton).Label(label).Focusable().Cursor(ui.CursorPointer).
+		BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder)
+	if b.Pressed() {
+		b.Background(k.pressed)
+	} else if b.Hovered() {
+		b.Background(k.hover)
+	}
+	b.Children(func() { ui.Icon(c, icon(name)).Size(14, 14).TextColor(k.iconMuted) })
+	return b
+}
+
 func (a *App) compactTabLabel(c *ui.Context, k *colors, i int, t *Tab, name, detail string, hovered bool) {
+	if t.Host != nil {
+		ui.Icon(c, icon("monitor")).Size(12, 12).Shrink(0).TextColor(k.iconMuted).Tooltip(t.Host.name()).Label("远端电脑 " + t.Host.name())
+		ui.Text(c, t.Host.name()).MaxWidth(82).MinWidth(0).FontSize(10).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1)
+	}
 	if t.Focus != nil {
 		if prog := paneProgram(t.Focus); prog.Agent {
 			programIcon(c, prog.Glyph).Size(15, 15).TextColor(programIconColor(c, prog)).

@@ -2,26 +2,17 @@ package main
 
 import (
 	"context"
-	"time"
 
 	"github.com/egoist/mygo"
 	"gorex/internal/remote"
 	"gorex/internal/rex"
 )
 
-const mobileResumeCheckTimeout = 2 * time.Second
-const mobileResumeRecoveryTimeout = 4 * time.Second
+const mobileResumeCheckTimeout = remote.ResumeCheckTimeout
+const mobileResumeRecoveryTimeout = remote.ResumeRecoveryTimeout
 
 func (m *mobileApp) connectionUsable() bool {
-	if m.client == nil || m.reconnecting {
-		return false
-	}
-	select {
-	case <-m.client.Closed():
-		return false
-	default:
-		return true
-	}
+	return !m.reconnecting && remote.ConnectionUsable(m.client)
 }
 
 func (m *mobileApp) isConnectedDesktop(desktop desktopRecent) bool {
@@ -161,57 +152,10 @@ func (m *mobileApp) checkRetainedConnection() {
 // same authenticated Tailcat tunnel. A network change may require a fresh
 // tunnel; the caller falls back to the ordinary reconnect in that case.
 func resumeMobileConnection(ctx context.Context, client *rex.Client, info *rex.DeviceInfo) (*rex.Client, rex.Hello, []rex.SessionInfo, error) {
-	checkCtx, cancel := context.WithTimeout(ctx, mobileResumeCheckTimeout)
-	sessions, err := checkMobileConnection(checkCtx, client, info)
-	cancel()
-	if err == nil {
-		return client, rex.Hello{}, sessions, nil
-	}
-	if ctx.Err() != nil {
-		return nil, rex.Hello{}, nil, ctx.Err()
-	}
-	next, err := client.Redial(ctx)
-	if err != nil {
-		return nil, rex.Hello{}, nil, err
-	}
-	stop := context.AfterFunc(ctx, func() { next.Close() })
-	var hello rex.Hello
-	if info != nil {
-		hello, err = next.HelloFrom(*info)
-	} else {
-		hello, err = next.Hello()
-	}
-	if err == nil && !rex.CompatibleProtocol(hello.Version) {
-		err = &remote.ConnectionError{Kind: remote.ProtocolMismatch}
-	}
-	if err == nil {
-		sessions, err = checkMobileConnection(ctx, next, info)
-	}
-	stop()
-	if ctx.Err() != nil {
-		err = ctx.Err()
-	}
-	if err != nil {
-		next.Close()
-		return nil, rex.Hello{}, nil, err
-	}
-	return next, hello, sessions, nil
+	return remote.ResumeConnection(ctx, client, info)
 }
-
 func checkMobileConnection(ctx context.Context, client *rex.Client, info *rex.DeviceInfo) ([]rex.SessionInfo, error) {
-	stop := context.AfterFunc(ctx, func() { client.Close() })
-	var sessions []rex.SessionInfo
-	var err error
-	if info != nil {
-		sessions, err = client.ListFrom(*info)
-	} else {
-		sessions, err = client.List()
-	}
-	stop()
-	if err == nil {
-		err = ctx.Err()
-	}
-	return sessions, err
+	return remote.CheckConnection(ctx, client, info)
 }
 
 func (m *mobileApp) finishRetainedConnection(client *rex.Client, generation int, sessions []rex.SessionInfo, err error) {

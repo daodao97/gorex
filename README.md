@@ -106,6 +106,21 @@ iOS uses the UIKit host in the pinned MyGo fork.
   stays readable in either theme without restarting the program; colored and
   standard ANSI backgrounds retain their program-supplied colors.
 
+## Connect another desktop
+
+In Settings → **连接**, paste a `gorex://connect` link under **连接其他桌面**.
+Choose an existing session or create one with an optional remote working directory.
+The arrow beside **＋** selects a computer; **＋**, ⌘T and splits inherit the
+current tab's computer and directory. Remote tabs show the computer's name.
+Connections reuse the mobile client's handshake, health checks and recovery.
+Closing a remote tab or disconnecting preserves its sessions. Reopening the app
+restores remote tabs and splits. The active remote pane takes the session's size
+at its normal font size, using the same ownership mechanism as the phone.
+Switching tabs or leaving the window detaches that pane and releases its size.
+If another device takes the session, the previous remote view detaches without
+closing its tab or ending the task; focusing or clicking it reconnects the same
+session. Polling never reclaims ownership automatically.
+
 ## iPhone
 
 Open desktop Settings → **连接** → **显示二维码** to enable a Tailcat connection.
@@ -113,6 +128,16 @@ The title-bar phone icon appears only while a phone is connected; click it
 to view connection details and the QR code. On iPhone, tap **扫码连接桌面** and scan it. The phone
 lists the desktop's sessions; tap one to attach or the top-right **＋** to start the
 default shell in a desktop directory. The terminal follows the system keyboard, including Chinese nine-key input.
+If a connection fails, the message identifies the unfinished stage. Tap
+**连接诊断 → 复制诊断** to share the last six connection attempts, including
+stage timings, timeout budgets, relay events, protocol versions and safe error
+codes. Reports remain available on the connection screen and in **显示与提醒**
+after a retry succeeds, and are saved in the app's Keychain namespace across
+launches. They contain no pairing links, keys, device tokens or session content.
+`dns_not_found`, `tls_certificate_invalid` and `connection_refused` identify
+specific failures; `deadline_exceeded` alone does not establish whether the
+desktop or relay was unavailable. System network preparation on iOS can reuse
+a cached result, so completing that stage is not a fresh relay reachability check.
 A fixed accessory row provides Esc, Ctrl, Option, Cmd, Tab, **更多** and **收起**.
 Tap a modifier for the next key; hold it to lock, then tap again to unlock.
 Modifiers combine and request the system alphabet keyboard. Switching waits

@@ -1,0 +1,171 @@
+package remote
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"gorex/internal/rex"
+	"net"
+	"testing"
+	"time"
+)
+
+func TestWatchConnectionSurvivesRelayStall(t *testing.T) {
+	conn, peer := net.Pipe()
+	defer peer.Close()
+	client := rex.NewClient(conn, nil)
+	defer client.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		decoder := json.NewDecoder(peer)
+		for i := 0; ; i++ {
+			var req rex.Request
+			if decoder.Decode(&req) != nil {
+				return
+			}
+			if i == 0 {
+				// Reproduce a brief stall longer than the former two-second
+				// deadline, followed by normal responses on the same socket.
+				select {
+				case <-time.After(5500 * time.Millisecond):
+				case <-ctx.Done():
+					return
+				}
+			}
+			data, _ := json.Marshal([]rex.SessionInfo{{ID: "existing", PID: 123, Cols: 80, Rows: 24}})
+			if json.NewEncoder(peer).Encode(rex.Response{ID: req.ID, Data: data}) != nil {
+				return
+			}
+		}
+	}()
+	type result struct {
+		sessions []rex.SessionInfo
+		err      error
+	}
+	results := make(chan result, 2)
+	go watchConnection(ctx, client, nil, func(s []rex.SessionInfo, err error) {
+		select {
+		case results <- result{s, err}:
+		case <-ctx.Done():
+		}
+	}, 10*time.Millisecond, ResumeCheckTimeout)
+	for i := 0; i < 2; i++ {
+		select {
+		case got := <-results:
+			if got.err != nil || len(got.sessions) != 1 || got.sessions[0].PID != 123 || !ConnectionUsable(client) {
+				t.Fatalf("transient delay disconnected the original session: %+v", got)
+			}
+		case <-time.After(12 * time.Second):
+			t.Fatal("poll did not recover after the delayed response")
+		}
+	}
+}
+
+func TestWatchConnectionClosesUnresponsiveControl(t *testing.T) {
+	// Cover both a blocked request write and a server that reads but never replies.
+	for _, read := range []bool{false, true} {
+		t.Run(map[bool]string{false: "blocked write", true: "missing reply"}[read], func(t *testing.T) {
+			conn, peer := net.Pipe()
+			defer peer.Close()
+			client := rex.NewClient(conn, nil)
+			defer client.Close()
+			if read {
+				go func() {
+					var req rex.Request
+					json.NewDecoder(peer).Decode(&req)
+				}()
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			result := make(chan error, 1)
+			go watchConnection(ctx, client, nil, func(_ []rex.SessionInfo, err error) { result <- err }, time.Millisecond, 50*time.Millisecond)
+			select {
+			case err := <-result:
+				if !errors.Is(err, context.DeadlineExceeded) {
+					t.Fatalf("unresponsive connection lost timeout diagnosis: %v", err)
+				}
+			case <-time.After(time.Second):
+				t.Fatal("unresponsive connection did not trigger bounded recovery")
+			}
+			select {
+			case <-client.Closed():
+			case <-time.After(time.Second):
+				t.Fatal("unresponsive control remained open")
+			}
+		})
+	}
+}
+
+func TestWatchConnectionDetectsClosedTransportImmediately(t *testing.T) {
+	conn, peer := net.Pipe()
+	defer peer.Close()
+	client := rex.NewClient(conn, nil)
+	defer client.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	result := make(chan error, 1)
+	go watchConnection(ctx, client, nil, func(_ []rex.SessionInfo, err error) { result <- err }, time.Hour, ResumeCheckTimeout)
+	peer.Close()
+	select {
+	case err := <-result:
+		if err == nil {
+			t.Fatal("closed transport was reported as healthy")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("closed transport waited for the polling deadline")
+	}
+}
+
+func TestWatchConnectionStoppedDuringPollRetainsSocket(t *testing.T) {
+	conn, peer := net.Pipe()
+	defer peer.Close()
+	client := rex.NewClient(conn, nil)
+	defer client.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request := make(chan rex.Request, 1)
+	go func() {
+		var req rex.Request
+		if json.NewDecoder(peer).Decode(&req) == nil {
+			request <- req
+		}
+	}()
+	delivered := make(chan error, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watchConnection(ctx, client, func() *rex.DeviceInfo { return &rex.DeviceInfo{Name: "phone"} }, func(_ []rex.SessionInfo, err error) { delivered <- err }, time.Millisecond, 50*time.Millisecond)
+	}()
+	var req rex.Request
+	select {
+	case req = <-request:
+	case <-time.After(time.Second):
+		t.Fatal("poll never started")
+	}
+	if req.Device == nil || req.Device.Name != "phone" {
+		t.Fatal("shared polling lost phone metadata")
+	}
+	cancel() // Background the phone while the server is still processing LIST.
+	select {
+	case <-client.Closed():
+		t.Fatal("a late foreground timer disconnected the suspended phone")
+	case <-time.After(150 * time.Millisecond):
+	}
+	if err := json.NewEncoder(peer).Encode(rex.Response{ID: req.ID, Data: json.RawMessage(`[]`)}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stopped poll did not finish")
+	}
+	select {
+	case err := <-delivered:
+		t.Fatalf("background poll delivered stale work: %v", err)
+	default:
+	}
+	if !ConnectionUsable(client) {
+		t.Fatal("stopped polling discarded the retained connection")
+	}
+}

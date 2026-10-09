@@ -40,6 +40,7 @@ func (m *mobileApp) sessionSettingsDialog(c *ui.Context) {
 				}
 			})
 		}
+		m.connectionDiagnosticsAction(c)
 	})
 }
 

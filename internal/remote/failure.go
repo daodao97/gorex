@@ -23,6 +23,7 @@ const (
 type ConnectionError struct {
 	Kind  FailureKind
 	Cause error
+	Stage ConnectionStage
 }
 
 func (e *ConnectionError) Unwrap() error { return e.Cause }

@@ -229,7 +229,7 @@ func (a *App) clearFocused() {
 		p := t.Focus
 		p.term.Feed([]byte("\x1b[H\x1b[2J\x1b[3J"))
 		idle := p.info.Idle
-		client := a.client
+		client := a.paneClient(p)
 		if client == nil || p.SID == "" {
 			return
 		}
@@ -249,6 +249,10 @@ func (a *App) restartFocused() {
 		return
 	}
 	old := t.Focus
+	if t.Host != nil {
+		a.restartDesktopPane(old)
+		return
+	}
 	cols, rows := 80, 24
 	if old.term != nil {
 		cols, rows = old.term.Size()
@@ -260,7 +264,7 @@ func (a *App) restartFocused() {
 	if old.term != nil {
 		old.term.Close()
 	}
-	go a.client.Kill(old.SID)
+	go a.paneClient(old).Kill(old.SID)
 	if t.Zoom == old {
 		t.Zoom = p
 	}

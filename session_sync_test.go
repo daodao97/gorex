@@ -18,6 +18,21 @@ func TestRemoteSessionAppearsWithoutChangingDesktopFocus(t *testing.T) {
 	a, tt := newTestApp(t)
 	tt.Frame()
 	active, focus, request := a.tab(), a.tab().Focus, a.focusReq
+	// The first view schedules its stream attachment/resize asynchronously.
+	// Record the settled desktop grid, rather than racing the initial 80×24.
+	waitFor(t, tt, "initial desktop size", func() bool {
+		cols, rows := focus.term.Size()
+		infos, err := a.client.List()
+		if err != nil {
+			return false
+		}
+		for _, in := range infos {
+			if in.ID == focus.SID {
+				return in.Cols == cols && in.Rows == rows
+			}
+		}
+		return false
+	})
 	before, err := a.client.List()
 	if err != nil {
 		t.Fatal(err)

@@ -126,7 +126,7 @@ func (a *App) openTerminalLink(p *Pane, link terminal.Link) {
 		cwd = p.startDir
 	}
 	home, _ := os.UserHomeDir()
-	remote := p.info.Program == "ssh" || p.info.Program == "mosh"
+	remote := p.host != nil || p.info.Program == "ssh" || p.info.Program == "mosh"
 	target, err := resolveTerminalLink(link, cwd, home, editorForLinks(prefs.LinkEditor), remote)
 	if err == nil {
 		open := a.openLinkURL

@@ -63,7 +63,7 @@ func recoveryFrame(data string) []byte {
 func TestMobileFailedPartialSnapshotKeepsScreenAndDoesNotReplayInput(t *testing.T) {
 	registerFonts()
 	failed := make(chan struct{}, 2)
-	stream := newMobileStream(nil, func() { failed <- struct{}{} })
+	stream := newSessionViewStream(nil, func() { failed <- struct{}{} })
 	term, err := terminal.New(terminal.Options{Conn: stream, FixedCols: 80, FixedRows: 24, ReflowView: true, Font: terminal.Font{Family: termFont.Family, Size: 13}, NoBlink: true})
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestMobileRecoveryAcrossDesktopBridgeRestart(t *testing.T) {
 		t.Fatal("fixture viewer did not attach")
 	}
 	var retainedTerm *terminal.Terminal
-	var retainedStream *mobileStream
+	var retainedStream *sessionViewStream
 	mygo.RunOnMain(func() { retainedTerm, retainedStream = m.term, m.stream; m.startPolling(phone, m.generation) })
 	bridge.Close()
 	if !wait(5*time.Second, func() bool { return m.reconnecting && m.term == retainedTerm }) {

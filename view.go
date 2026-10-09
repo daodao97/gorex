@@ -20,6 +20,7 @@ func (a *App) view(c *ui.Context) {
 	a.runPosted()
 	k := colorsOf(c)
 	a.focusedWin = a.win == nil || a.win.IsFocused()
+	a.syncRemotePaneActivity()
 	a.closeViewedPaneNotice()
 	c.Root().Background(terminalBackground(c))
 	ui.Column(c).Fill().Children(func() {
@@ -37,6 +38,7 @@ func (a *App) view(c *ui.Context) {
 	a.palette(c, k)
 	a.settingsPage(c, k)
 	a.phonePairDialog(c, k)
+	a.desktopConnectionDialog(c, k)
 	if a.saveDue && time.Since(a.lastSave) > time.Second {
 		a.save()
 	}
@@ -191,10 +193,31 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 				t.setFocus(p)
 				a.changed()
 			}
+			if tv.Pressed() && p.host != nil {
+				a.activateRemotePane(p)
+			}
 			if tv.Focused() {
 				p.attention = false
 			}
 		})
+		if p.host != nil && (!p.host.connected() || p.streamEnded) {
+			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(32).Children(func() { a.desktopOfflineBar(c, k, p.host) })
+		} else if p.host != nil && p.remoteView != nil && !p.remoteView.inputReady() {
+			ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8, 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+				message := "点击窗格接入会话"
+				if p.remoteYielded {
+					message = "此会话已在其他窗口打开"
+				} else if p.remoteView.hasTransport() {
+					message = "正在载入会话…"
+				}
+				ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
+				if !p.remoteView.hasTransport() && iconButton(c, k, "rotate-ccw", "接入当前窗格", 24, 13).Clicked() {
+					t.setFocus(p)
+					a.focusReq = p
+					a.activateRemotePane(p)
+				}
+			})
+		}
 	})
 	// Bounds during view building are from the previous layout. Record
 	// this frame's rectangle so focus navigation works just after unzoom.
@@ -205,6 +228,7 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 		t.setFocus(p)
 		a.focusReq = p
 	}
+	a.syncRemotePaneActivity()
 	return card
 }
 

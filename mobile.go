@@ -29,7 +29,7 @@ type mobileApp struct {
 	hello                              rex.Hello
 	sessions                           []rex.SessionInfo
 	term                               *terminal.Terminal
-	stream                             *mobileStream
+	stream                             *sessionViewStream
 	selected                           rex.SessionInfo
 	link, error                        string
 	history                            []desktopRecent
@@ -82,6 +82,9 @@ type mobileApp struct {
 	keyboardLatch                      ui.ModifierLatch
 	connectionIssue                    *mobileConnectionIssue
 	connectionDetailsOpen              bool
+	connectionDiagnostics              []remote.DiagnosticReport
+	connectionDiagnosticsOpen          bool
+	connectionDiagnosticsCopied        bool
 	sessionSettingsOpen                bool
 	// sizeLock, a setting, makes an opened session take the PTY's size
 	// (and the desktop's pane show it) while the phone session is active.
@@ -92,78 +95,12 @@ type mobileApp struct {
 	lockRelease                  <-chan struct{}
 }
 
-type desktopRecent struct {
-	Link string
-	Name string
-	ID   string `json:",omitempty"`
-	OS   string `json:",omitempty"`
-}
-
-func sameDesktop(a, b desktopRecent) bool {
-	if a.ID != "" && a.ID == b.ID {
-		return true
-	}
-	if a.Name == "桌面" || a.Name != b.Name {
-		return false
-	}
-	if a.ID == "" || b.ID == "" {
-		return true
-	}
-	// Upgrade records from early builds that used an installation UUID.
-	if strings.HasPrefix(a.ID, "legacy:") || strings.HasPrefix(b.ID, "legacy:") {
-		return strings.HasPrefix(a.ID, "machine:") || strings.HasPrefix(b.ID, "machine:")
-	}
-	return strings.HasPrefix(a.ID, "machine:") && !strings.Contains(b.ID, ":") ||
-		strings.HasPrefix(b.ID, "machine:") && !strings.Contains(a.ID, ":")
-}
-
-func mergeDesktopHistory(first, second []desktopRecent) []desktopRecent {
-	var history []desktopRecent
-	for _, entries := range [][]desktopRecent{first, second} {
-		for _, entry := range entries {
-			if _, err := remote.ParseLink(entry.Link); err != nil {
-				continue
-			}
-			if strings.TrimSpace(entry.Name) == "" {
-				entry.Name = "桌面"
-			}
-			duplicate := false
-			for i, kept := range history {
-				if entry.Link == kept.Link || sameDesktop(entry, kept) {
-					// Migrate older records without IDs while keeping the newest URL.
-					if kept.ID == "" || strings.HasPrefix(entry.ID, "machine:") && !strings.HasPrefix(kept.ID, "legacy:") {
-						history[i].ID = entry.ID
-					}
-					if kept.OS == "" {
-						history[i].OS = entry.OS
-					}
-					duplicate = true
-					break
-				}
-			}
-			if duplicate {
-				continue
-			}
-			history = append(history, entry)
-			if len(history) == 6 {
-				return history
-			}
-		}
-	}
-	return history
-}
-
 func mobileMain() {
 	if dir, err := mygo.App.Path(mygo.PathUserData); err == nil {
 		os.Setenv("GOREX_DIR", dir)
 	}
 	registerFonts()
-	m := &mobileApp{storage: make(chan func(), 32), sizeLock: true}
-	go func() {
-		for task := range m.storage {
-			task()
-		}
-	}()
+	m := &mobileApp{storage: connectionStorage(), sizeLock: true}
 	storeName := "desktop-connection"
 	if os.Getenv("GOREX_UI_TEST") == "1" {
 		storeName += "-ui-tests"
@@ -196,7 +133,11 @@ func mobileMain() {
 		m.storage <- func() {
 			var history []desktopRecent
 			var recentSessions []mobileRecentSession
-			historySaved := false
+			var diagnostics []remote.DiagnosticReport
+			if saved, err := m.store.Get("connection-diagnostics-v1"); err == nil && len(saved) <= 65536 {
+				json.Unmarshal(saved, &diagnostics)
+			}
+
 			if saved, err := m.store.Get("recent-sessions"); err == nil {
 				json.Unmarshal(saved, &recentSessions)
 			}
@@ -204,15 +145,9 @@ func mobileMain() {
 			if saved, err := m.store.Get("size-lock"); err == nil {
 				sizeLock = string(saved) == "1"
 			}
-			if saved, err := m.store.Get("history"); err == nil {
-				historySaved = json.Unmarshal(saved, &history) == nil
-			}
-			if !historySaved {
-				if saved, err := m.store.Get("recent"); err == nil {
-					history = []desktopRecent{{Link: string(saved), Name: "桌面"}}
-				}
-			}
+			history = readDesktopHistory(m.store)
 			mygo.RunOnMain(func() {
+				m.restoreConnectionDiagnostics(diagnostics)
 				m.sizeLock = sizeLock
 				if m.historyEpoch == historyEpoch {
 					m.applyLoadedConnectionHistory(history, recentSessions, historyEpoch)
@@ -296,7 +231,10 @@ func (m *mobileApp) disconnect(forget bool) {
 func (m *mobileApp) connect(raw string) {
 	addr, err := remote.ParseLink(raw)
 	if err != nil {
-		m.connectionIssue = connectionIssueFor(&remote.ConnectionError{Kind: remote.InvalidLink, Cause: err})
+		trace := remote.NewDiagnostics(false, 1, 0)
+		err = trace.Measure(remote.StageLink, func() error { return &remote.ConnectionError{Kind: remote.InvalidLink, Cause: err} })
+		m.recordConnectionDiagnostic(trace.Finish(err))
+		m.connectionIssue = connectionIssueFor(err)
 		m.error = ""
 		m.invalidate()
 		return
@@ -340,33 +278,20 @@ func (m *mobileApp) startConnection(recovering bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	m.cancel = cancel
 	link := m.link
+	trace := remote.NewDiagnostics(recovering, m.retryAttempt, timeout)
 	device := mobileDevice()
 	if snapshot := m.pushSnapshot.Load(); snapshot != nil {
 		device = *snapshot
 	}
 	go func() {
-		client, closeTunnel, err := remote.Connect(ctx, link)
-		var hello rex.Hello
-		var sessions []rex.SessionInfo
-		stop := func() bool { return false }
-		if client != nil {
-			stop = context.AfterFunc(ctx, func() { client.Close() })
-		}
-		if err == nil {
-			hello, err = client.HelloFrom(device)
-		}
-		if err == nil && !rex.CompatibleProtocol(hello.Version) {
-			err = &remote.ConnectionError{Kind: remote.ProtocolMismatch}
-		}
-		if err == nil {
-			sessions, err = client.List()
-		}
-		stop()
-		if ctx.Err() != nil {
-			err = ctx.Err()
-		}
+		client, closeTunnel, hello, sessions, err := remote.OpenConnection(ctx, link, device, trace)
+		report := trace.Finish(err)
 		cancel()
 		mygo.RunOnMain(func() {
+			// Ignore attempts canceled by navigation, backgrounding or a new scan.
+			if generation == m.generation {
+				m.recordConnectionDiagnostic(report)
+			}
 			if generation != m.generation || err != nil {
 				if client != nil {
 					client.Close()
@@ -393,9 +318,9 @@ func (m *mobileApp) startConnection(recovering bool) {
 			}
 			m.presence[m.link] = desktopPresence{state: desktopOnline, checked: time.Now()}
 			if m.store != nil {
-				history, _ := json.Marshal(m.history)
+				history := append([]desktopRecent(nil), m.history...)
 				m.storage <- func() {
-					if err := m.store.Set("history", history); err != nil {
+					if err := writeDesktopHistory(m.store, history); err != nil {
 						mygo.RunOnMain(func() {
 							if m.generation == generation {
 								m.error = "已连接；无法保存连接记录，下次启动请重新扫码"
@@ -436,56 +361,31 @@ func (m *mobileApp) startConnection(recovering bool) {
 }
 
 func (m *mobileApp) poll(ctx context.Context, client *rex.Client, generation int) {
-	ticker := time.NewTicker(2 * time.Second)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-client.Closed():
-			mygo.RunOnMain(func() {
-				if ctx.Err() == nil && !m.background && m.generation == generation && m.client == client {
-					m.connectionLost()
-				}
-			})
-			return
-		case <-ticker.C:
-			if ctx.Err() != nil {
+	remote.WatchConnection(ctx, client, m.pushSnapshot.Load, func(sessions []rex.SessionInfo, err error) {
+		mygo.RunOnMain(func() {
+			if ctx.Err() != nil || m.background || m.generation != generation || m.client != client {
 				return
 			}
-			// Stopping foreground polling must not close a healthy retained
-			// connection when a list request happens to be in flight. Let
-			// that bounded request finish; the parent still suppresses its
-			// callback after background entry or a transport replacement.
-			checkCtx, cancel := context.WithTimeout(context.Background(), mobileResumeCheckTimeout)
-			sessions, err := checkMobileConnection(checkCtx, client, m.pushSnapshot.Load())
-			cancel()
-			mygo.RunOnMain(func() {
-				if ctx.Err() == nil && !m.background && m.generation == generation && m.client == client {
-					if err != nil {
-						m.connectionLost()
-						return
+			if err != nil {
+				m.connectionLost()
+				return
+			}
+			m.updateSessions(sessions, false)
+			for _, s := range sessions {
+				if s.ID == m.selected.ID {
+					if m.term != nil && m.stream != nil && !m.stream.HasScreenSize() && (s.Cols != m.selected.Cols || s.Rows != m.selected.Rows) {
+						m.selected = s
+						m.stream.geometry(s.Cols, s.Rows)
+						m.stream.replace(m.sessionStream(s.ID, false))
+					} else {
+						m.selected = s
+						m.followSizeLock(s)
 					}
-					m.updateSessions(sessions, false)
-					for _, s := range sessions {
-						if s.ID == m.selected.ID {
-							if m.term != nil && m.stream != nil && !m.stream.HasScreenSize() && (s.Cols != m.selected.Cols || s.Rows != m.selected.Rows) {
-								// Older desktop daemons send raw ANSI. Reattach for a
-								// fresh snapshot if their source grid changes.
-								m.selected = s
-								m.stream.geometry(s.Cols, s.Rows)
-								m.stream.replace(m.sessionStream(s.ID, false))
-							} else {
-								m.selected = s
-								m.followSizeLock(s)
-							}
-						}
-					}
-					m.invalidate()
 				}
-			})
-		}
-	}
+			}
+			m.invalidate()
+		})
+	})
 }
 
 func (m *mobileApp) scan() {
@@ -544,10 +444,10 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		m.lockLost = false
 	}
 	m.detach()
-	var stream *mobileStream
+	var stream *sessionViewStream
 	locking := m.locksSize()
 	m.lockSeen = false
-	stream = newMobileStream(m.sessionStream(s.ID, locking), func() {
+	stream = newSessionViewStream(m.sessionStream(s.ID, locking), func() {
 		mygo.RunOnMain(func() {
 			if m.stream == stream && !stream.hasTransport() {
 				if m.closingSession == m.selected.ID {
@@ -657,6 +557,7 @@ func (m *mobileApp) view(c *ui.Context) {
 	m.sessionSettingsDialog(c)
 	m.sessionEndDialog(c)
 	m.connectionDialog(c)
+	m.connectionDiagnosticsDialog(c)
 	if page := m.navigation.Path(); page != m.navigationPage {
 		// A completed edge gesture changes history. Release resources only
 		// after the new page has built; a cancelled preview keeps them alive.

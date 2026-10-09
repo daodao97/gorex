@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/egoist/mygo"
+	"gorex/internal/remote"
 	"time"
 )
 
@@ -51,7 +52,7 @@ func (m *mobileApp) connectionLost() {
 }
 
 func mobileRetryDelay(attempt int) time.Duration {
-	return min(time.Duration(1<<min(max(attempt, 0), 3))*time.Second, 5*time.Second)
+	return remote.RetryDelay(attempt)
 }
 
 func (m *mobileApp) scheduleRetry() {

@@ -73,14 +73,11 @@ func (v *view) layout(r ui.Rect, scale float32) {
 		// Whole-pixel cells must fit too; rounding each cell after scaling
 		// the font can otherwise clip the final columns on a Retina screen.
 		cw, ch := max(w/cols, 1), max(h/rows, 1)
-		for range 4 {
-			mw, mh, _ := fontGeometry(fk, scale)
-			factor := min(float32(cw)/float32(mw), float32(ch)/float32(mh))
-			if factor >= 1 {
-				break
-			}
-			fk.size *= factor * 0.99
+		key := fitFontKey{font: fk, cellW: cw, cellH: ch}
+		if key != v.fitKey {
+			v.fitKey, v.fittedFont = key, fitFont(fk, scale, cw, ch)
 		}
+		fk = v.fittedFont
 	}
 	if fk != v.font {
 		v.followCursor = true
@@ -108,6 +105,38 @@ func (v *view) layout(r ui.Rect, scale float32) {
 		v.ox -= v.panX
 		v.oy -= v.panY
 	}
+}
+
+type fitFontKey struct {
+	font         fontKey
+	cellW, cellH int
+}
+
+// fitFont finds the largest uniform font that fits the whole-pixel cell
+// budget. It enlarges small source screens as well as shrinking large ones.
+func fitFont(fk fontKey, scale float32, cw, ch int) fontKey {
+	mw, mh, _ := fontGeometry(fk, scale)
+	factor := min(float32(cw)/float32(mw), float32(ch)/float32(mh))
+	low, high := float32(0), max(fk.size, fk.size*factor)*2
+	fits := func(size float32) bool {
+		candidate := fk
+		candidate.size = size
+		w, h, _ := fontGeometry(candidate, scale)
+		return w <= cw && h <= ch
+	}
+	for fits(high) {
+		low, high = high, high*2
+	}
+	for range 12 {
+		middle := (low + high) / 2
+		if fits(middle) {
+			low = middle
+		} else {
+			high = middle
+		}
+	}
+	fk.size = low
+	return fk
 }
 
 func fontGeometry(fk fontKey, scale float32) (cw, ch, baseline int) {

@@ -72,7 +72,7 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 	}
 	name := programOf(s.ID).Name
 	tip := name + " · " + agentStateLabel(s)
-	e := ui.Box(c.Key("agent-state-"+p.SID)).Size(13, 16).Shrink(0).Center().
+	e := ui.Box(c.Key("agent-state-"+p.noticeKey())).Size(13, 16).Shrink(0).Center().
 		Role(ui.RoleButton).Label(label).Tooltip(tip + " · 点击定位窗格").Cursor(ui.CursorPointer)
 	e.Children(func() {
 		switch s.State {
@@ -89,7 +89,7 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 		}
 	})
 	if e.Clicked() {
-		a.later(c, func() { a.focusAgentPane(p.SID) })
+		a.later(c, func() { a.focusAgentPane(p.noticeKey()) })
 	}
 }
 
@@ -108,7 +108,7 @@ func (a *App) paneIsViewed(p *Pane) bool {
 
 func (a *App) closeViewedPaneNotice() {
 	if t := a.tab(); t != nil && a.paneIsViewed(t.Focus) {
-		a.closeAgentNotice(t.Focus.SID)
+		a.closeAgentNotice(t.Focus.noticeKey())
 	}
 }
 
@@ -129,23 +129,23 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	}
 	finished := s.State == agents.Completed || s.State == agents.Failed
 	if s.State != agents.Waiting && !finished {
-		if s.State != "" || a.agentNoticeKinds[p.SID] == agents.Waiting {
-			a.closeAgentNotice(p.SID)
+		if s.State != "" || a.agentNoticeKinds[p.noticeKey()] == agents.Waiting {
+			a.closeAgentNotice(p.noticeKey())
 		}
 		return
 	}
-	if (s.State != previous.State && !finished) || (finished && a.agentNoticeKinds[p.SID] == agents.Waiting) {
-		a.closeAgentNotice(p.SID)
+	if (s.State != previous.State && !finished) || (finished && a.agentNoticeKinds[p.noticeKey()] == agents.Waiting) {
+		a.closeAgentNotice(p.noticeKey())
 	}
 	var hidden bool
 	if finished {
 		if a.agentFinishedNotified == nil {
 			a.agentFinishedNotified = map[string]uint64{}
 		}
-		if s.CompletionRevision <= a.agentFinishedNotified[p.SID] {
+		if s.CompletionRevision <= a.agentFinishedNotified[p.noticeKey()] {
 			return
 		}
-		a.agentFinishedNotified[p.SID] = s.CompletionRevision
+		a.agentFinishedNotified[p.noticeKey()] = s.CompletionRevision
 		// Restoring a window must not announce historical completed turns.
 		if previous.SessionID == s.SessionID && previous.CompletionRevision == s.CompletionRevision && (previous.State == agents.Completed || previous.State == agents.Failed) {
 			return
@@ -155,16 +155,22 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 		if a.agentNotified == nil {
 			a.agentNotified = map[string]uint64{}
 		}
-		if s.WaitRevision <= a.agentNotified[p.SID] {
+		if s.WaitRevision <= a.agentNotified[p.noticeKey()] {
 			return
 		}
-		a.agentNotified[p.SID] = s.WaitRevision
+		a.agentNotified[p.noticeKey()] = s.WaitRevision
 		hidden = prefs.HideAgentNotifications
 	}
 	if hidden || a.paneIsViewed(p) {
 		return
 	}
-	opts := mygo.NotificationOptions{Title: programOf(s.ID).Name + " · " + agentStateLabel(s), Body: rex.AgentNoticeBody(rex.Dir(), p.info)}
+	body := ""
+	if p.host == nil {
+		body = rex.AgentNoticeBody(rex.Dir(), p.info)
+	} else {
+		body = p.host.name() + " · " + agentStateLabel(s)
+	}
+	opts := mygo.NotificationOptions{Title: programOf(s.ID).Name + " · " + agentStateLabel(s), Body: body}
 	a.showPaneNotice(p, s.State, opts)
 }
 
@@ -181,8 +187,8 @@ func (a *App) showPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions
 	if a.agentNotices == nil {
 		a.agentNotices = map[string]func(){}
 	}
-	a.closeAgentNotice(p.SID)
-	sid := p.SID
+	a.closeAgentNotice(p.noticeKey())
+	sid := p.noticeKey()
 	click := func() {
 		if a.win == nil && a.agentNotify == nil && a.openWindow != nil {
 			a.openWindow()
@@ -226,7 +232,7 @@ func (a *App) showTerminalNotice(p *Pane, title, body string) {
 func (a *App) focusAgentPane(sid string) bool {
 	for i, t := range a.tabs {
 		for _, p := range t.panes() {
-			if p.SID != sid || p.closed {
+			if p.noticeKey() != sid || p.closed {
 				continue
 			}
 			a.settingsOpen, a.paletteOpen, a.renaming = false, false, nil

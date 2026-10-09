@@ -136,6 +136,7 @@ func (a *App) tabMenu(m *ui.Menu, t *Tab) {
 	}
 	m.Separator()
 	if m.Item("New Tab").Shortcut(ui.Cmd, ui.KeyT).Chosen() {
+		a.selectTab(slices.Index(a.tabs, t))
 		a.newTab(a.currentDir())
 	}
 	if m.Item("Close Tab").Chosen() {

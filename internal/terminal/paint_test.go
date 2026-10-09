@@ -90,7 +90,7 @@ func TestRemoteGridFitsWithoutReflow(t *testing.T) {
 	phone.Feed(source.Snapshot())
 	want := source.Text()
 	tt := ui.NewTester(func(c *ui.Context) { View(c, phone).Fill() }, 393, 680)
-	for _, size := range [][2]int{{393, 680}, {393, 280}, {780, 180}, {320, 200}} {
+	for _, size := range [][2]int{{1440, 960}, {720, 960}, {393, 680}, {393, 280}, {780, 180}, {320, 200}} {
 		tt.SetScale(3)
 		tt.SetSize(size[0], size[1])
 		tt.Frame()
@@ -103,6 +103,19 @@ func TestRemoteGridFitsWithoutReflow(t *testing.T) {
 		}
 		if v.cols*v.cellW > v.viewportW || v.rows*v.cellH > v.viewportH {
 			t.Fatalf("%v clips fitted grid: %dx%d cells of %dx%d in %dx%d", size, v.cols, v.rows, v.cellW, v.cellH, v.viewportW, v.viewportH)
+		}
+		if size == [2]int{1440, 960} && v.font.size <= 13 {
+			t.Fatal("larger desktop pane did not enlarge the remote screen")
+		}
+		// Keep the source aspect ratio, but use the available space along
+		// at least one axis rather than leaving a small fixed-size screen.
+		widthSlack := v.viewportW - v.cols*v.cellW
+		heightSlack := v.viewportH - v.rows*v.cellH
+		if widthSlack >= v.cols && heightSlack >= v.rows {
+			t.Fatalf("%v underfills both axes beyond whole-cell rounding: width slack=%d height slack=%d", size, widthSlack, heightSlack)
+		}
+		if size[1] == 960 {
+			save(t, tt, fmt.Sprintf("remote-grid-desktop-fit-%d", size[0]))
 		}
 	}
 	phone.SetFitToView(false)

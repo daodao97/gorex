@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
@@ -162,10 +161,10 @@ func (m *mobileApp) persistDesktopHistory() {
 	if m.store == nil || m.storage == nil {
 		return
 	}
-	saved, _ := json.Marshal(m.history)
+	saved := append([]desktopRecent(nil), m.history...)
 	epoch := m.historyEpoch
 	m.storage <- func() {
-		if err := m.store.Set("history", saved); err != nil {
+		if err := writeDesktopHistory(m.store, saved); err != nil {
 			mygo.RunOnMain(func() {
 				if m.historyEpoch == epoch {
 					m.error = "无法保存连接记录，请重试"

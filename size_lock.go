@@ -14,6 +14,9 @@ import (
 // pane follows that size until the phone leaves or a window unlocks it.
 func (a *App) followSizeLock(p *Pane, was rex.SessionInfo) {
 	in := p.info
+	if p.host != nil {
+		return
+	} // Remote viewers follow framed source dimensions.
 	// A list made before an unlock completed still names the lock.
 	if p.term == nil || p.unlocking || time.Since(p.unlockedAt) < 2*time.Second {
 		return
@@ -26,7 +29,7 @@ func (a *App) followSizeLock(p *Pane, was rex.SessionInfo) {
 		if first {
 			// What the phone's program drew reached this pane before the
 			// list did. Replace it with the session's screen at its size.
-			sid, client := p.SID, a.client
+			sid, client := p.SID, a.paneClient(p)
 			go client.Resync(sid)
 		}
 	case in.SizeLock == "" && p.locked:
@@ -46,7 +49,7 @@ func (a *App) unlockSize(p *Pane) {
 		return
 	}
 	p.unlocking = true
-	sid, client := p.SID, a.client
+	sid, client := p.SID, a.paneClient(p)
 	go func() {
 		err := client.UnlockSize(sid, 0, 0)
 		a.post(func() {

@@ -82,6 +82,8 @@ type view struct {
 	// pixels per DIP.
 	font                             fontKey
 	fonts                            [4]ui.Font
+	fitKey                           fitFontKey
+	fittedFont                       fontKey
 	scale                            float32
 	cellW, cellH, baseline           int
 	ox, oy                           int

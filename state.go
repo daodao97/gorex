@@ -20,6 +20,7 @@ import (
 
 // Tab is a tab of the window: panes in a tree of splits.
 type Tab struct {
+	Host *desktopHost // nil is this computer; all splits share the same host
 	ID   int
 	Name string // the name the user gave it, "" to follow its panes
 	Root *Node
@@ -46,12 +47,17 @@ type Node struct {
 
 // Pane is a terminal attached to a session of the server.
 type Pane struct {
-	ID     int
-	SID    string
-	Tab    *Tab
-	Node   *Node
-	term   *terminal.Terminal
-	stream *rex.Stream
+	host                      *desktopHost
+	ID                        int
+	SID                       string
+	Tab                       *Tab
+	Node                      *Node
+	term                      *terminal.Terminal
+	stream                    *rex.Stream
+	remoteView                *sessionViewStream
+	remoteOwner               string
+	remoteSeen, remoteYielded bool
+	remoteRelease             <-chan struct{}
 
 	// info is what the server last said of the session.
 	info rex.SessionInfo
@@ -63,8 +69,9 @@ type Pane struct {
 	// while it was out of sight; seen clears it.
 	attention bool
 	// bounds is where the pane's card was in the last frame.
-	bounds ui.Rect
-	closed bool
+	bounds      ui.Rect
+	closed      bool
+	streamEnded bool
 	// restored tells that the session was made anew for a pane of a
 	// saved layout whose session was gone.
 	restored bool
@@ -78,6 +85,8 @@ type Pane struct {
 
 // App is the state of GoRex's window.
 type App struct {
+	desktops        desktopConnections
+	desktopStorage  chan func()
 	phone           *phonePair
 	openLinkURL     func(string) error // injectable native URL opener
 	win             *mygo.Window
@@ -110,6 +119,8 @@ type App struct {
 	lastSave              time.Time
 	quitting              bool
 	focusedWin            bool
+	activeRemote          *Pane
+	remoteReleases        []remoteSizeRelease
 	lastSnapshot          string
 	title                 string
 	agentHooks            map[string]agents.HookInstallation
@@ -216,6 +227,7 @@ func (a *App) newPane(dir string, cols, rows int) *Pane {
 
 // attach makes the pane's terminal, attached to its session.
 func (a *App) attach(p *Pane, cols, rows int) {
+	win := a.win
 	onSplit := func(down bool) {
 		a.laterFrom(a.services, func() { a.splitPane(p, down) })
 	}
@@ -227,11 +239,29 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		}
 		return
 	}
-	p.stream = a.client.Stream(p.SID, cols, rows)
-	p.stream.OnData = func(int) { p.lastData.Store(time.Now().UnixNano()) }
+	if p.host != nil {
+		var view *sessionViewStream
+		view = newSessionViewStream(nil, func() {
+			a.post(func() {
+				if !p.closed && !a.quitting && p.remoteView == view && !view.hasTransport() && !p.remoteYielded {
+					p.streamEnded = true
+				}
+			})
+			if win != nil {
+				win.Invalidate()
+			}
+		})
+		p.remoteView = view
+	} else {
+		p.stream = a.paneClient(p).Stream(p.SID, cols, rows)
+	}
+	stream := p.stream
+	p.streamEnded = false
+	if p.stream != nil {
+		p.stream.OnData = func(int) { p.lastData.Store(time.Now().UnixNano()) }
+	}
 	// The terminal's callbacks change the state on the main thread, in
 	// the window that made the pane, as long as it is open.
-	win := a.win
 	update := func(fn func()) {
 		if win != nil {
 			win.Update(fn)
@@ -239,7 +269,7 @@ func (a *App) attach(p *Pane, cols, rows int) {
 			a.post(fn)
 		}
 	}
-	term, err := terminal.New(terminal.Options{
+	options := terminal.Options{
 		Conn:           p.stream,
 		Font:           termFont,
 		Theme:          lightTerm,
@@ -261,12 +291,23 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		},
 		OnExit: func(int) {
 			update(func() {
-				if !p.closed && !a.quitting {
+				if p.closed || a.quitting || p.stream != stream {
+					return
+				}
+				if p.host == nil {
 					a.closePane(p)
+				} else {
+					p.streamEnded = true
 				}
 			})
 		},
-	})
+	}
+	if p.host != nil {
+		// Only the active pane attaches and supplies its own viewport size.
+		// Reuse the phone's retained-reader and atomic snapshot replacement.
+		options.Conn = p.remoteView
+	}
+	term, err := terminal.New(options)
 	if err != nil {
 		log.Printf("terminal: %v", err)
 		a.err = err.Error()
@@ -293,6 +334,14 @@ func (a *App) ring(p *Pane) {
 
 // newTab opens a tab with a shell in dir, after the active tab.
 func (a *App) newTab(dir string) *Tab {
+	if h := a.currentHost(); h != nil {
+		a.createDesktopSession(h, dir, nil, false)
+		return nil
+	}
+	return a.newLocalTab(dir)
+}
+
+func (a *App) newLocalTab(dir string) *Tab {
 	t := &Tab{ID: a.id()}
 	p := a.newPane(dir, 0, 0)
 	t.Root = &Node{ID: a.id(), Pane: p}
@@ -312,6 +361,9 @@ func (a *App) currentDir() string {
 		if d := t.Focus.info.Dir; d != "" {
 			return d
 		}
+	}
+	if h := a.currentHost(); h != nil {
+		return h.hello.Host.Home
 	}
 	home, _ := os.UserHomeDir()
 	return home
@@ -340,6 +392,10 @@ func (a *App) split(vertical bool) {
 		return
 	}
 	old := t.Focus
+	if t.Host != nil {
+		a.createDesktopSession(t.Host, a.currentDir(), old, vertical)
+		return
+	}
 	t.Zoom = nil
 	n := old.Node
 	cols, rows := 80, 24
@@ -368,13 +424,15 @@ func (a *App) closePane(p *Pane) {
 		return
 	}
 	p.closed = true
-	a.markSessionClosed(p.SID)
+	a.markPaneClosed(p)
 	if p.term != nil {
-		p.term.Close()
+		a.closePaneTerminal(p)
 	}
 	if sid := p.SID; sid != "" {
-		c := a.client
-		go c.Kill(sid)
+		c := a.paneClient(p)
+		if p.host == nil {
+			go c.Kill(sid)
+		}
 	}
 	t := p.Tab
 	if t.Zoom == p {
@@ -444,12 +502,12 @@ func (a *App) removeTab(t *Tab) {
 func (a *App) closeTab(t *Tab) {
 	for _, p := range t.panes() {
 		p.closed = true
-		a.markSessionClosed(p.SID)
+		a.markPaneClosed(p)
 		if p.term != nil {
-			p.term.Close()
+			a.closePaneTerminal(p)
 		}
-		if p.SID != "" {
-			go a.client.Kill(p.SID)
+		if p.SID != "" && p.host == nil {
+			go a.paneClient(p).Kill(p.SID)
 		}
 	}
 	a.removeTab(t)
@@ -707,8 +765,10 @@ type savedNode struct {
 	B        *savedNode `json:"b,omitempty"`
 }
 
-func (a *App) snapshot() savedLayout {
-	l := savedLayout{Active: a.active}
+func (a *App) snapshot() savedLayout { return a.snapshotHost(nil) }
+
+func (a *App) snapshotHost(host *desktopHost) savedLayout {
+	l := savedLayout{}
 	var save func(n *Node) *savedNode
 	save = func(n *Node) *savedNode {
 		if p := n.Pane; p != nil {
@@ -724,6 +784,12 @@ func (a *App) snapshot() savedLayout {
 		return &savedNode{Vertical: n.Vertical, Ratio: n.Ratio, A: save(n.A), B: save(n.B)}
 	}
 	for _, t := range a.tabs {
+		if t.Host != host {
+			continue
+		}
+		if t == a.tab() {
+			l.Active = len(l.Tabs)
+		}
 		st := savedTab{Name: t.Name, Root: save(t.Root), Zoom: t.Zoom != nil}
 		st.Focus = max(slices.Index(t.panes(), t.Focus), 0)
 		l.Tabs = append(l.Tabs, st)
@@ -732,11 +798,16 @@ func (a *App) snapshot() savedLayout {
 }
 
 // changed notes that the layout changed, to save it soon.
-func (a *App) changed() { a.saveDue = true }
+func (a *App) changed() { a.saveDue = true; a.desktops.dirty = true }
 
 // save sends the layout to the server, which keeps it on disk.
 func (a *App) save() {
 	a.saveDue = false
+	if a.desktops.dirty {
+		a.desktops.dirty = false
+		a.saveDesktopHistory()
+	}
+	a.lastSave = time.Now()
 	if a.client == nil {
 		return
 	}
@@ -855,6 +926,9 @@ func (a *App) syncSessionTabs(byID map[string]rex.SessionInfo) {
 	}
 	shown := map[string]bool{}
 	for _, t := range a.tabs {
+		if t.Host != nil {
+			continue
+		}
 		for _, p := range t.panes() {
 			shown[p.SID] = true
 		}
@@ -917,26 +991,40 @@ func (a *App) poll(win *mygo.Window, client *rex.Client) {
 }
 
 // apply takes what the server said of the sessions.
-func (a *App) apply(byID map[string]rex.SessionInfo) {
+func (a *App) apply(byID map[string]rex.SessionInfo) { a.applyHost(nil, byID) }
+
+func (a *App) applyHost(host *desktopHost, byID map[string]rex.SessionInfo) {
 	if a.win != nil {
 		a.focusedWin = a.win.IsFocused()
 	}
 	a.closeViewedPaneNotice()
 	for ti, t := range a.tabs {
+		if t.Host != host {
+			continue
+		}
 		for _, p := range t.panes() {
 			in, ok := byID[p.SID]
 			if !ok {
 				continue
 			}
 			was := p.info
-			if a.hello.Version == 4 {
+			if a.hostHello(host).Version == 4 {
 				previous := was
 				// Reopening a window on the same App resets pane snapshots,
 				// but retained notices must not swallow the next legacy turn.
-				previous.Agent.CompletionRevision = max(previous.Agent.CompletionRevision, a.agentFinishedNotified[p.SID])
+				previous.Agent.CompletionRevision = max(previous.Agent.CompletionRevision, a.agentFinishedNotified[p.noticeKey()])
 				in.Agent = rex.LegacyCompletionState(previous, in)
 			}
 			p.info = in
+			if host != nil {
+				a.followRemoteSizeOwner(p)
+			}
+			// A viewer uses its own TCP stream. The control connection can
+			// stay healthy after that stream drops, so restore it on the
+			// next successful poll without redialing or replacing the shell.
+			if host != nil && host.connected() && p.streamEnded && !in.Exited {
+				a.reattachDesktopPane(p, in)
+			}
 			a.followSizeLock(p, was)
 			a.updateAgentNotice(p, was.Agent)
 			// A program that ran a while and finished out of sight
@@ -955,7 +1043,7 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 						completion = max(completion, was.Agent.CompletionRevision)
 					}
 				}
-				integratedFinished := completion > 0 && a.agentFinishedNotified[p.SID] >= completion
+				integratedFinished := completion > 0 && a.agentFinishedNotified[p.noticeKey()] >= completion
 				if !seen && !integratedFinished && time.Since(was.LastInput) > 8*time.Second {
 					prog := programOf(was.Program)
 					a.showPaneNotice(p, "program", mygo.NotificationOptions{
@@ -969,14 +1057,35 @@ func (a *App) apply(byID map[string]rex.SessionInfo) {
 			}
 		}
 	}
+	if host != nil {
+		var ended []*Pane
+		for _, t := range a.tabs {
+			if t.Host == host {
+				for _, p := range t.panes() {
+					in, ok := byID[p.SID]
+					if (ok && in.Exited) || (!ok && time.Since(p.info.Created) > 3*time.Second) {
+						ended = append(ended, p)
+					}
+				}
+			}
+		}
+		for _, p := range ended {
+			a.closePane(p)
+		}
+	}
 	for sid, close := range a.agentNotices {
-		if _, ok := byID[sid]; !ok {
+		if !noticeOnHost(sid, host) {
+			continue
+		}
+		if _, ok := byID[noticeSessionID(sid)]; !ok {
 			close()
 			delete(a.agentNotices, sid)
 			delete(a.agentNoticeKinds, sid)
 		}
 	}
-	a.syncSessionTabs(byID)
+	if host == nil {
+		a.syncSessionTabs(byID)
+	}
 	if a.saveDue && time.Since(a.lastSave) > time.Second {
 		a.save()
 	}
