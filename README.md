@@ -13,7 +13,7 @@
   macOS · iPhone · Linux / macOS 服务器 &nbsp;|&nbsp; 原生 UI，无 WebView &nbsp;|&nbsp; 为终端 Agent 而生
 </p>
 
-![Retty 暗色桌面：标签页和左右分屏](docs/images/desktop-workspace-dark.jpg)
+![同一个 Retty 会话同时显示在 Mac 桌面和 iPhone 上](docs/images/hero-dark.jpg)
 
 在 Mac 上让 Claude Code 跑起来，出门后在 iPhone 上看它进行到哪、替它回答一个问题，回到桌前继续——**始终是同一个终端会话**。
 
