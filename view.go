@@ -72,6 +72,35 @@ func iconButton(c *ui.Context, k *colors, name, label string, size, iconSize flo
 	return b
 }
 
+// Keep toolbar actions clear of the hover control without shifting on hover.
+func paneActionInset(p *Pane) float32 {
+	if p.Tab != nil && p.Tab.Root != nil && p.Tab.Root.Pane == nil {
+		return 32
+	}
+	return 0
+}
+
+func (a *App) paneCloseButton(c *ui.Context, k *colors, p *Pane) {
+	b := ui.ButtonBase(c.Key("close-pane")).Size(24, 24).Absolute().Top(0).Right(0).
+		Radius(12).Cursor(ui.CursorPointer).Role(ui.RoleButton).Label("关闭窗格").Tooltip("关闭窗格")
+	col := k.iconMuted
+	if b.Pressed() {
+		b.Background(k.pressed)
+		col = k.text
+	} else if b.Hovered() || b.Focused() {
+		b.Background(k.hover)
+		col = k.text
+	}
+	b.Children(func() {
+		ui.Box(c).Size(12, 12).Radius(6).Border(1, col).Center().PassThrough().Children(func() {
+			ui.Icon(c, icon("x")).Size(8, 8).TextColor(col).PassThrough()
+		})
+	})
+	if b.Clicked() {
+		a.later(c, func() { a.closePane(p) })
+	}
+}
+
 // tabContent lays out the panes of a tab, or the one zoomed.
 func (a *App) tabContent(c *ui.Context, k *colors, t *Tab) {
 	if t.Zoom != nil {
@@ -210,9 +239,10 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 			}
 		})
 		if p.host != nil && (!p.host.connected() || p.streamEnded) {
-			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(32).Children(func() { a.desktopOfflineBar(c, k, p.host) })
+			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(32).Padding(0, paneActionInset(p), 0, 0).Background(k.panel).
+				Children(func() { a.desktopOfflineBar(c, k, p.host) })
 		} else if p.host != nil && p.remoteView != nil && a.remotePaneStatus(c, p) != "" {
-			ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8, 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+			ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
 				message := a.remotePaneStatus(c, p)
 				ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
 				if p.remoteYielded && iconButton(c, k, "rotate-ccw", "接入当前窗格", 24, 13).Clicked() {
@@ -221,6 +251,9 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 					a.activateRemotePane(p)
 				}
 			})
+		}
+		if card.Hovered() && t.Root.Pane == nil {
+			a.paneCloseButton(c, k, p)
 		}
 	})
 	// Bounds during view building are from the previous layout. Record

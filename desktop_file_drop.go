@@ -105,7 +105,7 @@ func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
 
 func (a *App) fileUploadBar(c *ui.Context, k *colors, p *Pane) {
 	upload := p.upload
-	ui.Row(c.Key("file-upload")).Height(30).Padding(0, 8, 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+	ui.Row(c.Key("file-upload")).Height(30).Padding(0, 8+paneActionInset(p), 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
 		message := "正在准备上传…"
 		if upload.prepared.Load() {
 			sent, total := upload.sent.Load(), upload.total.Load()

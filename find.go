@@ -53,7 +53,7 @@ func (a *App) findStep(direction int) {
 // findBar belongs to its pane, so switching tabs or focusing another pane
 // never searches a different session's output by accident.
 func (a *App) findBar(c *ui.Context, k *colors, t *Tab, p *Pane) {
-	bar := ui.Row(c.Key("find")).Height(36).Padding(0, 8, 0, 12).Gap(6).
+	bar := ui.Row(c.Key("find")).Height(36).Padding(0, 8+paneActionInset(p), 0, 12).Gap(6).
 		AlignItems(ui.Center).Background(k.panel).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).
 		Children(func() {
 			ui.Icon(c, icon("search")).Size(14, 14).TextColor(k.textFaint).Shrink(0)
