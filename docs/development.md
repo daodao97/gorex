@@ -120,14 +120,14 @@ GitHub Actions 的 **Build macOS DMG** 工作流在推送 `main` 或手动运行
 
 ### GitHub Release
 
-**Release** 复用 CLI 和 DMG 构建工作流，等待四个平台的 CLI 和 Universal DMG 全部构建、测试和校验通过，先上传到草稿 Release，再公开发布，共五个安装包和五份 SHA-256 文件。发布入口：
+**Release** 复用 CLI 和 DMG 构建工作流，等待四个平台的 CLI 和 Universal DMG 全部构建、测试和校验通过，先上传到草稿 Release，再公开发布，共五个安装包和五份 SHA-256 文件。正式 Release 强制启用 `require-notarization`：缺少签名 / 公证凭据或 Apple 公证、票据附加、Gatekeeper 校验失败，都会阻止发布，不会回退为 ad hoc 包。发布入口：
 
 - 推送 `v<版本>` 标签，版本必须与 `mygo.json.version` 一致。
 - 在 Actions 中手动运行 **Release**，使用所选分支的实际提交和 `mygo.json.version` 创建标签。
 
 同一版本标签不能指向不同提交；新版先更新 `mygo.json.version`。重新运行已公开的同一版本不会覆盖其产物，失败的草稿可重新运行补齐。发布任务才有 `contents: write` 权限；日常构建只读仓库。
 
-当前没有配置 Developer ID 凭据，DMG 使用 ad hoc 签名。要让下载的应用通过 macOS Gatekeeper，在仓库 Actions Secrets 中配置：
+日常 `main` 构建没有签名 / 公证凭据时仍可生成 ad hoc 测试包。手动运行 **Build macOS DMG** 可勾选 `require-notarization` 验证正式分发流程；**Release** 始终要求公证。配置位置为仓库 **Settings → Secrets and variables → Actions**：
 
 | Secret | 内容 |
 | --- | --- |
@@ -140,6 +140,8 @@ GitHub Actions 的 **Build macOS DMG** 工作流在推送 `main` 或手动运行
 可通过 `base64 < DeveloperID.p12 | gh secret set MACOS_CERTIFICATE_P12` 和 `gh secret set MACOS_NOTARY_KEY < AuthKey.p8` 上传文件，密码使用 `gh secret set MACOS_CERTIFICATE_PASSWORD` 交互输入。不要把证书、私钥或密码放进仓库。
 
 配置后，CI 导入临时 Keychain，用 Developer ID 为应用、内嵌代码和 DMG 签名，启用 hardened runtime 与时间戳，等待 Apple 公证通过并 staple 票据，再验证 Gatekeeper 和生成校验文件。公证失败会阻止产物上传及 Release 发布；部分配置缺失会报错，不退回 ad hoc。任务结束后删除临时凭据。iOS 的 Apple Development / Apple Distribution 证书不能替代 Developer ID Application。
+
+公证提交结果和 Apple 诊断日志保存在 Actions 的 `macOS-notarization` Artifact，保留 14 天；不包含 P12、P8 或私钥。构建总超时 45 分钟，单次 Apple 公证等待最多 20 分钟。只有 DMG 和应用的票据、Gatekeeper 检查全部通过后，工作流才输出 `notarized=true`，Release 发布步骤再次检查这一结果。已发布的未公证版本不会原地覆盖，补齐凭据后递增 `mygo.json.version` 再发布。
 
 ### 下载后提示已损坏
 

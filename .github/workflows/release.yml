@@ -53,6 +53,8 @@ jobs:
   dmg:
     needs: prepare
     uses: ./.github/workflows/build-dmg.yml
+    with:
+      require-notarization: true
     secrets: inherit
 
   publish:
@@ -93,6 +95,8 @@ jobs:
           python3 - <<'PY'
           import hashlib, os, subprocess
           from pathlib import Path
+          if os.environ['DMG_NOTARIZED'] != 'true':
+              raise SystemExit('Refusing to publish a DMG without successful Apple notarization')
           folder = Path('release')
           assets = [f'retty-{platform}.tar.gz' for platform in ['linux-amd64', 'linux-arm64', 'darwin-amd64', 'darwin-arm64']]
           assets.append(f'Retty-{os.environ["RELEASE_VERSION"]}-macos-universal.dmg')

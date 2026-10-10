@@ -4,7 +4,17 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      require-notarization:
+        description: Require Developer ID signing and Apple notarization
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      require-notarization:
+        description: Refuse unsigned or unnotarized release packages
+        type: boolean
+        default: false
     outputs:
       notarized:
         value: ${{ jobs.build-dmg.outputs.notarized }}
@@ -30,20 +40,15 @@ concurrency:
 jobs:
   build-dmg:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     outputs:
-      notarized: ${{ steps.signing.outputs.enabled }}
+      notarized: ${{ steps.notarize.outputs.notarized || 'false' }}
     env:
       GOWORK: 'off'
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
 
       - name: Prepare optional Developer ID signing
         id: signing
@@ -54,9 +59,14 @@ jobs:
           NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
           NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
+          REQUIRE_NOTARIZATION: ${{ inputs.require-notarization || false }}
         run: |
           set -euo pipefail
           if [[ -z "$CERTIFICATE_P12$CERTIFICATE_PASSWORD$NOTARY_KEY$NOTARY_KEY_ID$NOTARY_ISSUER_ID" ]]; then
+            if [[ "$REQUIRE_NOTARIZATION" == true ]]; then
+              echo '::error::Release requires Apple notarization. Configure MACOS_CERTIFICATE_P12, MACOS_CERTIFICATE_PASSWORD (if set), MACOS_NOTARY_KEY, MACOS_NOTARY_KEY_ID and MACOS_NOTARY_ISSUER_ID in Actions Secrets.'
+              exit 1
+            fi
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
             echo 'identity=-' >> "$GITHUB_OUTPUT"
             echo '::warning::Developer ID credentials are absent; this DMG is ad hoc signed and not notarized.'
@@ -90,12 +100,18 @@ jobs:
           echo 'enabled=true' >> "$GITHUB_OUTPUT"
           echo "identity=$identity" >> "$GITHUB_OUTPUT"
 
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
       - name: Build production app and universal DMG
         env:
           SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
         run: env -u MYGO_INSPECTOR go tool mygo build -platform darwin/universal -sign "$SIGNING_IDENTITY" .
 
       - name: Notarize and staple Apple tickets
+        id: notarize
         if: steps.signing.outputs.enabled == 'true'
         shell: bash
         env:
@@ -103,16 +119,27 @@ jobs:
           NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
         run: |
           set -euo pipefail
+          folder="$RUNNER_TEMP/retty-notary"
+          mkdir -p "$folder"
           for image in build/darwin-universal/*.dmg; do
+            submit_status=0
             xcrun notarytool submit "$image" --key "$RUNNER_TEMP/retty-signing/notary-key.p8" \
               --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
-              --wait --timeout 20m --output-format json > "$RUNNER_TEMP/retty-notary.json"
+              --wait --timeout 20m --output-format json > "$folder/submission.json" || submit_status=$?
+            submission_id=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("id", ""))' "$folder/submission.json")
+            status=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$folder/submission.json")
+            if [[ -n "$submission_id" ]]; then
+              xcrun notarytool log "$submission_id" --key "$RUNNER_TEMP/retty-signing/notary-key.p8" \
+                --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" "$folder/log.json" || true
+            fi
+            if [[ "$submit_status" -ne 0 || "$status" != Accepted ]]; then
+              echo "::error::Apple notarization did not complete successfully (status=$status, submission=$submission_id). See the macOS-notarization artifact for diagnostics."
+              exit 1
+            fi
             python3 - <<'PY'
           import json, os
           from pathlib import Path
-          result = json.loads((Path(os.environ['RUNNER_TEMP']) / 'retty-notary.json').read_text())
-          if result.get('status') != 'Accepted':
-              raise SystemExit(f'Notarization failed: {result}')
+          result = json.loads((Path(os.environ['RUNNER_TEMP']) / 'retty-notary/submission.json').read_text())
           print(f'Notarization accepted: {result["id"]}')
           PY
             xcrun stapler staple "$image"
@@ -120,7 +147,19 @@ jobs:
             spctl --assess --type open --context context:primary-signature --verbose=4 "$image"
           done
           xcrun stapler staple build/darwin-universal/Retty.app
+          xcrun stapler validate build/darwin-universal/Retty.app
           spctl --assess --type execute --verbose=4 build/darwin-universal/Retty.app
+          echo 'notarized=true' >> "$GITHUB_OUTPUT"
+          echo 'macOS: Developer ID signed, Apple notarized and Gatekeeper verified.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Apple notarization diagnostics
+        if: always() && steps.signing.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: macOS-notarization
+          path: ${{ runner.temp }}/retty-notary/*.json
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Verify architectures, release tags, signature and disk image
         shell: bash
