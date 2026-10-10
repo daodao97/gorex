@@ -1,8 +1,8 @@
-This package is the MyGo terminal plugin from github.com/egoist/mygo v0.2.14, under the MIT license in LICENSE.
+This package originally copied the MyGo terminal plugin from github.com/egoist/mygo v0.2.14, under the MIT license in LICENSE.
 
-Retty keeps a local copy because that version does not expose the Ghostty search API or search highlights to applications. The search additions are in search.go, internal/vt/search.go, and the terminal renderer. view.go also copies completed mouse selections automatically. The renderer removes horizontal grid padding and extends last-column backgrounds to the viewport edge. Native library metadata remains pinned to the upstream build.
+Retty originally kept a local copy because that version did not expose the Ghostty search API or search highlights to applications. The search additions are in search.go, internal/vt/search.go, and the terminal renderer. view.go also copies completed mouse selections automatically. The renderer removes horizontal grid padding and extends last-column backgrounds to the viewport edge. Native library metadata remains pinned to the upstream build.
 
-When updating MyGo, compare this package with the new upstream terminal plugin and carry forward the local changes (or switch back when upstream exposes them).
+When updating MyGo, compare this package with the framework terminal plugin and carry forward the applicable fixes while preserving Retty's platform packaging.
 
 Selection copying supports visible text (excluding SGR-concealed characters)
 and raw terminal text through Options.CopyRawText and SetCopyRawText. All three
@@ -76,3 +76,27 @@ Fork commit 364c8ce0c826 merges upstream through 05b235d: text ranges retain
 their styles during input-method composition, and apps without bindings no
 longer generate a TypeScript client. The terminal plugin is unchanged from
 de6ced6a3965; Retty retains its local additions and Ghostty library pin.
+
+## Generic terminal enhancements returned to the MyGo fork
+
+Fork commit `c1b0ee5` on `main` now contains the generic parts of Retty's terminal work:
+Ghostty incremental search/highlights, visible/raw selection formatting,
+primary-screen drag selection, edge auto-scroll and touch selection, software
+key encoding and input-method context, fixed-grid connections and atomic screen
+replacement, typed file links, optional color contrast/adaptation, locale
+inheritance and the synchronized-output inactivity watchdog. Its existing
+`OpenLink`, `OnPaste(text)` and `OnKey` APIs remain compatible.
+
+MyGo keeps explicit copying by default; `CopyOnSelect` enables automatic copy.
+It keeps its original horizontal grid padding. Retty's vendor still enables
+automatic copying and uses zero horizontal padding.
+
+Retty retains its vendor for the CLI's UI-free VT package and iOS's statically
+linked Ghostty packaging. Local-only pieces include `ReflowView` compact mobile
+presentation, pane split menu callbacks, iOS bindings/build assets and screen
+transport integration. Session ownership, reconnection, transfers, notification
+routing, connection-quality policies and tab/pane trees remain in Retty.
+
+Future terminal fixes should land in MyGo first, then be carried into the local
+vendor where applicable. Keep MyGo's native manifest/build generator and Retty's
+iOS/CLI packaging independent when synchronizing.
