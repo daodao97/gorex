@@ -17,14 +17,16 @@ type sessionTransport interface {
 }
 
 type sessionViewStream struct {
-	mu         sync.Mutex
-	cond       *sync.Cond
-	current    sessionTransport
-	cols, rows int
-	reset      bool
-	paused     bool
-	closed     bool
-	failed     func()
+	mu            sync.Mutex
+	cond          *sync.Cond
+	current       sessionTransport
+	input         sessionTransport
+	separateInput bool
+	cols, rows    int
+	reset         bool
+	paused        bool
+	closed        bool
+	failed        func()
 }
 
 func newSessionViewStream(stream sessionTransport, failed func()) *sessionViewStream {
@@ -59,10 +61,17 @@ func (s *sessionViewStream) replace(next sessionTransport) {
 func (s *sessionViewStream) failure(stream sessionTransport) {
 	s.mu.Lock()
 	active := !s.closed && s.current == stream
+	inputFailed := !s.closed && s.separateInput && s.input == stream
 	if active {
 		s.current = nil
 	}
+	if inputFailed {
+		s.input = nil
+	}
 	s.mu.Unlock()
+	if inputFailed && !active {
+		stream.Close()
+	}
 	if active {
 		stream.Close()
 		if s.failed != nil {
@@ -168,6 +177,9 @@ func (s *sessionViewStream) Read(p []byte) (int, error) {
 func (s *sessionViewStream) Write(p []byte) (int, error) {
 	s.mu.Lock()
 	stream, closed, paused := s.current, s.closed, s.paused
+	if s.separateInput {
+		stream = s.input
+	}
 	s.mu.Unlock()
 	if closed {
 		return 0, io.ErrClosedPipe
@@ -186,6 +198,12 @@ func (s *sessionViewStream) Write(p []byte) (int, error) {
 func (s *sessionViewStream) Resize(cols, rows int) error {
 	s.mu.Lock()
 	stream := s.current
+	if s.separateInput {
+		stream = s.input
+		if stream != nil {
+			s.cols, s.rows = cols, rows
+		}
+	}
 	s.mu.Unlock()
 	if stream != nil {
 		return stream.Resize(cols, rows)
@@ -215,7 +233,21 @@ func (s *sessionViewStream) hasTransport() bool {
 func (s *sessionViewStream) inputReady() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return !s.closed && s.current != nil && !s.paused && (!s.separateInput || s.input != nil)
+}
+
+func (s *sessionViewStream) readReady() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	return !s.closed && s.current != nil && !s.paused
+}
+
+// Desktop viewers retain their reader while a foreground attachment owns
+// input and sizing. Mobile continues to use one transport for both.
+func (s *sessionViewStream) setInput(input sessionTransport) {
+	s.mu.Lock()
+	s.separateInput, s.input = true, input
+	s.mu.Unlock()
 }
 
 func (s *sessionViewStream) Close() error {
@@ -226,9 +258,14 @@ func (s *sessionViewStream) Close() error {
 	}
 	s.closed = true
 	old := s.current
+	input := s.input
 	s.current = nil
+	s.input = nil
 	s.cond.Broadcast()
 	s.mu.Unlock()
+	if input != nil && input != old {
+		input.Close()
+	}
 	if old != nil {
 		return old.Close()
 	}

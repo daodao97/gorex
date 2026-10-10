@@ -202,8 +202,8 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 				t.setFocus(p)
 				a.changed()
 			}
-			if tv.Pressed() && p.host != nil {
-				a.activateRemotePane(p)
+			if tv.Pressed() && p.host != nil && !p.remoteYielded {
+				a.resumeRemotePane(p)
 			}
 			if tv.Focused() {
 				p.attention = false
@@ -211,16 +211,11 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 		})
 		if p.host != nil && (!p.host.connected() || p.streamEnded) {
 			ui.Box(c).Absolute().Top(0).Left(0).Right(0).Height(32).Children(func() { a.desktopOfflineBar(c, k, p.host) })
-		} else if p.host != nil && p.remoteView != nil && !p.remoteView.inputReady() {
+		} else if p.host != nil && p.remoteView != nil && a.remotePaneStatus(c, p) != "" {
 			ui.Row(c).Absolute().Top(0).Left(0).Right(0).Height(28).Padding(0, 8, 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
-				message := "点击窗格接入会话"
-				if p.remoteYielded {
-					message = "此会话已在其他窗口打开"
-				} else if p.remoteView.hasTransport() {
-					message = "正在载入会话…"
-				}
+				message := a.remotePaneStatus(c, p)
 				ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
-				if !p.remoteView.hasTransport() && iconButton(c, k, "rotate-ccw", "接入当前窗格", 24, 13).Clicked() {
+				if p.remoteYielded && iconButton(c, k, "rotate-ccw", "接入当前窗格", 24, 13).Clicked() {
 					t.setFocus(p)
 					a.focusReq = p
 					a.activateRemotePane(p)
@@ -304,4 +299,26 @@ func (a *App) errorBanner(c *ui.Context, k *colors) {
 			})
 		})
 	})
+}
+
+// Fast attachments do not flash a loading banner over a retained screen.
+func (a *App) remotePaneStatus(c *ui.Context, p *Pane) string {
+	if p.remoteYielded {
+		return "此会话已在其他窗口打开"
+	}
+	if a.activeRemote != p {
+		return ""
+	}
+	if p.remoteView.readReady() {
+		return ""
+	}
+	if p.remoteView.hasTransport() {
+		remaining := remoteLoadingDelay - c.Now().Sub(p.remoteLoadingSince)
+		if remaining > 0 {
+			c.After(remaining)
+			return ""
+		}
+		return "正在载入会话…"
+	}
+	return ""
 }

@@ -58,6 +58,11 @@ type Pane struct {
 	remoteOwner               string
 	remoteSeen, remoteYielded bool
 	remoteRelease             <-chan struct{}
+	remoteIdleTimer           *time.Timer
+	remoteIdleEpoch           uint64
+	remoteAttempt             uint64
+	remoteAttaching           bool
+	remoteLoadingSince        time.Time
 	upload                    *paneUpload
 
 	// info is what the server last said of the session.
@@ -245,7 +250,8 @@ func (a *App) attach(p *Pane, cols, rows int) {
 		var view *sessionViewStream
 		view = newSessionViewStream(nil, func() {
 			a.post(func() {
-				if !p.closed && !a.quitting && p.remoteView == view && !view.hasTransport() && !p.remoteYielded {
+				if !p.closed && !a.quitting && p.remoteView == view && !view.hasTransport() {
+					a.pauseRemotePane(p)
 					p.streamEnded = true
 				}
 			})
@@ -254,6 +260,7 @@ func (a *App) attach(p *Pane, cols, rows int) {
 			}
 		})
 		p.remoteView = view
+		view.setInput(nil)
 	} else {
 		p.stream = a.paneClient(p).Stream(p.SID, cols, rows)
 	}
@@ -1019,6 +1026,9 @@ func (a *App) applyHost(host *desktopHost, byID map[string]rex.SessionInfo) {
 			}
 			p.info = in
 			if host != nil {
+				if p.remoteView != nil && p.stream == nil {
+					p.remoteView.geometry(in.Cols, in.Rows)
+				}
 				a.followRemoteSizeOwner(p)
 			}
 			// A viewer uses its own TCP stream. The control connection can

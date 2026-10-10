@@ -144,7 +144,7 @@ func (a *App) desktopInputEnabled(h *desktopHost, enabled bool) {
 		if tab.Host == h {
 			for _, p := range tab.panes() {
 				if p.term != nil {
-					p.term.SetInputEnabled(enabled && (p.remoteView == nil || a.activeRemote == p && !p.remoteYielded && p.remoteView.hasTransport()))
+					p.term.SetInputEnabled(enabled && (p.remoteView == nil || a.activeRemote == p && !p.remoteYielded && p.remoteView.inputReady()))
 				}
 			}
 		}
@@ -436,7 +436,9 @@ func (a *App) reattachDesktopTabs(h *desktopHost) {
 func (a *App) reattachDesktopPane(p *Pane, in rex.SessionInfo) {
 	if p.remoteView != nil {
 		p.info = in
-		if a.activeRemote == p && !p.remoteYielded {
+		a.pauseRemotePane(p)
+		p.remoteView.replace(nil)
+		if a.activeRemote == p {
 			a.resumeRemotePane(p)
 		}
 		return
