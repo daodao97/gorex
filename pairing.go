@@ -52,6 +52,7 @@ func (a *App) startPhonePair() {
 		// Notification registration shares the authenticated control tunnel and
 		// runs off the forwarding goroutine. Repeated receipts are idempotent.
 		registrations := make(chan push.Registration, 32)
+		presence := make(chan rex.DesktopActivity, 32)
 		stopPush := make(chan struct{})
 		go func() {
 			for {
@@ -62,16 +63,26 @@ func (a *App) startPhonePair() {
 					if r.Validate() == nil {
 						push.Register(rex.Dir(), r)
 					}
+				case activity := <-presence:
+					_ = push.ReportDesktop(rex.Dir(), activity)
 				}
 			}
 		}()
 		b, err := remote.Start(ctx, rex.SocketPath(), remote.Options{StateDir: rex.Dir(), OnDevice: func(info rex.DeviceInfo) {
+			if info.Activity != nil {
+				select {
+				case presence <- *info.Activity:
+				default:
+				}
+			}
 			if info.Push != nil {
 				select {
 				case registrations <- push.Registration(*info.Push):
 				default:
 				}
 			}
+		}, OnNotice: func(activity rex.DesktopActivity, n push.Notice) (push.Route, error) {
+			return claimDesktopNotice(rex.Dir(), activity, n)
 		}, OnPeer: func(d remote.ConnectedDevice) {
 			a.post(func() {
 				if p.generation == generation && !a.quitting {

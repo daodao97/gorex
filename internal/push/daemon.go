@@ -30,10 +30,12 @@ type serviceRequest struct {
 	Op           string           `json:"op"`
 	Registration *Registration    `json:"registration,omitempty"`
 	Desktop      *DesktopActivity `json:"desktop,omitempty"`
+	Notice       *Notice          `json:"notice,omitempty"`
 }
 type serviceResponse struct {
 	Error  string `json:"error,omitempty"`
 	Status Status `json:"status"`
+	Route  Route  `json:"route,omitempty"`
 }
 
 // Ensure starts only the notification worker; the existing session server and
@@ -57,24 +59,31 @@ func Ensure(dir, sessionSocket string) error {
 	}
 	return errors.New("notification worker did not start")
 }
-func call(dir string, req serviceRequest) (Status, error) {
+func request(dir string, req serviceRequest) (serviceResponse, error) {
 	conn, err := net.DialTimeout("unix", serviceSocket(dir), 300*time.Millisecond)
 	if err != nil {
-		return Status{}, err
+		return serviceResponse{}, err
 	}
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(time.Second))
 	if err = json.NewEncoder(conn).Encode(req); err != nil {
-		return Status{}, err
+		return serviceResponse{}, err
 	}
 	var response serviceResponse
 	if err = json.NewDecoder(io.LimitReader(conn, 8192)).Decode(&response); err != nil {
-		return Status{}, err
+		return serviceResponse{}, err
 	}
 	if response.Error != "" {
-		return response.Status, errors.New(response.Error)
+		if req.Op == "claim" && response.Error == "unknown notification operation" {
+			return response, ErrLegacyRouting
+		}
+		return response, errors.New(response.Error)
 	}
-	return response.Status, nil
+	return response, nil
+}
+func call(dir string, req serviceRequest) (Status, error) {
+	response, err := request(dir, req)
+	return response.Status, err
 }
 func Query(dir string) (Status, error) { return call(dir, serviceRequest{Op: "status"}) }
 func Register(dir string, r Registration) (Status, error) {
@@ -83,6 +92,10 @@ func Register(dir string, r Registration) (Status, error) {
 func ReportDesktop(dir string, activity DesktopActivity) error {
 	_, err := call(dir, serviceRequest{Op: "desktop", Desktop: &activity})
 	return err
+}
+func Claim(dir string, activity DesktopActivity, n Notice) (Route, error) {
+	r, err := request(dir, serviceRequest{Op: "claim", Desktop: &activity, Notice: &n})
+	return r.Route, err
 }
 
 func Run(dir, socket string) error {
@@ -164,6 +177,19 @@ func Run(dir, socket string) error {
 					response.Error = "missing notification registration"
 				} else if err := s.register(*req.Registration); err != nil {
 					response.Error = err.Error()
+				}
+			case "claim":
+				if req.Desktop == nil || req.Notice == nil {
+					response.Error = "missing notification claim"
+				} else if err := s.desktopActivity(*req.Desktop, time.Now()); err != nil {
+					response.Error = err.Error()
+				} else {
+					var err error
+					req.Notice.Caller = req.Desktop.ID
+					response.Route, err = s.claim(*req.Notice, time.Now())
+					if err != nil {
+						response.Error = err.Error()
+					}
 				}
 			default:
 				response.Error = "unknown notification operation"

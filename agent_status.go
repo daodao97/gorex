@@ -116,6 +116,9 @@ func (a *App) paneIsViewed(p *Pane) bool {
 	if p == nil || p.closed {
 		return false
 	}
+	if a.pushPresence != nil && !desktopUserPresent(a.pushPresence.locked, a.pushPresence.sleeping, mygo.Power.IdleTime()) {
+		return false
+	}
 	focused := a.focusedWin
 	if a.win != nil {
 		focused = a.win.IsFocused() && !a.win.IsMinimized()
@@ -180,7 +183,13 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 		a.agentNotified[p.noticeKey()] = s.WaitRevision
 		hidden = prefs.HideAgentNotifications
 	}
-	if hidden || a.paneIsViewed(p) {
+	if hidden {
+		return
+	}
+	if a.paneIsViewed(p) {
+		if a.pushPresence != nil {
+			a.routePaneNotice(p, s.State, mygo.NotificationOptions{})
+		}
 		return
 	}
 	if !a.programNoticeLimiter.Allow(p.noticeKey(), s, time.Now()) {
@@ -200,6 +209,17 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 }
 
 func (a *App) showPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions) {
+	if p == nil || p.closed || a.quitting {
+		return
+	}
+	if a.pushPresence != nil {
+		a.routePaneNotice(p, kind, opts)
+		return
+	}
+	a.showDesktopPaneNotice(p, kind, opts)
+}
+
+func (a *App) showDesktopPaneNotice(p *Pane, kind string, opts mygo.NotificationOptions) {
 	// All notification paths, including terminal OSC messages, share the
 	// current focus check. A cached polling snapshot may already be stale.
 	if p == nil || p.closed || a.quitting || a.paneIsViewed(p) {

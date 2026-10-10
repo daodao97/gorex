@@ -93,8 +93,9 @@ Codex、Claude Code、Gemini CLI、OpenCode、Cursor Agent、Copilot、Aider、A
 对 **Claude Code、Codex、Gemini CLI、Qwen Code**，Retty 还接入了完整的生命周期：
 
 - 运行中、等待授权 / 回答、完成、失败，状态一目了然；
-- 窗格不在视野内时发送桌面通知，点击直达对应窗格；
-- 离开电脑后通过 APNs 推送到 iPhone，桌面正在使用时自动静默；
+- 正在前台查看当前窗格时静默；人在电脑前时只发桌面通知，点击直达对应窗格；
+- 锁屏、休眠或连续 5 分钟无键鼠操作后优先通过 APNs 推送到一台 iPhone，没有可用手机推送订阅时保留桌面提醒；
+- 同一事件由会话所在电脑统一分配给一个接收端，桌面和手机不重复提醒；
 - 按任务去重，新输入会取消过时提醒，重开界面不会重放旧通知。
 
 Retty 也支持 **OSC 7501（Program Status Protocol）**：任何发送该协议的终端程序，都能直接报告运行、进度、等待操作、完成和失败，供桌面、手机与服务器共享，无需专用 Hook。用法和更新要求见 [终端程序状态协议](docs/program-status.md)。

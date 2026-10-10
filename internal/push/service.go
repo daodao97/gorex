@@ -19,15 +19,18 @@ type sender interface {
 	Send(context.Context, apns.Notification) (apns.Response, error)
 }
 type device struct {
-	Token    string               `json:"token"`
-	Updated  time.Time            `json:"updated"`
-	Receipts map[string]time.Time `json:"receipts,omitempty"`
+	Token         string    `json:"token"`
+	Updated       time.Time `json:"updated"`
+	LastSeen      time.Time `json:"lastSeen,omitzero"`
+	lastSeenSaved time.Time
+	Receipts      map[string]time.Time `json:"receipts,omitempty"`
 }
 type pendingNotice struct {
 	ID, Device, Desktop, Session, Kind string
 	Title, Body                        string
 	Created, Next                      time.Time
 	Attempts                           int
+	External                           bool
 }
 type savedSession struct {
 	ID        string
@@ -40,12 +43,14 @@ func (s savedSession) info() rex.SessionInfo {
 }
 
 type database struct {
-	Devices     map[string]device        `json:"devices"`
-	Previous    map[string]savedSession  `json:"previous"`
-	Pending     map[string]pendingNotice `json:"pending"`
-	Sent        uint64                   `json:"sent"`
-	LastSent    time.Time                `json:"lastSent,omitzero"`
-	DesktopSeen map[string]time.Time     `json:"desktopSeen,omitempty"`
+	Devices  map[string]device        `json:"devices"`
+	Previous map[string]savedSession  `json:"previous"`
+	Pending  map[string]pendingNotice `json:"pending"`
+	Sent     uint64                   `json:"sent"`
+	LastSent time.Time                `json:"lastSent,omitzero"`
+	// Legacy JSON name retained: these are shared viewed/delivered receipts,
+	// including successful phone delivery, rather than desktop focus alone.
+	DesktopSeen map[string]time.Time `json:"desktopSeen,omitempty"`
 }
 
 type service struct {
@@ -89,6 +94,10 @@ func newService(dir string) (*service, error) {
 		}
 	}
 	s.desktops = map[string]desktopLease{}
+	for id, d := range s.state.Devices {
+		d.lastSeenSaved = d.LastSeen
+		s.state.Devices[id] = d
+	}
 	if s.state.DesktopSeen == nil {
 		s.state.DesktopSeen = map[string]time.Time{}
 	}
@@ -149,6 +158,11 @@ func (s *service) register(r Registration) error {
 	now := time.Now()
 	d := s.state.Devices[r.ID]
 	changed := false
+	if now.Sub(d.lastSeenSaved) >= time.Minute {
+		changed = true
+		d.lastSeenSaved = now
+	}
+	d.LastSeen = now
 	// Reinstallation can change the installation ID while APNs keeps the token.
 	// A physical device must have only one delivery subscription.
 	for otherID, other := range s.state.Devices {
@@ -195,6 +209,12 @@ func (s *service) register(r Registration) error {
 			changed = true
 		}
 		s.removeLocked(r.ID + ":" + id)
+		// Seeing an event on any phone also prevents a desktop or another
+		// phone from announcing it after reconnecting.
+		if _, exists := s.state.DesktopSeen[id]; !exists {
+			s.noticeHandledLocked(id, now)
+			changed = true
+		}
 	}
 	if len(d.Receipts) > 256 {
 		// Preserve newest receipts. They are acknowledgements, never credentials.
@@ -218,7 +238,7 @@ func (s *service) register(r Registration) error {
 func (s *service) status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Status{Configured: s.provider != nil, Devices: len(s.state.Devices), Sent: s.state.Sent, LastSent: s.state.LastSent, LastError: s.lastError, DesktopActive: s.desktopActiveLocked(time.Now())}
+	return Status{Configured: s.provider != nil, Devices: len(s.state.Devices), Sent: s.state.Sent, LastSent: s.state.LastSent, LastError: s.lastError, DesktopActive: s.desktopActiveLocked(time.Now()), RoutingVersion: 1}
 }
 func (s *service) removeLocked(key string) {
 	delete(s.state.Pending, key)
@@ -238,7 +258,6 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 	changed := false
 	s.currentDesktop = desktop
 	s.legacy = hello.Version < 5
-	active := s.desktopActiveLocked(now)
 	pruneReceipts(s.state.DesktopSeen, now, 1024)
 	for _, ss := range sessions {
 		previous, seen := s.state.Previous[ss.ID]
@@ -253,7 +272,7 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 		next[ss.ID] = ss
 		saved[ss.ID] = savedSession{ID: ss.ID, Agent: ss.Agent, LastInput: ss.LastInput}
 		id := s.noticeID(desktop, ss)
-		if active && rex.AgentNoticeState(ss) {
+		if s.desktopViewedLocked(desktop, ss.ID, ss.Agent.State, now) && rex.AgentNoticeState(ss) {
 			if _, exists := s.state.DesktopSeen[id]; !exists {
 				s.state.DesktopSeen[id] = now
 				changed = true
@@ -268,25 +287,23 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 		if !s.programNoticeLimiter.Allow(desktop+":"+ss.ID, ss.Agent, now) {
 			continue
 		}
-		for deviceID, d := range s.state.Devices {
-			if _, ack := d.Receipts[id]; ack {
-				continue
-			}
-			key := deviceID + ":" + id
-			if _, exists := s.state.Pending[key]; exists {
-				continue
-			}
-			title := ss.Agent.ID + " · " + stateLabel(ss.Agent.State)
-			if agent, ok := agents.Lookup(ss.Agent.ID); ok {
-				title = agent.Name + " · " + stateLabel(ss.Agent.State)
-			}
-			s.state.Pending[key] = pendingNotice{ID: id, Device: deviceID, Desktop: desktop, Session: ss.ID, Kind: ss.Agent.State, Title: title, Body: rex.AgentNoticeBody(s.dir, ss), Created: now, Next: now.Add(3 * time.Second)}
-			changed = true
+		title := ss.Agent.ID + " · " + stateLabel(ss.Agent.State)
+		if agent, ok := agents.Lookup(ss.Agent.ID); ok {
+			title = agent.Name + " · " + stateLabel(ss.Agent.State)
 		}
+		s.queuePhoneLocked(Notice{ID: id, Desktop: desktop, Session: ss.ID, Kind: ss.Agent.State, Title: title, Body: rex.AgentNoticeBody(s.dir, ss)}, now, false)
+		changed = true
 	}
 	s.current = next
 	s.initialized = true
 	for key, p := range s.state.Pending {
+		if p.External {
+			if _, handled := s.state.DesktopSeen[p.ID]; handled || now.Sub(p.Created) > 15*time.Minute {
+				s.removeLocked(key)
+				changed = true
+			}
+			continue
+		}
 		ss, exists := next[p.Session]
 		_, viewed := s.state.DesktopSeen[p.ID]
 		if viewed || !exists || now.Sub(p.Created) > 15*time.Minute || s.noticeID(p.Desktop, ss) != p.ID || !rex.AgentNoticeState(ss) {
@@ -384,7 +401,7 @@ func (s *service) deliver(ctx context.Context, now time.Time) {
 		return
 	} // a receipt or new task cancelled it while in flight
 	if err == nil {
-		delete(s.state.Pending, key)
+		s.noticeHandledLocked(chosen.ID, now)
 		fresh := s.state.Devices[chosen.Device]
 		if fresh.Receipts == nil {
 			fresh.Receipts = map[string]time.Time{}

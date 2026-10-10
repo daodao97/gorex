@@ -4,20 +4,20 @@
 
 ## MyGo 依赖
 
-Retty 依赖 MyGo fork `github.com/daodao97/mygo` 的 `main` 分支：`go.mod` 用 `replace` 固定到 `main` 上某个提交的伪版本（`v0.0.0-<时间>-<提交>`）。
+Retty 依赖 MyGo fork `github.com/daodao97/mygo` 的 `feat/ios-platform` 分支（2026-10-10 明确切换）：`go.mod` 用 `replace` 固定到该分支上某个已推送提交的伪版本（`v0.0.0-<时间>-<提交>`），不会在构建时自动跟随分支更新。
 
-- MyGo 的功能、修复和上游同步都先合并到 fork 的 `main` 并推送，再更新 Retty。不要让 `go.mod` 指向功能分支、未推送的提交或本地路径（`replace ... => ../mygo`）。
+- MyGo 的功能、修复和上游同步都先合并到 fork 的 `feat/ios-platform` 并推送，再更新 Retty。不要让 `go.mod` 指向未推送的提交或本地路径（`replace ... => ../mygo`）。
 - 更新依赖：
 
   ```sh
-  GOWORK=off go mod edit -replace github.com/egoist/mygo=github.com/daodao97/mygo@main
+  GOWORK=off go mod edit -replace github.com/egoist/mygo=github.com/daodao97/mygo@feat/ios-platform
   GOWORK=off go mod tidy
   ./scripts/check-mygo.sh
   ```
 
-- `go.work` 指向 `../mygo`，只用于同时修改 MyGo 和 Retty。该目录必须停在 `main`，且与 `go.mod` 固定的提交一致；否则不加 `GOWORK=off` 的命令会悄悄使用另一份 MyGo 代码。`../mygo` 里的未提交或未推送改动不会进入 `GOWORK=off` 构建、GitHub Actions 和正式打包。
-- 改完 MyGo 后的顺序：在 `../mygo` 提交并推送 `main` → 更新 Retty 伪版本 → `GOWORK=off` 跑完整检查。
-- `./scripts/check-mygo.sh` 只读检查以上约定（固定提交在 fork `main` 上、`go.work` 检出在 `main` 且与固定提交一致），提交 `go.mod` 改动前、发布前运行。
+- `go.work` 指向 `../mygo`，只用于同时修改 MyGo 和 Retty。该目录必须停在 `feat/ios-platform`，且与 `go.mod` 固定的提交一致；否则不加 `GOWORK=off` 的命令会悄悄使用另一份 MyGo 代码。`../mygo` 里的未提交或未推送改动不会进入 `GOWORK=off` 构建、GitHub Actions 和正式打包。
+- 改完 MyGo 后的顺序：在 `../mygo` 提交并推送 `feat/ios-platform` → 更新 Retty 伪版本 → `GOWORK=off` 跑完整检查。
+- `./scripts/check-mygo.sh` 只读检查以上约定（固定提交在 fork `feat/ios-platform` 上、`go.work` 检出在该分支且与固定提交一致），提交 `go.mod` 改动前、发布前运行。
 - 升级 MyGo 后对照 `internal/terminal/UPSTREAM.md`，把 vendored terminal 的本地改动带到新 API 上。上游的 UI API 可能有破坏性变化（例如 #143 的 `ui.Element` 值句柄、`Context` 只在构建期间有效），先运行 `go tool mygo migrate-ui .` 预览并跑全部测试，不能只看编译通过。
 - terminal 及其 iOS 构建链（`scripts/build-ios.sh`、libghostty-vt）留在 Retty；其他通用 iOS 原生桥接（扫码、设备信息、收起键盘、网络预热等）放在 MyGo，不要在 Retty 里重新加 cgo/Objective-C。
 
@@ -67,7 +67,7 @@ env -u MYGO_ENV -u MYGO_READY_SOCKET \
   RETTY_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev
 ```
 
-开发热更新会重新启动开发窗口；服务替换只能用于这种隔离环境。需要本地 MyGo 改动时可去掉 `GOWORK=off`，先运行 `./scripts/check-mygo.sh` 确认 `../mygo` 在 `main` 上（见“MyGo 依赖”）。不要用开发命令更新 `/Applications/Retty.app`。
+开发热更新会重新启动开发窗口；服务替换只能用于这种隔离环境。需要本地 MyGo 改动时可去掉 `GOWORK=off`，先运行 `./scripts/check-mygo.sh` 确认 `../mygo` 在 `feat/ios-platform` 上（见“MyGo 依赖”）。不要用开发命令更新 `/Applications/Retty.app`。
 
 单独调试服务时另用一个数据目录，也不要与上面的开发窗口并行共用：
 
@@ -351,6 +351,12 @@ xcrun devicectl device process launch --device "$IOS_DEVICE" --terminate-existin
 日志和 xcresult 在 `.mygo/ios-test/`；临时 `tests/ios/Fixture.swift` 含连接能力，应由脚本清理且不提交。只清理自己创建的测试服务、runner 和临时目录。不要批量结束所有 Retty、Go 或 Python 进程。
 
 ## 推送配置与状态
+
+桌面与 APNs 共用 push worker 的事件领取记录。前台当前窗格静默；系统未锁屏、未休眠且键鼠闲置不足 5 分钟时，只发桌面通知；离开电脑后优先发到最近联系过发送端的一台手机，没有可用 APNs provider 或手机订阅时才保留桌面提醒。APNs 不提供实时手机在线查询，不能以手机 Retty 的前台连接作为后台推送的必要条件。
+
+窗口每秒上报系统状态、查看的 Host / Session 和通知偏好，租约 5 秒过期。远程桌面通过既有加密控制连接上报 presence，通过独立的 `notification-claim` 桥接请求向会话源电脑领取通知，避免多个桌面各自发送。这个请求不附着 PTY，不改终端尺寸；无需更新会话协议。完整统一路由需要源电脑的 GUI 桥接与 push worker 支持 `routingVersion=1`。旧 worker 保留运行，GUI 通过旧 foreground 字段传递“人在电脑前”的粗略租约；旧版桥接无法实现完整跨端领取。不要为了启用通知路由重启有真实任务的服务，待合适的维护时机更新 worker 和桥接。
+
+同一事件已查看、已领取桌面通知或 APNs 已接受时持久记录，切换焦点、回到桌面或重启 worker 不重放它。APNs 请求已在发送时，不再让桌面领取同一事件；平台接受推送不等于手机已显示通知。桌面通知仍依赖 macOS 的 Retty 通知许可。离开判定是系统状态与闲置时间的估计，不是物理在场检测。
 
 ```sh
 GOWORK=off go tool mygo push status

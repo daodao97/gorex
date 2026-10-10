@@ -132,10 +132,25 @@ type HostInfo struct {
 
 // DeviceInfo identifies the connected mobile client for the desktop UI.
 type DeviceInfo struct {
-	ID   string            `json:"id,omitempty"`
-	Name string            `json:"name"`
-	OS   string            `json:"os,omitempty"`
-	Push *PushRegistration `json:"push,omitempty"`
+	ID       string            `json:"id,omitempty"`
+	Name     string            `json:"name"`
+	OS       string            `json:"os,omitempty"`
+	Push     *PushRegistration `json:"push,omitempty"`
+	Activity *DesktopActivity  `json:"activity,omitempty"`
+}
+
+// DesktopActivity is a short-lived notification presence lease. Session
+// servers can ignore it; the authenticated desktop bridge forwards it to push.
+type DesktopActivity struct {
+	ID             string `json:"id"`
+	Sequence       uint64 `json:"sequence"`
+	Active         bool   `json:"active"`
+	RoutingVersion int    `json:"routingVersion,omitempty"`
+	Present        bool   `json:"present,omitempty"`
+	ViewedDesktop  string `json:"viewedDesktop,omitempty"`
+	ViewedSession  string `json:"viewedSession,omitempty"`
+	HideWaiting    bool   `json:"hideWaiting,omitempty"`
+	HideCompletion bool   `json:"hideCompletion,omitempty"`
 }
 
 // PushRegistration travels only through an authenticated mobile control connection.

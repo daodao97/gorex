@@ -74,6 +74,15 @@ func (c *Client) Redial(ctx context.Context) (*Client, error) {
 	return ConnectDial(ctx, c.dial)
 }
 
+// DialExtension opens an independent authenticated transport for a bounded
+// bridge request. It never attaches a PTY or changes its dimensions.
+func (c *Client) DialExtension(ctx context.Context) (net.Conn, error) {
+	if c.dial == nil {
+		return nil, errors.New("independent transport unavailable")
+	}
+	return c.dial(ctx)
+}
+
 // NewClient takes ownership of conn; dial opens independent session streams.
 func NewClient(conn net.Conn, dial func(context.Context) (net.Conn, error)) *Client {
 	c := &Client{conn: conn, dial: dial, pending: map[int64]chan Response{}, closed: make(chan struct{})}

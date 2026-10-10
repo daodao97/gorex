@@ -190,7 +190,7 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 					}
 				}
 			}
-			if hello && info.Push != nil && b.onDevice != nil {
+			if hello && (info.Push != nil || info.Activity != nil) && b.onDevice != nil {
 				b.onDevice(info)
 			}
 		}
@@ -201,7 +201,7 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 		if len(res.Data) > 0 && json.Unmarshal(res.Data, &sessions) != nil {
 			return
 		}
-		if info.Push != nil && b.onDevice != nil {
+		if (info.Push != nil || info.Activity != nil) && b.onDevice != nil {
 			b.onDevice(info)
 		}
 		now := time.Now()

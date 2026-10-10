@@ -175,7 +175,7 @@ func (a *App) open() {
 	win.OnFocus(a.closeViewedPaneNotice)
 	win.OnFocus(func() { a.focusedWin = true; a.syncRemotePaneActivity(); win.Invalidate() })
 	win.OnBlur(func() { a.focusedWin = false; a.syncRemotePaneActivity(); win.Invalidate() })
-	startDesktopPushPresence(win)
+	startDesktopPushPresence(a)
 	if !a.restore() {
 		home, _ := os.UserHomeDir()
 		a.newTab(home)

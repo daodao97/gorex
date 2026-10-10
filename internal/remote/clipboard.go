@@ -51,6 +51,10 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		b.serveFileUpload(conn, reader, socket, upload)
 		return
 	}
+	if req.Op == "notification-claim" {
+		b.serveNotice(conn, line)
+		return
+	}
 	conn.SetReadDeadline(time.Time{})
 	local, err := net.DialTimeout("unix", socket, 5*time.Second)
 	if err != nil {

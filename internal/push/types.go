@@ -42,18 +42,37 @@ func (r Registration) Validate() error {
 }
 
 type Status struct {
-	Configured    bool      `json:"configured"`
-	Devices       int       `json:"devices"`
-	Sent          uint64    `json:"sent"`
-	LastError     string    `json:"lastError,omitempty"`
-	LastSent      time.Time `json:"lastSent,omitzero"`
-	DesktopActive bool      `json:"desktopActive"`
+	Configured     bool      `json:"configured"`
+	Devices        int       `json:"devices"`
+	Sent           uint64    `json:"sent"`
+	LastError      string    `json:"lastError,omitempty"`
+	LastSent       time.Time `json:"lastSent,omitzero"`
+	DesktopActive  bool      `json:"desktopActive"`
+	RoutingVersion int       `json:"routingVersion,omitempty"`
 }
 
 // DesktopActivity is a short-lived foreground lease from a local GUI window.
 // Sequence orders focus/blur updates; a crashed GUI stops renewing its lease.
-type DesktopActivity struct {
-	ID       string `json:"id"`
-	Sequence uint64 `json:"sequence"`
-	Active   bool   `json:"active"`
+type DesktopActivity = rex.DesktopActivity
+
+// Notice describes one event shared by desktop delivery and APNs.
+type Notice struct {
+	ID      string `json:"id"`
+	Desktop string `json:"desktop"`
+	Session string `json:"session"`
+	Kind    string `json:"kind"`
+	Title   string `json:"title"`
+	Body    string `json:"body"`
+	Viewed  bool   `json:"viewed,omitempty"`
+	Caller  string `json:"-"`
 }
+
+type Route string
+
+const (
+	RouteQuiet   Route = "quiet"
+	RouteDesktop Route = "desktop"
+	RoutePhone   Route = "phone"
+)
+
+var ErrLegacyRouting = errors.New("notification worker needs routing update")

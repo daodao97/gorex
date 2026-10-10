@@ -63,4 +63,5 @@ require (
 
 tool github.com/egoist/mygo/cmd/mygo
 
+// MyGo source branch: github.com/daodao97/mygo@feat/ios-platform.
 replace github.com/egoist/mygo => github.com/daodao97/mygo v0.0.0-20261010081610-364c8ce0c826

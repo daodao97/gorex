@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tailscale/tailcat"
+	"retty/internal/push"
 	"retty/internal/rex"
 )
 
@@ -65,6 +66,7 @@ type Bridge struct {
 	disconnected map[string]bool
 	onPeer       func(ConnectedDevice)
 	onDevice     func(rex.DeviceInfo)
+	onNotice     func(rex.DesktopActivity, push.Notice) (push.Route, error)
 	onClose      func()
 	onImage      func(context.Context, string, []byte) error
 	imageGate    chan struct{}
@@ -85,6 +87,8 @@ type Options struct {
 	// OnDevice receives metadata only after a successful compatible control
 	// response. Callbacks must not block; terminal bytes are forwarded unchanged.
 	OnDevice func(rex.DeviceInfo)
+	// OnNotice arbitrates desktop/APNs delivery on the session's source host.
+	OnNotice func(rex.DesktopActivity, push.Notice) (push.Route, error)
 	// OnPeer reports a completed device connection, including clients without
 	// push registration. It must not block the forwarding goroutine.
 	OnPeer func(ConnectedDevice)
@@ -115,6 +119,7 @@ func Start(ctx context.Context, socket string, options ...Options) (*Bridge, err
 	}
 	if len(options) > 0 {
 		b.onDevice = options[0].OnDevice
+		b.onNotice = options[0].OnNotice
 		b.onPeer = options[0].OnPeer
 		b.onImage = options[0].OnPasteImage
 	}

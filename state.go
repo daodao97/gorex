@@ -135,6 +135,7 @@ type App struct {
 	agentNotified         map[string]uint64
 	agentFinishedNotified map[string]uint64
 	programNoticeLimiter  rex.ProgramNoticeLimiter
+	pushPresence          *desktopPushPresence
 	agentNotices          map[string]func()
 	agentNoticeKinds      map[string]string
 	agentNotify           func(mygo.NotificationOptions, func()) func()
