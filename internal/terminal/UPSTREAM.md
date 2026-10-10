@@ -67,3 +67,7 @@ terminal plugin unchanged relative to 7cdc2f22b829. Retty keeps the same
 local terminal additions and Ghostty library pin; the UI changes add list
 sideways scrolling and text-line tracking, and fix unconstrained column
 growth and table column dragging.
+
+Fork commit de6ced6a3965 resolves Finder file-reference URLs during native
+macOS file drops. It leaves the terminal plugin and UI APIs unchanged;
+Retty retains the same local terminal additions and Ghostty library pin.
