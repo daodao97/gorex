@@ -99,6 +99,7 @@ func (m *mobileApp) orderedSessions() []rex.SessionInfo {
 }
 
 func (m *mobileApp) sessionList(c *ui.Context) {
+	recovering := m.needsRecovery() || m.connectionIssue != nil
 	mobileListGroup(c).Children(func() {
 		if len(m.sessions) == 0 {
 			mobileListEmpty(c, "轻点右上角 ＋ 新建终端")
@@ -108,11 +109,11 @@ func (m *mobileApp) sessionList(c *ui.Context) {
 				mobileListDivider(c)
 			}
 			value := m.sessionValue(s)
-			if m.reconnecting {
+			if recovering {
 				value = m.sessionTitle(s) + " · 连接恢复后可打开"
 			}
 			row := mobileListRow(c, "session-"+s.ID, "打开会话 "+s.ID, 64).Value(value + " · " + s.Dir).TouchSelection().HandleInput(func(ev ui.InputEvent) bool {
-				if ev.Kind == ui.InputLongPress && !m.reconnecting {
+				if ev.Kind == ui.InputLongPress && !recovering {
 					m.editSession(s)
 					c.Invalidate()
 					return true
@@ -138,27 +139,26 @@ func (m *mobileApp) sessionList(c *ui.Context) {
 						case agents.Failed:
 							color = c.Theme().Danger
 						}
-						if m.reconnecting {
-							status, color = "重连中", colorsOf(c).attention
+						if recovering {
+							status = ""
 						} else if m.closingSession == s.ID {
 							status = "正在结束"
 						}
 						if status != "" {
 							ui.Row(c).Gap(4).Shrink(0).Children(func() {
-								if m.reconnecting && m.recoveryAnimating() {
-									mobileReconnectIcon(c, 12, color)
-								}
 								ui.Text(c, status).FontSize(11).TextColor(color).Shrink(0)
 							})
 						}
 					},
 				})
-				if mobileIconAction(c, "会话设置 "+s.ID, "ellipsis").Disabled(m.reconnecting || m.closingSession != "").Clicked() {
-					m.editSession(s)
+				if !recovering {
+					if mobileIconAction(c, "会话设置 "+s.ID, "ellipsis").Disabled(m.closingSession != "").Clicked() {
+						m.editSession(s)
+					}
 				}
 			})
 			if row.Clicked() && !m.editingOpen {
-				if m.reconnecting {
+				if recovering {
 					m.connectionDetailsOpen = true
 				} else {
 					m.openSession(s)

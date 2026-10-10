@@ -34,6 +34,30 @@ func connectionStatusCard(c *ui.Context, title, body string, animating bool, act
 	})
 }
 
+// Keep automatic recovery quiet; the full set of actions lives in the details.
+func connectionStatusSummary(c *ui.Context, title, body string, animating bool) ui.Element {
+	var action ui.Element
+	mobileCard(c.Key("connection-feedback")).Label("连接状态").Children(func() {
+		action = ui.ButtonBase(c).Label("连接恢复操作").Value(title+" · "+body).Role(ui.RoleButton).
+			FillWidth().Height(64).Padding(0, 12).Gap(10)
+		if action.Pressed() {
+			action.Background(c.Theme().SurfacePressed)
+		}
+		action.Children(func() {
+			ui.Box(c).Size(32, 32).Shrink(0).Radius(10).Center().Background(c.Theme().Accent.Mix(c.Theme().Surface, .92)).Children(func() {
+				if animating {
+					mobileReconnectIcon(c, 16, c.Theme().Accent)
+				} else {
+					ui.Icon(c, icon("unplug")).Size(16, 16).TextColor(colorsOf(c).attention)
+				}
+			})
+			mobileListText(c, mobileListTextOptions{Title: title, Subtitle: body, TitleSize: 14, SubtitleSize: 12})
+			ui.Icon(c, icon("ellipsis")).Size(17, 17).Shrink(0).TextColor(c.Theme().TextMuted)
+		})
+	})
+	return action
+}
+
 func mobileReconnectIcon(c *ui.Context, size float32, color ui.Color) {
 	e := ui.Icon(c, icon("rotate-ccw")).Label("重连进度").Role(ui.RoleProgress).Size(size, size).Shrink(0).TextColor(color).PassThrough()
 	e.Rotate(-360 * e.Loop("reconnect", 1100*time.Millisecond, ui.Linear))

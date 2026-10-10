@@ -95,6 +95,8 @@ func TestMobileDiagnosticsOnlyVisibleOnFailureAndCopyAtAllSizes(t *testing.T) {
 		}
 		m.connectionIssue = connectionIssueFor(context.DeadlineExceeded)
 		tt.Frame()
+		tt.Click("连接恢复操作")
+		tt.Frame()
 		tt.Click("查看连接诊断")
 		tt.Frame()
 		if !m.connectionDiagnosticsOpen {
@@ -119,6 +121,8 @@ func TestMobileDiagnosticsOnlyVisibleOnFailureAndCopyAtAllSizes(t *testing.T) {
 		if m.connectionDiagnosticsOpen {
 			t.Fatal("close did not dismiss diagnostics")
 		}
+		tt.Click("连接恢复操作")
+		tt.Frame()
 		tt.Click("查看连接诊断")
 		tt.Frame()
 		m.connectionIssue = nil // Recovery succeeds while diagnostics are open.

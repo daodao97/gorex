@@ -57,14 +57,16 @@ func (m *mobileApp) connectionFeedback(c *ui.Context) {
 	if m.connectionIssue == nil && !m.needsRecovery() {
 		return
 	}
-	title, body := "正在恢复连接", "恢复后将继续当前会话，可先阅读已有内容。"
+	title, body := "正在重连", "恢复连接后可打开会话"
+	if m.term != nil {
+		body = "已有内容仍可阅读"
+	}
 	if m.connectionIssue != nil {
 		title, body = m.connectionIssue.title, m.connectionIssue.body
 	}
-	connectionStatusCard(c, title, body, m.recoveryAnimating(), func() {
-		m.connectionActions(c)
-		m.connectionDiagnosticsAction(c)
-	})
+	if connectionStatusSummary(c, title, body, m.recoveryAnimating()).Clicked() {
+		m.connectionDetailsOpen = true
+	}
 }
 
 func (m *mobileApp) connectionActions(c *ui.Context) {

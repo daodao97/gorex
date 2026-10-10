@@ -32,15 +32,17 @@ func TestMobileSessionRecoverySharesHomeUIAndKeepsCachedList(t *testing.T) {
 		if !homeOK || homeStatus.W < status.W-.01 || homeStatus.W > status.W+.01 || homeStatus.H < status.H-.01 || homeStatus.H > status.H+.01 {
 			t.Fatalf("home and session recovery cards differ at %v: home %v, session %v", size, homeStatus, status)
 		}
-		for _, label := range []string{"重试连接", "重新扫码连接", "取消重连"} {
-			r, ok := tt.Find(label)
-			if !ok || r.W < 44 || r.H < 44 || r.X < status.X || r.X+r.W > status.X+status.W || r.Y+r.H > status.Y+status.H {
-				t.Fatalf("shared recovery action %s is clipped at %v: %v", label, size, r)
+		if status.H > 64.01 {
+			t.Fatalf("recovery summary is too tall at %v: %v", size, status)
+		}
+		for _, label := range []string{"重试连接", "重新扫码连接", "取消重连", "会话设置 agent", "会话设置 shell"} {
+			if _, ok := tt.Find(label); ok {
+				t.Fatalf("recovery list retains redundant actions: %s", label)
 			}
 		}
-		for _, label := range []string{"执行中", "桌面已连接"} {
-			if _, ok := tt.Find(label); ok {
-				t.Fatalf("recovery list shows distracting or stale state: %s", label)
+		for _, text := range []string{"执行中", "桌面已连接", "重连中"} {
+			if tt.HasText(text) {
+				t.Fatalf("recovery list shows distracting or stale state: %s", text)
 			}
 		}
 		tt.Click("新建会话")
@@ -53,6 +55,13 @@ func TestMobileSessionRecoverySharesHomeUIAndKeepsCachedList(t *testing.T) {
 			saveSettingsImage(t, tt, "mobile-sessions-reconnecting-dark")
 			tt.SetDark(false)
 		}
+		tt.Click("连接恢复操作")
+		tt.Frame()
+		if !m.connectionDetailsOpen {
+			t.Fatal("compact summary did not expose recovery actions")
+		}
+		tt.Click("关闭连接提示")
+		tt.Frame()
 		// Cached rows remain readable and explain why they cannot open yet.
 		tt.Click("打开会话 agent")
 		tt.Frame()
@@ -154,21 +163,26 @@ func TestMobileRecoveryDoesNotResizeTerminalAndActionsFit(t *testing.T) {
 	}
 }
 
-func TestMobileInitialFailureActionsStayAboveRecentHistory(t *testing.T) {
+func TestMobileInitialFailureSummaryStaysAboveRecentHistory(t *testing.T) {
 	registerFonts()
 	for _, kind := range []remote.FailureKind{remote.ConnectionTimeout, remote.InvalidLink} {
 		m := &mobileApp{link: "fixture", connectionIssue: connectionIssueFor(&remote.ConnectionError{Kind: kind}), history: []desktopRecent{{Name: "Mac"}}}
 		tt := ui.NewTester(m.view, 375, 750)
 		scan, _ := tt.Find("扫码连接桌面")
-		action, ok := tt.Find("重新扫码连接")
+		action, ok := tt.Find("连接恢复操作")
 		recent, _ := tt.Find("重新连接 Mac")
 		if !ok || action.Y < scan.Y || action.Y+action.H > recent.Y || action.H < 44 {
 			t.Fatal("recovery actions buried in history", action, recent)
+		}
+		saveSettingsImage(t, tt, "mobile-connection-failure")
+		tt.Click("连接恢复操作")
+		tt.Frame()
+		if _, ok := tt.Find("重新扫码连接"); !ok {
+			t.Fatal("failure details did not offer a replacement connection")
 		}
 		_, retry := tt.Find("重试连接")
 		if retry != (kind != remote.InvalidLink) {
 			t.Fatal("invalid capability offered useless retry")
 		}
-		saveSettingsImage(t, tt, "mobile-connection-failure")
 	}
 }
