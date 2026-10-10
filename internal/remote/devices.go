@@ -17,6 +17,7 @@ import (
 
 type ConnectedDevice struct {
 	ID        string
+	DeviceID  string `json:",omitempty"` // Stable installation identity; ID targets live peer streams.
 	Name      string
 	OS        string
 	Connected time.Time
@@ -178,6 +179,17 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 		if op == "hello" {
 			var h rex.Hello
 			hello = json.Unmarshal(res.Data, &h) == nil && rex.CompatibleProtocol(h.Version)
+			if hello {
+				id := info.ID
+				if id == "" && info.Push != nil {
+					id = info.Push.ID // Older mobile clients already send the installation ID here.
+				}
+				if len(id) == 32 {
+					if _, err := hex.DecodeString(id); err == nil {
+						d.DeviceID = strings.ToLower(id)
+					}
+				}
+			}
 			if hello && info.Push != nil && b.onDevice != nil {
 				b.onDevice(info)
 			}
@@ -201,8 +213,9 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 		conn.SetReadDeadline(now.Add(controlIdleTimeout))
 		b.mu.Lock()
 		if !b.closed && !b.disconnected[d.ID] {
+			previous := b.devices[conn]
 			b.devices[conn] = d
-			first = first && b.onPeer != nil
+			first = (first || previous.DeviceID != d.DeviceID) && b.onPeer != nil
 		} else {
 			first = false
 		}

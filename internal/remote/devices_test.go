@@ -90,7 +90,42 @@ func TestPushMetadataRequiresSuccessfulCompatibleControlResponse(t *testing.T) {
 			if want > 0 && received[want-1].Push.Token != registration.Token {
 				t.Fatal("registration metadata altered")
 			}
+			if want > 0 {
+				devices := b.Devices()
+				if len(devices) != 1 || devices[0].DeviceID != registration.ID {
+					t.Fatal("legacy push registration did not identify the installation", devices)
+				}
+			}
 		})
+	}
+}
+
+func TestDeviceHistoryReceivesStableIdentityAfterKeychainLoads(t *testing.T) {
+	server, peer := net.Pipe()
+	defer server.Close()
+	defer peer.Close()
+	var history []ConnectedDevice
+	b := &Bridge{devices: make(map[net.Conn]ConnectedDevice), onPeer: func(d ConnectedDevice) { history = append(history, d) }}
+	conn := b.observe(server)
+	conn.reads.feed([]byte("{\"id\":1,\"op\":\"hello\",\"device\":{\"name\":\"iPhone\",\"os\":\"iOS\"}}\n"))
+	conn.writes.feed([]byte("{\"id\":1,\"data\":{\"version\":4}}\n"))
+	conn.reads.feed([]byte("{\"id\":2,\"op\":\"list\"}\n"))
+	conn.writes.feed([]byte("{\"id\":2,\"data\":[]}\n"))
+	if len(history) != 1 || history[0].DeviceID != "" {
+		t.Fatal("initial connection not recorded")
+	}
+	id := strings.Repeat("a", 32)
+	conn.reads.feed([]byte(fmt.Sprintf("{\"id\":3,\"op\":\"hello\",\"device\":{\"id\":%q,\"name\":\"iPhone\",\"os\":\"iOS\"}}\n", id)))
+	conn.writes.feed([]byte("{\"id\":3,\"data\":{\"version\":4}}\n"))
+	conn.reads.feed([]byte("{\"id\":4,\"op\":\"list\"}\n"))
+	conn.writes.feed([]byte("{\"id\":4,\"data\":[]}\n"))
+	if len(history) != 2 || history[1].DeviceID != id || history[1].ID != history[0].ID || !history[1].Connected.Equal(history[0].Connected) {
+		t.Fatal("late identity did not update the existing peer record", history)
+	}
+	conn.reads.feed([]byte("{\"id\":5,\"op\":\"list\"}\n"))
+	conn.writes.feed([]byte("{\"id\":5,\"data\":[]}\n"))
+	if len(history) != 2 {
+		t.Fatal("unchanged heartbeat duplicated history")
 	}
 }
 

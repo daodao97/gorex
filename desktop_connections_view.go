@@ -351,9 +351,19 @@ func (a *App) desktopLocalConnection(c *ui.Context) {
 
 func (a *App) desktopIncomingRows(c *ui.Context) {
 	var active = map[string]bool{}
+	incoming := mergeIncomingDevices(nil, a.desktops.incoming)
 	if a.phone != nil && a.phone.bridge != nil {
-		for _, d := range a.phone.bridge.Devices() {
+		devices := mergeIncomingDevices(nil, a.phone.bridge.Devices())
+		incoming = mergeIncomingDevices(devices, incoming)
+		for _, d := range devices {
 			active[d.ID] = true
+			// A retained older control may still be live after a newer peer
+			// disconnects. Use that peer for status and disconnect actions.
+			for i, saved := range incoming {
+				if d.DeviceID != "" && d.DeviceID == saved.DeviceID {
+					incoming[i] = d
+				}
+			}
 		}
 	}
 	ui.Column(c).FillWidth().Children(func() {
@@ -361,10 +371,10 @@ func (a *App) desktopIncomingRows(c *ui.Context) {
 			ui.Text(c, fmt.Sprint(len(active))+" 在线").FontSize(10).TextColor(colorsOf(c).textFaint)
 		})
 		desktopConnectionGroup(c).Children(func() {
-			if len(a.desktops.incoming) == 0 {
+			if len(incoming) == 0 {
 				ui.Text(c, "手机或其他电脑连接后，会保留在这里").FontSize(11).TextColor(colorsOf(c).textFaint).Padding(14)
 			}
-			for i, d := range slices.Clone(a.desktops.incoming) {
+			for i, d := range incoming {
 				if i > 0 {
 					desktopConnectionDivider(c)
 				}

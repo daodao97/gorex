@@ -22,6 +22,20 @@ func TestMobilePushRegistrationWaitsForActivation(t *testing.T) {
 	}
 }
 
+func TestMobileDeviceIdentityDoesNotRequirePushPermissionOrToken(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		m := &mobileApp{pushDeviceID: "0123456789abcdef0123456789abcdef", pushDisabled: disabled}
+		m.refreshPushSnapshot()
+		info := m.pushSnapshot.Load()
+		if info.ID != m.pushDeviceID {
+			t.Fatal("connection identity depends on notification registration")
+		}
+		if !disabled && info.Push != nil {
+			t.Fatal("identity alone registered for push")
+		}
+	}
+}
+
 func TestMobileRemoteAndLocalRemindersShareEventIdentity(t *testing.T) {
 	m := &mobileApp{hello: rex.Hello{Version: 5, Host: rex.HostInfo{ID: "desktop"}}}
 	now := time.Now()

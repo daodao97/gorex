@@ -132,6 +132,7 @@ type HostInfo struct {
 
 // DeviceInfo identifies the connected mobile client for the desktop UI.
 type DeviceInfo struct {
+	ID   string            `json:"id,omitempty"`
 	Name string            `json:"name"`
 	OS   string            `json:"os,omitempty"`
 	Push *PushRegistration `json:"push,omitempty"`

@@ -56,6 +56,7 @@ func (m *mobileApp) setupPush() {
 			m.pushDeviceID = string(value)
 			m.pushDisabled = disabled
 			m.refreshPushSnapshot()
+			m.syncPushRegistration()
 			m.registerSystemPush()
 		})
 	}
@@ -183,6 +184,8 @@ func (m *mobileApp) persistNoticeReceipts() {
 }
 func (m *mobileApp) refreshPushSnapshot() {
 	info := mobileDevice()
+	// The Keychain installation ID also identifies reconnects without APNs.
+	info.ID = m.pushDeviceID
 	if m.pushDeviceID != "" && (m.pushToken != "" || m.pushDisabled || m.notificationDenied) {
 		ids := make([]string, 0, len(m.noticeReceipts))
 		for id := range m.noticeReceipts {
@@ -198,7 +201,7 @@ func (m *mobileApp) syncPushRegistration() {
 		return
 	}
 	info := m.pushSnapshot.Load()
-	if info == nil || info.Push == nil {
+	if info == nil || info.ID == "" && info.Push == nil {
 		return
 	}
 	client := m.client
