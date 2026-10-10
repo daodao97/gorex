@@ -1,0 +1,101 @@
+Generated and refined with the built-in imagegen tool.
+Final asset: docs/images/hero-retty.png
+Final headline: 换个屏幕，无缝接力。
+
+Reference assets:
+- docs/images/desktop-workspace-dark.jpg
+- docs/images/ios-home-dark.png
+- docs/images/ios-terminal-dark.png
+- assets/branding/claude-code-terminal-reference.png (user-supplied CLI screenshot)
+
+The following prompts were applied sequentially. Each edit used the preceding generated artwork as its edit target, with the indicated screenshot references. Old draft images remain in the tool's generated-image directory.
+
+Initial artwork
+
+Use case: ads-marketing.
+Asset type: flagship GitHub README hero for Retty, a native terminal app for macOS and iPhone that reconnects to persistent terminal sessions on Macs and headless Linux servers.
+Create a brand new premium 16:9 landscape hero, ideally 2048x1152, designed by a world-class software brand art director. The visual must instantly communicate ONE PERSISTENT TERMINAL SESSION, CONTINUED ACROSS DIFFERENT DEVICES. More distinctive than a pile of app screenshots.
+
+Scene and visual language: restrained near-black graphite background (#101315), subtle cool green ambient illumination, meticulously controlled studio lighting, deep soft shadows, finely machined dark glass and brushed charcoal surfaces. Mint green (#a7e8cc) is the single signature accent; warm off-white text. Luxurious, quiet, precise, editorial. Broad negative space and exceptionally beautiful typography. Flat readable typography combined with restrained dimensional product illustration.
+
+Composition: an asymmetric but balanced wide editorial layout. Upper-left brand lockup: a small mint terminal prompt >_ and exact word "Retty", elegant sans serif. Large two-line Chinese headline on the left, exact text:
+"换个屏幕，"
+"接着工作。"
+Under it, small exact text "Reconnect TTY. Relay TTY."
+The right and lower center form one cohesive sculptural installation: a beautiful native dark terminal window with a minimal macOS titlebar; one slim, realistic upright iPhone in the foreground showing a dark terminal with responsive narrow text and no keyboard; a small elegantly abstract headless server slab behind/below the desktop, with a tiny terminal prompt and a single mint status LED. The three subjects are clearly distinct and fully contained in frame, no overlapping important text. Do not overemphasize hardware: terminal continuity is the subject.
+A single thin continuous mint light ribbon travels from the server into the desktop terminal and gently arcs into the iPhone terminal, physically reading as one uninterrupted path, with restrained bloom and a few tiny precise luminous connection points. Both device terminal surfaces show the same mint prompt motif and a short recognizable ongoing coding-agent task. Desktop terminal text, exact minimal readable mono lines:
+"~/workspace"
+"> claude"
+"Refactoring authentication..."
+Phone terminal text:
+"~/workspace"
+"> claude"
+"Continue session"
+Include one tiny refined mobile notification capsule "Claude Code" with "Waiting for input" to suggest agent awareness, tasteful and secondary.
+Tiny understated platform labels near their respective objects: "macOS", "iPhone", "Linux". At the very bottom, a spaced small mono line "ONE SESSION. ANY SCREEN."
+
+Text quality: every listed word spelled exactly, Retty spelled R-e-t-t-y, clean Chinese glyphs, sophisticated hierarchy, headline very readable at GitHub's content width. All terminal text extremely sparse and clear. This is a conceptual branded illustration, not an exact app UI screenshot.
+Constraints: dark mode only; one phone, one desktop terminal surface, one small server. No collage of multiple phones, no laptop stock photo, no cables, no padlock emblem, no cloud symbol, no networking diagram, no giant arrow, no cyberpunk city, no purple neon, no rainbow gradients, no excessive glow, no decorative charts, no additional text, no watermark. Maintain generous safe margins, credible terminal UI, refined realistic geometry and expertly composed negative space.
+
+Remove decorative props
+
+Use case: precise-object-edit. Edit this Retty README hero. Change ONLY the surrounding decorative props and their small stray text: remove the books/notebooks, pen and partial object in the lower-left corner; remove the plant and its pot on the far-right background. Replace these removed areas with the same seamless graphite backdrop and dark tabletop, preserving consistent lighting, shadows and reflections. Preserve absolutely all brand lettering and Chinese headline exactly, all requested English typography, the Mac screen and its terminal UI, the iPhone and notification, the small Linux server, the single continuous mint connection path, composition, aspect ratio, color grading, terminal content, and typography. The resulting scene should be a quiet premium product installation containing only three meaningful subjects: Mac terminal, iPhone terminal, persistent Linux server. No new objects or text.
+
+Restore product screenshot details
+
+Use case: compositing.
+Asset: refined Retty GitHub README hero with AUTHENTIC PRODUCT SCREENSHOTS.
+Input image 1 is the EDIT TARGET: the approved premium graphite-and-mint Retty artwork.
+Input image 2 is an EXACT SCREEN CONTENT INSERT: actual Retty desktop screenshot with native macOS traffic lights, Workspace and Release notes tabs, keyboard shortcuts, two terminal panes, monospaced product text and SERVER CONSOLE.
+Input image 3 is an EXACT SCREEN CONTENT INSERT: real iPhone Retty home screenshot containing the blue scan button, recent connected computers, Mac mini / MacBook Pro / Linux computer rows, and recent sessions with Codex / shell / Activity / Claude Code icons.
+Input image 4 is an EXACT SCREEN CONTENT INSERT: real iPhone Retty terminal screenshot with status bar, Dynamic Island, back button, Retty Workspace title, full terminal output, two rows of terminal extension keys, and entire iOS keyboard including blue send button.
+
+The user likes the premium composition and lighting of image 1 but wants the authentic screenshot detail restored. Keep image 1's graphite studio scene, beautiful mint continuous connection light, Retty >_ lockup, Chinese headline "换个屏幕，" / "接着工作。", tagline "Reconnect TTY. Relay TTY.", bottom "ONE SESSION. ANY SCREEN.", Linux server slab and all their existing spacing, exact typography, colors and materials.
+Modify the device screens by COMPOSITING the supplied actual screenshot images faithfully as immutable raster graphics. Do not redesign, simplify, retype or reinterpret their interfaces. Maintain their original relative proportions, precise original colors, text, native UI widgets, icons, terminal lines and pixel detail. Use subtle perspective mapping only where required by screen geometry. Screens must remain sharply readable rather than darkened, blurred, glossy or tinted. Screenshot fidelity takes precedence over literal preservation of the device positions.
+
+Mac monitor: remove the fake sparse claude terminal and mountain desktop wallpaper entirely from inside the monitor. Put the entire desktop screenshot from image 2 inside its display, showing real tab bar and split panes. Preserve native Retty dark UI, large mono text, Workspace tab, Release notes tab, and both terminal panes. Match screenshot aspect ratio, use modest dark inset margins if needed; never stretch the screenshot.
+
+iPhone foreground: replace its fake minimal claude screen and invented notification with the COMPLETE actual terminal screenshot from image 4. Show its native status bar, Retty Workspace title, terminal text, the two extension key rows, system keyboard and blue send key. Keep all those details visible. Enlarge the phone modestly to make this genuine interface clear. The entire screenshot must fit inside the phone display with no cropped bottom or stretched aspect ratio. Avoid duplicating the Dynamic Island or native status bar. The phone should be mostly front-facing.
+
+To retain the original README's actual home-screen detail, add ONE companion iPhone slightly behind and to the left of the foreground iPhone, within the existing right-side device cluster. Its screen uses image 3 faithfully. Keep the blue scanning button, the recent computers and their status indicators, Codex / Claude / shell / Activity session icons visible. Let only a small edge be overlapped by the foreground phone, not the central lists. Both phones belong to the same cohesive product installation and are large enough to see interface detail. Their bases sit consistently on the dark table. Avoid clutter and protect the entire headline. Exactly two phones total, matching the original README's two mobile views.
+
+The uninterrupted mint line still joins Linux server, Mac screen and the primary iPhone, subtly routed at outer device edges so it NEVER crosses text or keyboard keys. Keep the server small. Retain dark mode and quiet premium styling throughout.
+Finish as a high-resolution wide 16:9 hero, ideally 3840x2160, rendering real screenshot content with utmost precision. No invented interface controls, no dummy app text, no additional promotional copy, no props, no plants, no notebooks, no QR code, no passwords, no watermarks. Aim for premium product photography around true product screenshots, not an AI-imagined app interface.
+
+Use Claude Code CLI terminal content
+
+Use case: precise-object-edit / compositing.
+Image 1 is the edit target: the approved Retty hero illustration with real desktop UI and two real iPhone app views.
+Image 2 is the user's exact Claude Code CLI screenshot, used ONLY as the terminal-content reference.
+
+Change ONLY the terminal program contents in the desktop's left terminal pane and the foreground iPhone's terminal viewport. Both should now show Claude Code CLI faithfully using image 2, rather than the Retty marketing demo text. Do not change any outer artwork, device geometry, positioning, typography outside the terminal surfaces, Linux slab, headline, branding, home-screen iPhone, light ribbon, lighting, colors, native app chrome, or the foreground iPhone's two extension key rows and iOS system keyboard.
+
+Inside both terminal viewports, reproduce the recognizable actual Claude Code interface:
+- near-black terminal background
+- the orange block-pixel Claude mascot at the upper left, matching the silhouette and color in image 2
+- beside it the bold mono header "Claude Code v2.1.295"
+- gray mono model line "Claude Opus 5.5 · API Usage Billing"
+- current directory "~/work/github/quickgui/gorex"
+- a generous calm dark empty workspace below the header
+- bordered terminal input strip containing the prompt chevron "❯"
+- subdued bottom status line with mint/green "main" and gray "Claude Opus 5.5"
+- small amber "auto mode on" followed by gray "(shift+tab to cycle)" at the bottom.
+Preserve the block-pixel rather than ornamental star mascot, terminal mono font and restrained orange/gray/green coloring. Use the screenshot itself as a faithful graphic insert where practical, but reflow the narrow phone's header lines naturally as a terminal resizes, never stretch glyphs. All important Claude identity and input/status affordances should be visible and not hidden behind the phone keyboard. Do not preserve the source image's tall blank area literally; adapt blank workspace height to each existing viewport while maintaining actual CLI structure.
+
+Desktop: retain original Retty macOS traffic lights, tab bar and central split divider. The right SERVER CONSOLE pane can stay as it is, because it demonstrates server CLI commands. Only replace the entire left demo-terminal contents with the Claude Code CLI. Keep the header crisp and large enough to recognize at README viewing size.
+Foreground iPhone: keep the current native status bar, Dynamic Island, back button and existing app page header. Replace ONLY the area between its app page header and extension keyboard with the matching Claude Code terminal, resized to phone columns. Keep both terminal modifier rows, Esc, Ctrl, arrows, and full iOS keyboard and blue send button exact.
+Background iPhone: retain real home screen, blue scan button, recent host list and Agent session list completely unchanged.
+Preserve brand text "Retty", "换个屏幕，", "接着工作。", "Reconnect TTY. Relay TTY.", "ONE SESSION. ANY SCREEN." exactly as in image 1. Keep everything else unchanged. No new overlays, no stylized invented Claude interface, no extra labels or props. Finished premium dark landscape hero with a true recognizable Claude Code terminal on both screens.
+
+Final approved headline
+
+Use case: text-localization / precise-object-edit.
+Edit only the large Chinese headline in the provided Retty hero image.
+The top headline line stays EXACTLY "换个屏幕，".
+Replace the second headline line "接着工作。" with EXACTLY "无缝接力。".
+The finished two-line headline must read:
+换个屏幕，
+无缝接力。
+Match the exact existing typography: large bold white Chinese sans serif, same size, stroke weight, baseline alignment, line spacing, left margin and crisp edges. Spell the four new Chinese glyphs accurately, 无 缝 接 力, followed by a Chinese full stop.
+Everything else is strictly immutable: Retty >_ brand lockup, English tagline, bottom slogan, dark graphite background, Linux server, monitor and two iPhones, device positions and scale, desktop tabs and split terminal panes, both Claude Code terminal interfaces with their orange pixel mascots and authentic version/model/header/input/status lines, server console, background phone's host and Agent lists, foreground phone's system keyboard and extension keys, mint connection ribbon, platform labels, lighting, textures and framing. Do not redraw or simplify any screen. Do not add anything. Change only these four large headline characters.
+

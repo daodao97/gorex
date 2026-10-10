@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>终端的无缝接力</b><br />
-  换个屏幕，接着工作。
+  换个屏幕，无缝接力。
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@
   <a href="https://testflight.apple.com/join/fvYUeH4Z"><img src="https://img.shields.io/badge/iOS-加入_TestFlight-007AFF?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="通过 TestFlight 安装 Retty iOS 版" /></a>
 </p>
 
-![同一个 Retty 会话同时显示在 Mac 桌面和 iPhone 上](docs/images/hero-dark.jpg)
+![Retty：换个屏幕，无缝接力；Claude Code 终端、手机连接首页与扩展键盘展示跨设备会话接续](docs/images/hero-retty.png)
 
 在 Mac 上让 Claude Code 跑起来，出门后在 iPhone 上看它进行到哪、替它回答一个问题，回到桌前继续——**始终是同一个终端会话**。
 
