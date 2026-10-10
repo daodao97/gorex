@@ -183,6 +183,11 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 			}
 			p.term.SetSelectOnDrag(paneProgram(p).Agent)
 			tv := terminal.View(c, p.term).Fill()
+			if p.acceptsFileDrop() {
+				if files := tv.DroppedFiles(); len(files) > 0 {
+					a.pasteDroppedFiles(t, p, files)
+				}
+			}
 			if p.find.open && tv.Shortcut(0, ui.KeyEscape) {
 				a.closeFind(p)
 			}
