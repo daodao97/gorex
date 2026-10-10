@@ -71,3 +71,8 @@ growth and table column dragging.
 Fork commit de6ced6a3965 resolves Finder file-reference URLs during native
 macOS file drops. It leaves the terminal plugin and UI APIs unchanged;
 Retty retains the same local terminal additions and Ghostty library pin.
+
+Fork commit 364c8ce0c826 merges upstream through 05b235d: text ranges retain
+their styles during input-method composition, and apps without bindings no
+longer generate a TypeScript client. The terminal plugin is unchanged from
+de6ced6a3965; Retty retains its local additions and Ghostty library pin.
