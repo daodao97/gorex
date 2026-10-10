@@ -62,7 +62,7 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 			ui.Text(c, "最近 5 分钟").FontSize(10).TextColor(c.Theme().TextMuted)
 		})
 		path, latency := "暂无", "暂无"
-		if !s.Path.At.IsZero() && c.Now().Sub(s.Path.At) <= 30*time.Second && h.connected() {
+		if !s.Path.At.IsZero() && c.Now().Sub(s.Path.At) <= 45*time.Second && h.connected() {
 			path = "中继"
 			if s.Path.Direct {
 				path = "直连"

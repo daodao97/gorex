@@ -429,8 +429,7 @@ func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
 	if h.quality == nil {
 		t.Fatal("connected host has no quality collector")
 	}
-	a.probeDesktopQuality(h, time.Now())
-	waitFor(t, tt, "existing tunnel path measurement", func() bool { return !h.qualityProbeBusy })
+	waitFor(t, tt, "automatic tunnel path discovery without popover", func() bool { return !h.quality.Snapshot(time.Now()).Path.At.IsZero() })
 	if sample := h.quality.Snapshot(time.Now()).Path; sample.At.IsZero() || sample.Latency <= 0 {
 		t.Fatal("encrypted tunnel did not provide real path latency", sample)
 	}

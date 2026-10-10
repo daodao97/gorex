@@ -245,16 +245,21 @@ func connect(ctx context.Context, raw string, reportFailure bool, diagnostics *D
 		return nil, nil, err
 	}
 	unbind := func() {}
+	stopDiscovery := func() {}
 	if len(quality) > 0 && quality[0] != nil {
-		unbind = quality[0].bindProbe(func(ctx context.Context) (PathSample, error) {
+		lifetime, cancel := context.WithCancel(context.Background())
+		unbind = quality[0].bindProbe(serializedPathProbe(lifetime, func(ctx context.Context) (PathSample, error) {
 			p, err := tunnel.DiscoPing(ctx)
 			if err != nil {
 				return PathSample{}, err
 			}
 			return PathSample{At: time.Now(), Direct: p.Endpoint != "", Latency: time.Duration(p.LatencySeconds * float64(time.Second))}, nil
-		})
+		}))
+		stop := startPathDiscovery(quality[0])
+		stopDiscovery = func() { cancel(); stop() }
 	}
 	return client, func() {
+		stopDiscovery()
 		unbind()
 		// Send the final FIN/ACK before shutting down the userspace TCP stack.
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
