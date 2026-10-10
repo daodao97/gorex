@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -52,7 +53,7 @@ func ParseLink(raw string) (tailcat.Addr, error) {
 	return tailcat.Addr(addr), nil
 }
 
-// Bridge exposes session transport and image paste to a paired phone. Closing it
+// Bridge exposes session transport and uploads to paired clients. Closing it
 // disconnects phones without forgetting a persisted identity or ending sessions.
 type Bridge struct {
 	server       *tailcat.Server
@@ -69,6 +70,8 @@ type Bridge struct {
 	imageGate    chan struct{}
 	imageContext context.Context
 	imageCancel  context.CancelFunc
+	uploadDir    string
+	uploadGate   chan struct{}
 	identityLock *os.File
 }
 
@@ -106,6 +109,10 @@ func Start(ctx context.Context, socket string, options ...Options) (*Bridge, err
 	}
 	b.imageContext, b.imageCancel = context.WithCancel(context.Background())
 	b.imageGate = make(chan struct{}, 1)
+	b.uploadGate = make(chan struct{}, 2)
+	if stateDir != "" {
+		b.uploadDir = filepath.Join(stateDir, "uploads")
+	}
 	if len(options) > 0 {
 		b.onDevice = options[0].OnDevice
 		b.onPeer = options[0].OnPeer

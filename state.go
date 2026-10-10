@@ -58,6 +58,7 @@ type Pane struct {
 	remoteOwner               string
 	remoteSeen, remoteYielded bool
 	remoteRelease             <-chan struct{}
+	upload                    *paneUpload
 
 	// info is what the server last said of the session.
 	info rex.SessionInfo

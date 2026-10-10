@@ -142,6 +142,21 @@ func TestTailcatSessionLifecycle(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("image upload not delivered")
 	}
+	file := filepath.Join(dir, "tunnel file.txt")
+	if err := os.WriteFile(file, []byte("file payload over authenticated Tailcat"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	uploaded, err := client.UploadFiles(ctx, existing.ID, []string{file}, nil)
+	if err != nil || len(uploaded) != 1 {
+		t.Fatal("file upload over Tailcat failed", err)
+	}
+	if data, err := os.ReadFile(uploaded[0]); err != nil || string(data) != "file payload over authenticated Tailcat" {
+		t.Fatal("file payload changed over Tailcat", err)
+	}
+	unchanged, err := desktop.List()
+	if err != nil || len(unchanged) != 1 || unchanged[0].ID != existing.ID || unchanged[0].PID != existing.PID || unchanged[0].Cols != 80 || unchanged[0].Rows != 24 {
+		t.Fatal("upload changed the session or geometry", err)
+	}
 	deadline = time.Now().Add(time.Second)
 	for len(bridge.Devices()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)

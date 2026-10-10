@@ -42,6 +42,15 @@ func (b *Bridge) serveConnection(conn net.Conn, socket string) {
 		b.serveImage(conn, reader, req)
 		return
 	}
+	if req.Op == "upload-files" {
+		var upload rex.FileUploadRequest
+		if len(line) > rex.MaxUploadHeader+1 || json.Unmarshal(line, &upload) != nil {
+			_ = json.NewEncoder(conn).Encode(rex.Response{Error: "文件上传清单无效"})
+			return
+		}
+		b.serveFileUpload(conn, reader, socket, upload)
+		return
+	}
 	conn.SetReadDeadline(time.Time{})
 	local, err := net.DialTimeout("unix", socket, 5*time.Second)
 	if err != nil {

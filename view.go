@@ -176,6 +176,9 @@ func (a *App) paneCard(c *ui.Context, k *colors, t *Tab, p *Pane) ui.Element {
 		if p.locked {
 			a.sizeLockBar(c, k, p)
 		}
+		if p.upload != nil {
+			a.fileUploadBar(c, k, p)
+		}
 		body := ui.Box(c.Key("terminal-body")).Grow(1).MinHeight(0)
 		body.Children(func() {
 			if p.term == nil {

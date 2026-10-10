@@ -22,7 +22,11 @@ func (a *App) syncRemotePaneActivity() {
 		}
 	}
 	if desired != nil && desired.term != nil && desired.remoteView != nil {
-		desired.term.SetInputEnabled(desired.remoteView.inputReady() && !desired.remoteYielded && desired.host.connected())
+		ready := desired.remoteView.inputReady() && !desired.remoteYielded && desired.host.connected()
+		if !ready {
+			desired.cancelFileUpload()
+		}
+		desired.term.SetInputEnabled(ready)
 	}
 }
 
@@ -59,6 +63,7 @@ func (a *App) resumeRemotePane(p *Pane) {
 }
 
 func (a *App) pauseRemotePane(p *Pane) {
+	p.cancelFileUpload()
 	if p.remoteView == nil {
 		return
 	}

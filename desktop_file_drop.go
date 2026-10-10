@@ -1,17 +1,27 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func (p *Pane) acceptsFileDrop() bool {
-	return p.term != nil && !p.closed && (p.host == nil || p.remoteView != nil && p.remoteView.inputReady())
+	return p.term != nil && !p.closed && (p.host == nil || !p.info.Exited && !p.remoteYielded && p.host.connected() && p.remoteView != nil && p.remoteView.inputReady())
 }
 
 func (a *App) pasteDroppedFiles(t *Tab, p *Pane, paths []string) {
 	if !p.acceptsFileDrop() {
+		return
+	}
+	if p.host != nil {
+		a.uploadDroppedFiles(t, p, paths)
 		return
 	}
 	text := droppedFilePaths(paths)
@@ -22,6 +32,94 @@ func (a *App) pasteDroppedFiles(t *Tab, p *Pane, paths []string) {
 	a.focusReq = p
 	a.changed()
 	p.term.Paste(text)
+}
+
+type paneUpload struct {
+	cancel      context.CancelFunc
+	sent, total atomic.Int64
+	prepared    atomic.Bool
+}
+
+func (p *Pane) cancelFileUpload() {
+	if p.upload != nil {
+		p.upload.cancel()
+		p.upload = nil
+	}
+}
+
+func (a *App) uploadDroppedFiles(t *Tab, p *Pane, paths []string) {
+	if droppedFilePaths(paths) == "" {
+		return
+	}
+	if p.upload != nil {
+		a.err = "当前窗格正在上传文件，请等待完成或取消"
+		return
+	}
+	t.setFocus(p)
+	a.focusReq = p
+	a.changed()
+	ctx, cancel := context.WithCancel(context.Background())
+	upload := &paneUpload{cancel: cancel}
+	p.upload = upload
+	paths = append([]string(nil), paths...)
+	client, generation, sid, term, stream := p.host.client, p.host.generation, p.SID, p.term, p.stream
+	win := a.win
+	invalidate := func() {
+		if win != nil {
+			win.Invalidate()
+		}
+	}
+	invalidate()
+	go func() {
+		defer cancel()
+		remotePaths, err := client.UploadFiles(ctx, sid, paths, func(sent, total int64) {
+			upload.sent.Store(sent)
+			upload.total.Store(total)
+			upload.prepared.Store(true)
+			invalidate()
+		})
+		completed := err == nil && ctx.Err() == nil
+		a.post(func() {
+			if p.upload != upload {
+				return
+			}
+			p.upload = nil
+			if a.quitting || p.closed {
+				return
+			}
+			if err != nil {
+				if !errors.Is(err, context.Canceled) {
+					a.err = err.Error()
+				}
+				return
+			}
+			// Never focus another pane or paste through a replacement connection.
+			if !completed || p.host.client != client || p.host.generation != generation || p.SID != sid || p.term != term || p.stream != stream || a.tab() != t || t.Focus != p || !p.acceptsFileDrop() {
+				return
+			}
+			p.term.Paste(droppedFilePaths(remotePaths))
+		})
+		invalidate()
+	}()
+}
+
+func (a *App) fileUploadBar(c *ui.Context, k *colors, p *Pane) {
+	upload := p.upload
+	ui.Row(c.Key("file-upload")).Height(30).Padding(0, 8, 0, 12).AlignItems(ui.Center).Gap(8).Background(k.panel).Children(func() {
+		message := "正在准备上传…"
+		if upload.prepared.Load() {
+			sent, total := upload.sent.Load(), upload.total.Load()
+			if sent == total {
+				message = "正在确认上传…"
+			} else {
+				message = fmt.Sprintf("上传文件 %.0f%% · %.1f / %.1f MB", float64(sent)*100/float64(total), float64(sent)/(1<<20), float64(total)/(1<<20))
+			}
+		}
+		ui.Text(c, message).FontSize(12).TextColor(k.textMuted).Grow(1)
+		if iconButton(c, k, "x", "取消文件上传", 24, 13).Clicked() {
+			p.cancelFileUpload()
+		}
+	})
 }
 
 // Treat each path as one shell argument, never as shell syntax. Leave a space
