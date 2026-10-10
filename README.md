@@ -13,6 +13,10 @@
   macOS · iPhone · Linux / macOS 服务器 &nbsp;|&nbsp; 原生 UI，无 WebView &nbsp;|&nbsp; 为终端 Agent 而生
 </p>
 
+<p align="center">
+  <a href="https://testflight.apple.com/join/fvYUeH4Z"><img src="https://img.shields.io/badge/TestFlight-加入内测-007AFF?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="通过 TestFlight 安装 Retty" /></a>
+</p>
+
 ![同一个 Retty 会话同时显示在 Mac 桌面和 iPhone 上](docs/images/hero-dark.jpg)
 
 在 Mac 上让 Claude Code 跑起来，出门后在 iPhone 上看它进行到哪、替它回答一个问题，回到桌前继续——**始终是同一个终端会话**。
@@ -103,7 +107,7 @@ Retty 只负责观察与提醒，不替 Agent 做授权决定，也不安装 Age
 | 平台 | 获取方式 |
 | --- | --- |
 | macOS 13+ | [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 的 Universal DMG（Apple Silicon + Intel）。当前尚未配置 Developer ID，下载后可能被 Gatekeeper 拦截，见[安装说明](docs/development.md#下载后提示已损坏)。 |
-| iOS 15+ | 从源码构建并用自己的证书签名安装（Bundle ID `com.daodao.retty`）。 |
+| iOS 15+ | [通过 TestFlight 安装](https://testflight.apple.com/join/fvYUeH4Z)，也可从源码构建并用自己的证书签名安装（Bundle ID `com.daodao.retty`）。 |
 | Linux / macOS 服务器 | [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 的 `retty-{系统}-{架构}.tar.gz`，包含 `retty` 与 Ghostty 动态库。 |
 
 推送 `main` 时生成日常构建，Actions Artifacts 保留 14 天。推送与 `mygo.json.version` 对应的 `v*` 标签，或手动运行 **Release**，会构建四个平台的 CLI 和 Universal DMG，校验后发布到 GitHub Release，每个包附有 SHA-256 文件。正式签名与公证的配置见[开发说明](docs/development.md#github-release)。
