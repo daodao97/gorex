@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"retty/internal/push"
+	"retty/internal/notification"
 	"retty/internal/rex"
 	"testing"
 )
@@ -28,17 +28,17 @@ func noticeClient(t *testing.T, b *Bridge) *rex.Client {
 
 func TestRemoteNotificationClaimDoesNotAttachOrRegisterDevice(t *testing.T) {
 	a := rex.DesktopActivity{ID: "viewer", Sequence: 1, RoutingVersion: 1, Present: true, ViewedDesktop: "source", ViewedSession: "pane"}
-	n := push.Notice{ID: "retty-agent-test", Desktop: "source", Session: "pane", Kind: "completed"}
+	n := notification.Notice{ID: "retty-agent-test", Desktop: "source", Session: "pane", Kind: "completed"}
 	called := false
-	b := &Bridge{devices: map[net.Conn]ConnectedDevice{}, onNotice: func(got rex.DesktopActivity, event push.Notice) (push.Route, error) {
+	b := &Bridge{devices: map[net.Conn]ConnectedDevice{}, onNotice: func(got rex.DesktopActivity, event notification.Notice) (notification.Route, error) {
 		called = true
 		if got != a || event != n {
 			t.Errorf("claim metadata changed: %+v %+v", got, event)
 		}
-		return push.RouteQuiet, nil
+		return notification.RouteQuiet, nil
 	}}
 	route, err := ClaimNotification(context.Background(), noticeClient(t, b), a, n)
-	if err != nil || route != push.RouteQuiet || !called {
+	if err != nil || route != notification.RouteQuiet || !called {
 		t.Fatal("source arbiter not used", route, err)
 	}
 	if len(b.Devices()) != 0 {
@@ -47,8 +47,8 @@ func TestRemoteNotificationClaimDoesNotAttachOrRegisterDevice(t *testing.T) {
 }
 
 func TestRemoteNotificationClaimRecognizesUnsupportedBridge(t *testing.T) {
-	_, err := ClaimNotification(context.Background(), noticeClient(t, &Bridge{}), rex.DesktopActivity{}, push.Notice{})
-	if !errors.Is(err, push.ErrLegacyRouting) {
+	_, err := ClaimNotification(context.Background(), noticeClient(t, &Bridge{}), rex.DesktopActivity{}, notification.Notice{})
+	if !errors.Is(err, notification.ErrLegacyRouting) {
 		t.Fatal("missing compatibility signal", err)
 	}
 }
