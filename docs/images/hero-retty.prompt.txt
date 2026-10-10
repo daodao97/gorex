@@ -98,4 +98,3 @@ The finished two-line headline must read:
 无缝接力。
 Match the exact existing typography: large bold white Chinese sans serif, same size, stroke weight, baseline alignment, line spacing, left margin and crisp edges. Spell the four new Chinese glyphs accurately, 无 缝 接 力, followed by a Chinese full stop.
 Everything else is strictly immutable: Retty >_ brand lockup, English tagline, bottom slogan, dark graphite background, Linux server, monitor and two iPhones, device positions and scale, desktop tabs and split terminal panes, both Claude Code terminal interfaces with their orange pixel mascots and authentic version/model/header/input/status lines, server console, background phone's host and Agent lists, foreground phone's system keyboard and extension keys, mint connection ribbon, platform labels, lighting, textures and framing. Do not redraw or simplify any screen. Do not add anything. Change only these four large headline characters.
-
