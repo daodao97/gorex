@@ -56,6 +56,9 @@ func (a *App) startRemotePane(p *Pane, takeover bool) {
 	}
 	p.remoteIdleEpoch++
 	if !p.remoteView.hasTransport() {
+		if p.streamEnded && p.host.quality != nil {
+			p.host.quality.ScreenRecovered(time.Now())
+		}
 		reader := a.paneClient(p).ViewStream(p.SID)
 		reader.OnData = func(int) { p.lastData.Store(time.Now().UnixNano()) }
 		p.remoteView.geometry(p.info.Cols, p.info.Rows)

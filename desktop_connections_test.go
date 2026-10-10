@@ -426,6 +426,14 @@ func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
 	if !h.connected() {
 		t.Fatal(h.err)
 	}
+	if h.quality == nil {
+		t.Fatal("connected host has no quality collector")
+	}
+	a.probeDesktopQuality(h, time.Now())
+	waitFor(t, tt, "existing tunnel path measurement", func() bool { return !h.qualityProbeBusy })
+	if sample := h.quality.Snapshot(time.Now()).Path; sample.At.IsZero() || sample.Latency <= 0 {
+		t.Fatal("encrypted tunnel did not provide real path latency", sample)
+	}
 	existing, err := desktop.Create(rex.CreateOptions{Dir: "/tmp", Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatal(err)
@@ -436,10 +444,14 @@ func TestDesktopTailcatConnectAndReconnect(t *testing.T) {
 	a.selectTab(1)
 	p := a.tab().Focus
 	oldClient := h.client
+	waitFor(t, tt, "existing poll records request metrics", func() bool { return h.quality.Snapshot(time.Now()).Successes > 0 })
 	oldClient.Close()
 	waitFor(t, tt, "automatically reconnected transport", func() bool { return h.connected() && h.client != oldClient && p.remoteView.inputReady() })
 	if !h.connected() || p.info.PID != existing.PID || p.SID != existing.ID {
 		t.Fatal("reconnect replaced session", h.err)
+	}
+	if sample := h.quality.Snapshot(time.Now()); sample.Reconnects != 1 || !sample.HasRecovery {
+		t.Fatal("reconnect not recorded in host quality", sample)
 	}
 	tt.Frame()
 	tt.Type("printf 'tunnel-%s\\n' continued")

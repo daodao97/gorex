@@ -134,6 +134,7 @@ func (a *App) desktopHostRows(c *ui.Context) {
 				label, glyph = "确认清除桌面连接记录", "check"
 			}
 			if desktopConnectionIconAction(c, label, glyph).Clicked() {
+				a.desktops.qualityHost = nil
 				if a.desktops.historySelection == nil {
 					a.desktops.historySelection = map[string]bool{}
 				} else {
@@ -184,6 +185,7 @@ func (a *App) desktopHostRows(c *ui.Context) {
 						ui.Text(c, status).FontSize(12).TextColor(c.Theme().TextMuted)
 					})
 					if !selecting {
+						a.desktopQualityTip(c, h)
 						mobileListChevron(c)
 					}
 				})

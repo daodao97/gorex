@@ -79,7 +79,8 @@ func TestWatchConnectionClosesUnresponsiveControl(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			result := make(chan error, 1)
-			go watchConnection(ctx, client, nil, func(_ []rex.SessionInfo, err error) { result <- err }, time.Millisecond, 50*time.Millisecond)
+			quality := &Quality{}
+			go watchConnection(ctx, client, nil, func(_ []rex.SessionInfo, err error) { result <- err }, time.Millisecond, 50*time.Millisecond, quality)
 			select {
 			case err := <-result:
 				if !errors.Is(err, context.DeadlineExceeded) {
@@ -87,6 +88,9 @@ func TestWatchConnectionClosesUnresponsiveControl(t *testing.T) {
 				}
 			case <-time.After(time.Second):
 				t.Fatal("unresponsive connection did not trigger bounded recovery")
+			}
+			if sample := quality.Snapshot(time.Now()); sample.Requests != 1 || sample.Timeouts != 1 || sample.Successes != 0 {
+				t.Fatal("timed-out poll produced misleading request metrics", sample)
 			}
 			select {
 			case <-client.Closed():

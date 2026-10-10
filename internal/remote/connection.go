@@ -19,7 +19,15 @@ func OpenConnection(ctx context.Context, link string, device rex.DeviceInfo, dia
 	if len(diagnostics) > 0 {
 		trace = diagnostics[0]
 	}
-	client, tunnel, err := ConnectWithDiagnostics(ctx, link, trace)
+	return openConnection(ctx, link, device, trace, nil)
+}
+
+func OpenConnectionWithQuality(ctx context.Context, link string, device rex.DeviceInfo, quality *Quality) (*rex.Client, func(), rex.Hello, []rex.SessionInfo, error) {
+	return openConnection(ctx, link, device, nil, quality)
+}
+
+func openConnection(ctx context.Context, link string, device rex.DeviceInfo, trace *Diagnostics, quality *Quality) (*rex.Client, func(), rex.Hello, []rex.SessionInfo, error) {
+	client, tunnel, err := connect(ctx, link, true, trace, quality)
 	var hello rex.Hello
 	var sessions []rex.SessionInfo
 	if err == nil {
@@ -122,11 +130,11 @@ func ResumeConnection(ctx context.Context, client *rex.Client, info *rex.DeviceI
 // WatchConnection is the shared foreground connection maintenance loop. Stopping
 // it does not destroy a retained tunnel: an in-flight bounded request can finish.
 // Delivery runs on this goroutine; consumers dispatch and reject stale UI work.
-func WatchConnection(ctx context.Context, client *rex.Client, device func() *rex.DeviceInfo, deliver func([]rex.SessionInfo, error)) {
-	watchConnection(ctx, client, device, deliver, 2*time.Second, ResumeCheckTimeout)
+func WatchConnection(ctx context.Context, client *rex.Client, device func() *rex.DeviceInfo, deliver func([]rex.SessionInfo, error), quality ...*Quality) {
+	watchConnection(ctx, client, device, deliver, 2*time.Second, ResumeCheckTimeout, quality...)
 }
 
-func watchConnection(ctx context.Context, client *rex.Client, device func() *rex.DeviceInfo, deliver func([]rex.SessionInfo, error), interval, timeout time.Duration) {
+func watchConnection(ctx context.Context, client *rex.Client, device func() *rex.DeviceInfo, deliver func([]rex.SessionInfo, error), interval, timeout time.Duration, quality ...*Quality) {
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {
@@ -148,10 +156,15 @@ func watchConnection(ctx context.Context, client *rex.Client, device func() *rex
 		if device != nil {
 			info = device()
 		}
+		started := time.Now()
 		sessions, err := checkConnection(check, ctx, client, info)
+		elapsed := time.Since(started)
 		cancel()
 		if ctx.Err() != nil {
 			return
+		}
+		if len(quality) > 0 && quality[0] != nil {
+			quality[0].RecordRequest(time.Now(), elapsed, err)
 		}
 		deliver(sessions, err)
 		if err != nil {

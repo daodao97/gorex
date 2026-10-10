@@ -17,20 +17,24 @@ import (
 
 // A host owns its transport; tabs never borrow another computer's client.
 type desktopHost struct {
-	retryTimer     *time.Timer
-	retryAttempt   int
-	layout         savedLayout
-	key, link      string
-	hello          rex.Hello
-	client         *rex.Client
-	tunnel         func()
-	cancel         context.CancelFunc
-	generation     int
-	busy, creating bool
-	err            string
-	sessions       []rex.SessionInfo
-	recent         desktopRecent
-	pendingSession string
+	retryTimer       *time.Timer
+	retryAttempt     int
+	quality          *remote.Quality
+	qualityProbeBusy bool
+	qualityProbeAt   time.Time
+	recoverySince    time.Time
+	layout           savedLayout
+	key, link        string
+	hello            rex.Hello
+	client           *rex.Client
+	tunnel           func()
+	cancel           context.CancelFunc
+	generation       int
+	busy, creating   bool
+	err              string
+	sessions         []rex.SessionInfo
+	recent           desktopRecent
+	pendingSession   string
 }
 type desktopConnections struct {
 	historyLoaded, dirty bool
@@ -39,6 +43,7 @@ type desktopConnections struct {
 	open, showLocal      bool
 	input, err           string
 	selected             *desktopHost
+	qualityHost          *desktopHost
 	historySelection     map[string]bool
 	recentSessions       []mobileRecentSession
 	incoming             []remote.ConnectedDevice
@@ -274,12 +279,18 @@ func (a *App) connectDesktop(h *desktopHost) {
 	disposeDesktopTransport(h.client, h.tunnel)
 	h.client, h.tunnel = nil, nil
 	h.generation++
+	h.qualityProbeBusy = false
+	h.qualityProbeAt = time.Time{}
 	generation := h.generation
 	ctx, cancel := context.WithCancel(context.Background())
 	h.cancel, h.busy, h.err = cancel, true, ""
 	a.desktopInputEnabled(h, false)
 	update := a.desktopDispatcher()
 	link := h.link
+	if h.quality == nil {
+		h.quality = &remote.Quality{}
+	}
+	quality := h.quality
 	device := mygo.App.Device()
 	deviceName := device.Name
 	if deviceName == "" {
@@ -288,7 +299,7 @@ func (a *App) connectDesktop(h *desktopHost) {
 	go func() {
 		deadline, stop := context.WithTimeout(ctx, 45*time.Second)
 		defer stop()
-		client, tunnel, hello, infos, err := remote.OpenConnection(deadline, link, rex.DeviceInfo{Name: deviceName, OS: device.System})
+		client, tunnel, hello, infos, err := remote.OpenConnectionWithQuality(deadline, link, rex.DeviceInfo{Name: deviceName, OS: device.System}, quality)
 		update(func() {
 			if h.generation != generation || a.quitting {
 				disposeDesktopTransport(client, tunnel)
@@ -324,6 +335,7 @@ func (a *App) connectDesktop(h *desktopHost) {
 			}
 			h.client, h.tunnel, h.hello, h.sessions = client, tunnel, hello, liveDesktopSessions(infos)
 			h.retryAttempt = 0
+			a.finishDesktopRecovery(h)
 			a.desktops.hosts = slices.Insert(slices.DeleteFunc(a.desktops.hosts, func(other *desktopHost) bool { return other == h }), 0, h)
 			h.recent = desktopRecent{Link: h.link, Name: h.name(), ID: hello.Host.ID, OS: desktopPlatform(hello.Host)}
 			a.reattachDesktopTabs(h)
@@ -365,9 +377,15 @@ func (a *App) pollDesktop(ctx context.Context, h *desktopHost, client *rex.Clien
 			}
 			a.applyHost(h, byID)
 		})
-	})
+	}, h.quality)
 }
 func (a *App) recoverDesktop(ctx context.Context, h *desktopHost, client *rex.Client, generation int, update func(func())) {
+	if h.recoverySince.IsZero() {
+		h.recoverySince = time.Now()
+		if h.quality != nil {
+			h.quality.RecoveryStarted(h.recoverySince)
+		}
+	}
 	h.busy, h.creating = true, false
 	h.err = "正在恢复连接，远端会话继续运行。"
 	a.desktopInputEnabled(h, false)
@@ -391,6 +409,7 @@ func (a *App) recoverDesktop(ctx context.Context, h *desktopHost, client *rex.Cl
 				return
 			}
 			h.err = ""
+			a.finishDesktopRecovery(h)
 			if next != client {
 				client.Close()
 				h.client = next
@@ -452,6 +471,7 @@ func (a *App) reattachDesktopPane(p *Pane, in rex.SessionInfo) {
 }
 
 func (a *App) disconnectDesktop(h *desktopHost) {
+	h.qualityProbeBusy = false
 	h.pendingSession = ""
 	h.generation++
 	if h.retryTimer != nil {
@@ -459,6 +479,7 @@ func (a *App) disconnectDesktop(h *desktopHost) {
 		h.retryTimer = nil
 	}
 	h.retryAttempt = 0
+	h.recoverySince = time.Time{}
 	if h.cancel != nil {
 		h.cancel()
 	}
@@ -634,6 +655,7 @@ func (a *App) restartDesktopPane(p *Pane) {
 	}()
 }
 func (a *App) showDesktopConnections(h *desktopHost) {
+	a.desktops.qualityHost = nil
 	a.settingsOpen, a.paletteOpen, a.renaming = false, false, nil
 	a.desktops.open, a.desktops.showLocal = true, false
 	a.desktops.historySelection = nil
@@ -641,6 +663,7 @@ func (a *App) showDesktopConnections(h *desktopHost) {
 	a.focusReq = nil
 }
 func (a *App) finishDesktopDialog() {
+	a.desktops.qualityHost = nil
 	a.desktops.open = false
 	if t := a.tab(); t != nil {
 		a.focusReq = t.Focus
