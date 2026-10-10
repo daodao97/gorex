@@ -61,6 +61,8 @@ type Bridge struct {
 	closed       bool
 	conns        map[net.Conn]bool
 	devices      map[net.Conn]ConnectedDevice
+	disconnected map[string]bool
+	onPeer       func(ConnectedDevice)
 	onDevice     func(rex.DeviceInfo)
 	onClose      func()
 	onImage      func(context.Context, string, []byte) error
@@ -80,6 +82,9 @@ type Options struct {
 	// OnDevice receives metadata only after a successful compatible control
 	// response. Callbacks must not block; terminal bytes are forwarded unchanged.
 	OnDevice func(rex.DeviceInfo)
+	// OnPeer reports a completed device connection, including clients without
+	// push registration. It must not block the forwarding goroutine.
+	OnPeer func(ConnectedDevice)
 	// OnPasteImage runs off the UI thread after a bounded authenticated upload.
 	// It must copy to the desktop clipboard before sending Ctrl+V to the session.
 	OnPasteImage func(context.Context, string, []byte) error
@@ -103,6 +108,7 @@ func Start(ctx context.Context, socket string, options ...Options) (*Bridge, err
 	b.imageGate = make(chan struct{}, 1)
 	if len(options) > 0 {
 		b.onDevice = options[0].OnDevice
+		b.onPeer = options[0].OnPeer
 		b.onImage = options[0].OnPasteImage
 	}
 	ln, err := b.server.Listen(ctx, "tcp", fmt.Sprintf(":%d", Port))
@@ -132,7 +138,7 @@ func (b *Bridge) accept(socket string) {
 			return
 		}
 		b.mu.Lock()
-		if b.closed {
+		if b.closed || b.disconnected[deviceConnectionID(conn)] {
 			b.mu.Unlock()
 			conn.Close()
 			return

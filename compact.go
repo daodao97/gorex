@@ -34,16 +34,17 @@ func (a *App) compactTitleBar(c *ui.Context, k *colors, bar ui.TitleBar) {
 	ui.Row(c).Height(compactTitleH).Padding(0, bar.Right, 0, left).Gap(0).
 		Background(k.track).AlignItems(ui.Center).DragWindow().Children(func() {
 		a.tabStrip(c, k)
-		a.phonePairButton(c, k, 28)
-		b := compactTitleButton(c.Key("compact-new-tab"), k, "plus", "New Tab").Tooltip("New Tab  ⌘T")
+		b := compactTitleButton(c.Key("compact-new-tab"), k, "plus", "New Tab", false).Tooltip("New Tab  ⌘T")
 		if b.Clicked() {
 			a.newTab(a.currentDir())
 		}
-		compactTitleButton(c.Key("new-tab-host"), k, "chevron-down", "选择新会话电脑").Tooltip("选择电脑或打开已有会话").Menu(a.desktopTabMenu)
+		if compactTitleButton(c.Key("desktop-connections"), k, "plug-connected", "连接", a.hasDesktopConnections()).Tooltip("连接").Clicked() {
+			a.showDesktopConnections(nil)
+		}
 	})
 }
 
-func compactTitleButton(c *ui.Context, k *colors, name, label string) ui.Element {
+func compactTitleButton(c *ui.Context, k *colors, name, label string, highlighted bool) ui.Element {
 	b := ui.Box(c).Width(28).FillHeight().Shrink(0).
 		Center().Role(ui.RoleButton).Label(label).Focusable().Cursor(ui.CursorPointer).
 		BorderWidth(0, 0, 1, 0).BorderColor(k.headerBorder)
@@ -52,7 +53,11 @@ func compactTitleButton(c *ui.Context, k *colors, name, label string) ui.Element
 	} else if b.Hovered() {
 		b.Background(k.hover)
 	}
-	b.Children(func() { ui.Icon(c, icon(name)).Size(14, 14).TextColor(k.iconMuted) })
+	col := k.iconMuted
+	if highlighted {
+		col = k.busy
+	}
+	b.Children(func() { ui.Icon(c, icon(name)).Size(14, 14).TextColor(col) })
 	return b
 }
 

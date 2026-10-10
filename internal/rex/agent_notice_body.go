@@ -10,7 +10,18 @@ import (
 // AgentNoticeBody names the task instead of displaying project paths or
 // generic navigation instructions. Local notifications and APNs share it.
 func AgentNoticeBody(dir string, session SessionInfo) string {
-	task := agents.ReadTask(dir, session.Agent.ID, session.Agent.SessionID, session.Agent.Updated)
+	if session.Agent.Source == ProgramStatusSource {
+		if msg := programStatusText(session.Agent.Message); msg != "" {
+			return msg
+		}
+		if label := programStatusText(session.Agent.Label); label != "" {
+			return label
+		}
+	}
+	task := ""
+	if session.Agent.Source != ProgramStatusSource {
+		task = agents.ReadTask(dir, session.Agent.ID, session.Agent.SessionID, session.Agent.Updated)
+	}
 	if task == "" {
 		task = strings.TrimLeftFunc(session.Title, func(r rune) bool {
 			return unicode.IsSpace(r) || r >= '\u2800' && r <= '\u28ff' || strings.ContainsRune("✳✦●✓✔⏺⏵", r)
@@ -44,6 +55,8 @@ func AgentNoticeBody(dir string, session SessionInfo) string {
 			return "需要你确认操作权限，授权后继续任务。"
 		case "question":
 			return "需要你回答一个问题，回答后继续任务。"
+		case "auth":
+			return "需要你登录或提供凭据，验证后继续任务。"
 		default:
 			return "任务正在等待你的输入。"
 		}

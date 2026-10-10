@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -10,13 +11,17 @@ import (
 )
 
 // An old hook must not put an agent badge on the shell or another program
-// after the agent exited. Unintegrated agents keep the ordinary activity dot.
+// after the agent exited. Direct program reports have server-owned lifetimes
+// and also work for programs with no agent-specific integration.
 func paneAgentState(p *Pane) rex.AgentState {
 	return sessionAgentState(p.info)
 }
 
 func sessionAgentState(info rex.SessionInfo) rex.AgentState {
 	s := info.Agent
+	if s.Source == rex.ProgramStatusSource {
+		return s
+	}
 	if s.State == "" || info.Idle || info.Exited {
 		return rex.AgentState{}
 	}
@@ -31,6 +36,9 @@ func agentStateLabel(s rex.AgentState) string {
 	case agents.Ready:
 		return "就绪"
 	case agents.Running:
+		if s.Progress != nil {
+			return fmt.Sprintf("执行中 %d%%", *s.Progress)
+		}
 		return "执行中"
 	case agents.Waiting:
 		switch s.Reason {
@@ -38,6 +46,8 @@ func agentStateLabel(s rex.AgentState) string {
 			return "等待授权"
 		case "question":
 			return "等待回答"
+		case "auth":
+			return "等待登录"
 		default:
 			return "等待输入"
 		}
@@ -72,6 +82,15 @@ func (a *App) agentIndicator(c *ui.Context, k *colors, p *Pane, s rex.AgentState
 	}
 	name := programOf(s.ID).Name
 	tip := name + " · " + agentStateLabel(s)
+	if s.Label != "" {
+		tip += " · " + s.Label
+	}
+	if s.Message != "" {
+		tip += " · " + s.Message
+	}
+	if s.State == agents.Waiting && s.Progress != nil {
+		tip += fmt.Sprintf(" · %d%%", *s.Progress)
+	}
 	e := ui.Box(c.Key("agent-state-"+p.noticeKey())).Size(13, 16).Shrink(0).Center().
 		Role(ui.RoleButton).Label(label).Tooltip(tip + " · 点击定位窗格").Cursor(ui.CursorPointer)
 	e.Children(func() {
@@ -129,7 +148,7 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	}
 	finished := s.State == agents.Completed || s.State == agents.Failed
 	if s.State != agents.Waiting && !finished {
-		if s.State != "" || a.agentNoticeKinds[p.noticeKey()] == agents.Waiting {
+		if s.State != "" || a.agentNoticeKinds[p.noticeKey()] == agents.Waiting || previous.Source == rex.ProgramStatusSource {
 			a.closeAgentNotice(p.noticeKey())
 		}
 		return
@@ -164,11 +183,17 @@ func (a *App) updateAgentNotice(p *Pane, previous rex.AgentState) {
 	if hidden || a.paneIsViewed(p) {
 		return
 	}
+	if !a.programNoticeLimiter.Allow(p.noticeKey(), s, time.Now()) {
+		return
+	}
 	body := ""
 	if p.host == nil {
 		body = rex.AgentNoticeBody(rex.Dir(), p.info)
 	} else {
 		body = p.host.name() + " · " + agentStateLabel(s)
+		if s.Source == rex.ProgramStatusSource {
+			body += " · " + rex.AgentNoticeBody("", p.info)
+		}
 	}
 	opts := mygo.NotificationOptions{Title: programOf(s.ID).Name + " · " + agentStateLabel(s), Body: body}
 	a.showPaneNotice(p, s.State, opts)

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/ui"
 	"retty/internal/remote"
 	"retty/internal/rex"
 )
@@ -31,14 +30,38 @@ type desktopHost struct {
 	err            string
 	sessions       []rex.SessionInfo
 	recent         desktopRecent
+	pendingSession string
 }
 type desktopConnections struct {
-	historyLoaded, dirty  bool
-	hosts                 []*desktopHost
-	store                 connectionRecordStore
-	open, initialFocus    bool
-	input, err, directory string
-	selected              *desktopHost
+	historyLoaded, dirty bool
+	hosts                []*desktopHost
+	store                connectionRecordStore
+	open, showLocal      bool
+	input, err           string
+	selected             *desktopHost
+	historySelection     map[string]bool
+	recentSessions       []mobileRecentSession
+	incoming             []remote.ConnectedDevice
+}
+
+func (a *App) hasDesktopConnections() bool {
+	for _, h := range a.desktops.hosts {
+		if h.connected() {
+			return true
+		}
+	}
+	if a.phone != nil && a.phone.bridge != nil {
+		bridge := a.phone.bridge
+		if len(bridge.Devices()) > 0 {
+			return true
+		}
+		for _, d := range a.desktops.incoming {
+			if bridge.DeviceConnected(d.ID) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (h *desktopHost) name() string {
@@ -146,6 +169,14 @@ func (a *App) loadDesktopHistory() {
 	store, win, update := a.desktops.store, a.win, a.desktopDispatcher()
 	a.desktopStorage <- func() {
 		history := readDesktopHistory(store)
+		var recentSessions []mobileRecentSession
+		if data, err := store.Get("recent-sessions"); err == nil {
+			json.Unmarshal(data, &recentSessions)
+		}
+		var incoming []remote.ConnectedDevice
+		if data, err := store.Get("incoming-devices"); err == nil {
+			json.Unmarshal(data, &incoming)
+		}
 		var layouts map[string]savedLayout
 		if data, err := store.Get("desktop-layouts"); err == nil {
 			json.Unmarshal(data, &layouts)
@@ -155,6 +186,8 @@ func (a *App) loadDesktopHistory() {
 				return
 			}
 			a.desktops.historyLoaded = true
+			a.desktops.recentSessions = mergeRecentSessions(a.desktops.recentSessions, recentSessions)
+			a.desktops.incoming = mergeIncomingDevices(a.desktops.incoming, incoming)
 			for _, entry := range history {
 				h, err := a.rememberDesktop(entry.Link)
 				if err != nil {
@@ -185,11 +218,19 @@ func (a *App) saveDesktopHistory() {
 	}
 	history = mergeDesktopHistory(history, nil)
 	data, _ := json.Marshal(layouts)
+	recentSessions, _ := json.Marshal(a.desktops.recentSessions)
+	incoming, _ := json.Marshal(a.desktops.incoming)
 	store, update := a.desktops.store, a.desktopDispatcher()
 	a.desktopStorage <- func() {
 		err := writeDesktopHistory(store, history)
 		if err == nil {
 			err = store.Set("desktop-layouts", data)
+		}
+		if err == nil {
+			err = store.Set("recent-sessions", recentSessions)
+		}
+		if err == nil {
+			err = store.Set("incoming-devices", incoming)
 		}
 		if err != nil {
 			update(func() { a.desktops.err = "无法保存最近连接，请重试。" })
@@ -289,6 +330,7 @@ func (a *App) connectDesktop(h *desktopHost) {
 
 			a.restoreDesktopLayout(h)
 			a.saveDesktopHistory()
+			a.finishDesktopPendingSession(h)
 			go a.pollDesktop(ctx, h, client, generation, update)
 		})
 	}()
@@ -356,6 +398,7 @@ func (a *App) recoverDesktop(ctx context.Context, h *desktopHost, client *rex.Cl
 			}
 			h.sessions = liveDesktopSessions(infos)
 			a.reattachDesktopTabs(h)
+			a.finishDesktopPendingSession(h)
 			go a.pollDesktop(ctx, h, h.client, generation, update)
 		})
 	}()
@@ -407,6 +450,7 @@ func (a *App) reattachDesktopPane(p *Pane, in rex.SessionInfo) {
 }
 
 func (a *App) disconnectDesktop(h *desktopHost) {
+	h.pendingSession = ""
 	h.generation++
 	if h.retryTimer != nil {
 		h.retryTimer.Stop()
@@ -445,6 +489,12 @@ func (a *App) closeDesktopConnections() {
 func (a *App) openDesktopSession(h *desktopHost, in rex.SessionInfo, selectIt bool) {
 	if !h.connected() || in.Exited {
 		return
+	}
+	if selectIt {
+		p := &Pane{info: in, startDir: in.Dir}
+		name, _ := p.label()
+		a.desktops.recentSessions = mergeRecentSessions([]mobileRecentSession{{Desktop: h.key, Session: in.ID, Title: name, Program: sessionProgramName(in)}}, a.desktops.recentSessions)
+		a.saveDesktopHistory()
 	}
 	for i, t := range a.tabs {
 		if t.Host == h {
@@ -513,7 +563,7 @@ func (a *App) createDesktopSession(h *desktopHost, dir string, split *Pane, vert
 			}
 			h.creating = false
 			if err != nil {
-				a.desktops.err = "无法新建会话，请检查工作目录和远端连接。"
+				a.desktops.err = "无法新建会话，请检查远端连接。"
 				a.showDesktopConnections(h)
 				return
 			}
@@ -583,8 +633,9 @@ func (a *App) restartDesktopPane(p *Pane) {
 }
 func (a *App) showDesktopConnections(h *desktopHost) {
 	a.settingsOpen, a.paletteOpen, a.renaming = false, false, nil
-	a.desktops.open, a.desktops.initialFocus = true, true
-	a.desktops.selected, a.desktops.directory = h, ""
+	a.desktops.open, a.desktops.showLocal = true, false
+	a.desktops.historySelection = nil
+	a.desktops.selected = h
 	a.focusReq = nil
 }
 func (a *App) finishDesktopDialog() {
@@ -593,23 +644,39 @@ func (a *App) finishDesktopDialog() {
 		a.focusReq = t.Focus
 	}
 }
-func (a *App) desktopTabMenu(m *ui.Menu) {
-	if m.Item("此电脑 · 新建会话").Chosen() {
-		a.newLocalTab(a.hello.Host.Home)
-	}
-	for _, h := range a.desktops.hosts {
-		h := h
-		if m.Item(h.name() + " · 新建会话").Disabled(!h.connected() || h.creating).Chosen() {
-			a.createDesktopSession(h, h.hello.Host.Home, nil, false)
+
+func (a *App) finishDesktopPendingSession(h *desktopHost) {
+	if sid := h.pendingSession; sid != "" {
+		h.pendingSession = ""
+		if a.desktops.open && a.desktops.selected == h {
+			a.openDesktopRecentSession(h, sid)
 		}
 	}
-	m.Separator()
-	if m.Item("打开已有会话…").Chosen() {
-		a.showDesktopConnections(a.currentHost())
+}
+func (a *App) openDesktopRecentSession(h *desktopHost, sid string) {
+	if in, ok := desktopSession(h, sid); ok {
+		a.openDesktopSession(h, in, true)
+	} else {
+		a.desktops.err = "原会话已结束，请选择其他会话。"
 	}
-	if m.Item("连接其他桌面…").Chosen() {
-		a.showDesktopConnections(nil)
+}
+
+func (a *App) removeDesktopHistory(selection map[string]bool) {
+	removed := map[string]bool{}
+	for _, h := range slices.Clone(a.desktops.hosts) {
+		if !selection[h.key] {
+			continue
+		}
+		removed[h.key] = true
+		a.disconnectDesktop(h)
+		if a.desktops.selected == h {
+			a.desktops.selected = nil
+		}
 	}
+	a.desktops.hosts = slices.DeleteFunc(a.desktops.hosts, func(h *desktopHost) bool { return removed[h.key] })
+	a.desktops.recentSessions = slices.DeleteFunc(a.desktops.recentSessions, func(s mobileRecentSession) bool { return removed[s.Desktop] })
+	a.desktops.historySelection = nil
+	a.saveDesktopHistory()
 }
 
 // Restore remote splits locally, using only sessions the remote server still

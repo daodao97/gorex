@@ -176,6 +176,9 @@ func init() {
 // sessionProgramName shares foreground process and launcher detection between
 // desktop tabs and mobile lists, and is safe to persist without command arguments.
 func sessionProgramName(info rex.SessionInfo) string {
+	if info.Agent.Source == rex.ProgramStatusSource && info.Agent.ID != "" && info.Agent.ID != "终端程序" {
+		return info.Agent.ID
+	}
 	if info.Idle || info.Program == "" {
 		return info.Shell
 	}

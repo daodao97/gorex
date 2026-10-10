@@ -100,6 +100,9 @@ type SessionInfo struct {
 	// SizeLockDevice is the name of that device, for the windows.
 	SizeLockDevice string     `json:"sizeLockDevice,omitempty"`
 	Agent          AgentState `json:"agent,omitempty"`
+	// ProgramStatuses preserves all OSC 7501 records across viewer reconnects.
+	// Agent contains their effective status for existing UI and push clients.
+	ProgramStatuses []ProgramStatus `json:"programStatuses,omitempty"`
 }
 
 // Hello is the server's answer to "hello".

@@ -49,19 +49,20 @@ type database struct {
 }
 
 type service struct {
-	mu             sync.Mutex
-	dir            string
-	state          database
-	provider       sender
-	lastError      string
-	managed        *apns.Provider
-	current        map[string]rex.SessionInfo
-	initialized    bool
-	legacy         bool
-	inflightKey    string
-	inflightCancel context.CancelFunc
-	desktops       map[string]desktopLease
-	currentDesktop string
+	mu                   sync.Mutex
+	dir                  string
+	state                database
+	provider             sender
+	lastError            string
+	managed              *apns.Provider
+	current              map[string]rex.SessionInfo
+	initialized          bool
+	legacy               bool
+	inflightKey          string
+	inflightCancel       context.CancelFunc
+	desktops             map[string]desktopLease
+	currentDesktop       string
+	programNoticeLimiter rex.ProgramNoticeLimiter
 }
 
 func newService(dir string) (*service, error) {
@@ -264,6 +265,9 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 		if !seen || !rex.AgentNoticeTransition(previous.info(), ss) || ss.Agent.Updated.IsZero() || now.Sub(ss.Agent.Updated) > 15*time.Minute {
 			continue
 		}
+		if !s.programNoticeLimiter.Allow(desktop+":"+ss.ID, ss.Agent, now) {
+			continue
+		}
 		for deviceID, d := range s.state.Devices {
 			if _, ack := d.Receipts[id]; ack {
 				continue
@@ -298,7 +302,7 @@ func (s *service) observe(hello rex.Hello, sessions []rex.SessionInfo, now time.
 	}
 	for id, ss := range saved {
 		prev, ok := s.state.Previous[id]
-		if !ok || prev.Agent != ss.Agent || !prev.LastInput.Equal(ss.LastInput) {
+		if !ok || !prev.Agent.Equal(ss.Agent) || !prev.LastInput.Equal(ss.LastInput) {
 			changed = true
 			break
 		}

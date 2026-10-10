@@ -34,7 +34,7 @@ func (m *mobileApp) goHome() {
 		m.disconnect(false)
 	}
 	m.detach()
-	m.home, m.creating, m.error = true, false, ""
+	m.home, m.error = true, ""
 	m.resumeSID = ""
 	m.invalidate()
 }

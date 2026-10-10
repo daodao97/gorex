@@ -302,7 +302,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.openSettings()
 		c.Invalidate()
 	}
-	if a.settingsOpen {
+	if a.settingsOpen || a.desktops.open {
 		return
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyF) {

@@ -63,15 +63,13 @@ func TestSettingsNavigationSearchAndDefaults(t *testing.T) {
 	if !strings.Contains(strings.Join(tt.Texts(), " "), "所有设置均使用默认值") {
 		t.Fatal("modified filter has no empty state")
 	}
-	for _, section := range []string{"Appearance", "Terminal settings", "Connections", "About Retty", "Appearance"} {
+	for _, section := range []string{"Appearance", "Terminal settings", "About Retty", "Appearance"} {
 		if err := tt.Click(section); err != nil {
 			t.Fatal(err)
 		}
-		if section == "Connections" {
-			if _, ok := tt.Find("Show phone connection QR code"); !ok {
-				t.Fatal("phone pairing entry missing from connection settings")
-			}
-		}
+	}
+	if _, ok := tt.Find("Connections"); ok {
+		t.Fatal("connection management remains in settings")
 	}
 	// Capture both appearances and the minimum size when requested for QA.
 	tt.SetSize(1512, 948)

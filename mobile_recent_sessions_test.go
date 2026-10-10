@@ -96,7 +96,7 @@ func TestMobileRecentSessionsRefreshOnlyConnectedDesktop(t *testing.T) {
 		t.Fatal("refresh removed an unreachable desktop or kept ended sessions", m.recentSessions)
 	}
 	m.openSessionID("gone")
-	if m.error == "" || m.term != nil || m.creating {
+	if m.error == "" || m.term != nil || m.busy {
 		t.Fatal("missing shortcut opened a new session or failed silently")
 	}
 }

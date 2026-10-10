@@ -24,12 +24,13 @@ const scrollback = 8 << 20
 
 // session is a pseudo-terminal of the server and its shell.
 type session struct {
-	id         string
-	shell      string
-	created    time.Time
-	p          *pty
-	agentToken string
-	agent      agentTracker
+	id            string
+	shell         string
+	created       time.Time
+	p             *pty
+	agentToken    string
+	agent         agentTracker
+	programStatus programStatusTracker
 
 	mu sync.Mutex
 	// vt is the session's screen, kept by the terminal emulator of the
@@ -180,6 +181,7 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 		}
 		s.mu.Lock()
 		s.exited, s.code = true, code
+		s.programStatus.processExit(time.Now())
 		s.clearSizeLockLocked()
 		for a := range s.clients {
 			a.finish()
@@ -232,6 +234,15 @@ func (s *session) read() {
 		n, err := s.p.master.Read(buf)
 		if n > 0 {
 			data := append([]byte(nil), buf[:n]...)
+			s.mu.Lock()
+			s.programStatus.serial = max(s.programStatus.serial, s.agent.state.WaitRevision, s.agent.state.CompletionRevision)
+			replies := s.programStatus.feed(data, time.Now())
+			s.mu.Unlock()
+			// Answer before delivering the following DA query to viewers. This
+			// works with no viewer attached and never counts as a user edit.
+			for range replies {
+				s.p.master.Write([]byte(programStatusReply))
+			}
 			s.mu.Lock()
 			s.prompt.feed(data)
 			s.vt.Feed(data)
@@ -548,6 +559,13 @@ func (s *session) info() SessionInfo {
 		Output: s.output, Bells: int(s.bells.Load()), Exited: s.exited, ExitCode: s.code,
 		Attached: len(s.clients), Cols: s.cols, Rows: s.rows,
 		SizeLock: s.sizeLock, SizeLockDevice: s.sizeLockDevice, Agent: s.agent.state,
+		ProgramStatuses: s.programStatus.snapshot(),
+	}
+	if len(in.ProgramStatuses) > 0 {
+		in.Agent = s.programStatus.agentState("")
+	} else if !s.programStatus.lastReport.IsZero() {
+		// Cleared protocol records must not resurrect an older hook badge.
+		in.Agent = AgentState{}
 	}
 	s.mu.Unlock()
 	if s.p.cmd.Process != nil {
@@ -563,7 +581,7 @@ func (s *session) info() SessionInfo {
 	in.Idle = fg == in.PID
 	// A crashed/killed agent cannot emit SessionEnd. Do not leave its
 	// last waiting state on a shell prompt. Allow startup hooks to settle.
-	if in.Idle && time.Since(in.Agent.Updated) > 2*time.Second {
+	if in.Idle && in.Agent.Source != ProgramStatusSource && time.Since(in.Agent.Updated) > 2*time.Second {
 		in.Agent = AgentState{}
 	}
 	p := inspect(fg)

@@ -7,6 +7,8 @@ Retty 目前识别 **37 种终端 Agent**。前台进程或明确的启动入口
 
 Hook 已验证的仍为 Claude Code、Codex、Gemini CLI、Qwen Code，本次只扩展识别和展示。
 
+Retty 同时支持通用的 [OSC 7501 程序状态协议](program-status.md)。发送该协议的 Agent 或其他终端程序无需专用 Hook，即可提供运行、进度、等待授权 / 回答 / 登录、完成和失败状态。
+
 ## 本次新增的 17 种
 
 | Magpie 客户端 | Retty 识别的命令 | 图标 |

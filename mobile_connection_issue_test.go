@@ -44,7 +44,7 @@ func TestMobileSessionRecoverySharesHomeUIAndKeepsCachedList(t *testing.T) {
 			}
 		}
 		tt.Click("新建会话")
-		if m.creating {
+		if m.busy {
 			t.Fatal("recovery allowed creating a session")
 		}
 		if size[0] == 390 {

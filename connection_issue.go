@@ -14,7 +14,7 @@ func connectionIssueFor(err error) *mobileConnectionIssue {
 	issue := &mobileConnectionIssue{title: "暂时无法连接桌面", body: "请确认电脑上的 Retty 正在运行，并检查两端网络。若电脑曾停止连接，请重新扫码。", automatic: true, retry: true}
 	switch remote.Failure(err) {
 	case remote.InvalidLink:
-		issue.title, issue.body = "连接码无法识别", "请在电脑的 Retty「设置 → 连接」中显示二维码，重新扫描。"
+		issue.title, issue.body = "连接码无法识别", "请点击电脑 Retty 右上角的连接按钮，显示本机二维码后重新扫描。"
 		issue.automatic, issue.retry = false, false
 	case remote.NetworkUnavailable:
 		issue.title, issue.body = "当前网络不可用", "请检查 Wi-Fi、蜂窝网络，以及 Retty 的联网权限，再重试。"

@@ -22,12 +22,25 @@ type AgentState struct {
 	Updated            time.Time `json:"updated,omitzero"`
 	WaitRevision       uint64    `json:"waitRevision,omitempty"`
 	CompletionRevision uint64    `json:"completionRevision,omitempty"`
+	Source             string    `json:"source,omitempty"`
+	Label              string    `json:"label,omitempty"`
+	Message            string    `json:"message,omitempty"`
+	Progress           *int      `json:"progress,omitempty"`
 }
 
 type AgentEvent struct {
 	Agent string           `json:"agent"`
 	Input agents.HookInput `json:"input"`
 	At    time.Time        `json:"at"`
+}
+
+// Equal compares progress values, not their allocation after JSON decoding.
+func (a AgentState) Equal(b AgentState) bool {
+	if (a.Progress == nil) != (b.Progress == nil) || a.Progress != nil && *a.Progress != *b.Progress {
+		return false
+	}
+	a.Progress, b.Progress = nil, nil
+	return a == b
 }
 
 type agentTracker struct {
@@ -50,7 +63,24 @@ func (s *session) reportAgent(token string, event *AgentEvent) error {
 	if s.exited {
 		return errors.New("session exited")
 	}
+	// Revisions share a monotonic space when a session switches between
+	// generic terminal status and an agent integration.
+	previous := s.agent.state
 	s.agent.apply(*event)
+	if s.agent.state.WaitRevision > previous.WaitRevision {
+		s.agent.state.WaitRevision = max(s.agent.state.WaitRevision, s.programStatus.serial+1)
+	}
+	if s.agent.state.CompletionRevision > previous.CompletionRevision {
+		s.agent.state.CompletionRevision = max(s.agent.state.CompletionRevision, s.programStatus.serial+1)
+	}
+	h := agents.NormalizeHook(event.Agent, event.Input)
+	accepted := s.agent.lastAt.Equal(event.At) && s.agent.state.ID == event.Agent && s.agent.state.SessionID == h.SessionID
+	if accepted && !event.At.Before(s.programStatus.lastReport) && (h.Event == "UserPromptSubmit" || h.Event == "SessionStart") {
+		s.programStatus.acknowledge()
+		if len(s.programStatus.records) == 0 {
+			s.programStatus.lastReport = time.Time{}
+		}
+	}
 	return nil
 }
 

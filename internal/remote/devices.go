@@ -2,6 +2,8 @@ package remote
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net"
 	"sort"
@@ -14,10 +16,79 @@ import (
 )
 
 type ConnectedDevice struct {
+	ID        string
 	Name      string
 	OS        string
 	Connected time.Time
 	lastSeen  time.Time
+}
+
+// A Tailcat peer has one overlay address for all its control and terminal TCP
+// streams. Ports identify streams, not devices. Never expose that address in UI.
+func deviceConnectionID(conn net.Conn) string {
+	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		host = conn.RemoteAddr().String()
+	}
+	sum := sha256.Sum256([]byte(host))
+	return hex.EncodeToString(sum[:12])
+}
+
+// DisconnectDevice stops only this peer's streams; the session daemon and PTYs
+// continue. Pause this peer on this bridge so automatic redial cannot undo it.
+func (b *Bridge) DisconnectDevice(id string) bool {
+	b.mu.Lock()
+	known := false
+	for _, d := range b.devices {
+		known = known || d.ID == id
+	}
+	if !known || b.closed {
+		b.mu.Unlock()
+		return false
+	}
+	if b.disconnected == nil {
+		b.disconnected = make(map[string]bool)
+	}
+	b.disconnected[id] = true
+	var conns []net.Conn
+	for conn := range b.conns {
+		if deviceConnectionID(conn) == id {
+			conns = append(conns, conn)
+			delete(b.devices, conn)
+		}
+	}
+	b.mu.Unlock()
+	for _, conn := range conns {
+		conn.Close()
+	}
+	return true
+}
+
+func (b *Bridge) DeviceDisconnected(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.disconnected[id]
+}
+
+// DeviceConnected includes idle retained controls, unlike Devices' UI lease.
+func (b *Bridge) DeviceConnected(id string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed || b.disconnected[id] {
+		return false
+	}
+	for _, d := range b.devices {
+		if d.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+func (b *Bridge) AllowDevice(id string) {
+	b.mu.Lock()
+	delete(b.disconnected, id)
+	b.mu.Unlock()
 }
 
 const deviceLease = 20 * time.Second
@@ -51,7 +122,7 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 	var mu sync.Mutex
 	pending := make(map[int64]string)
 	metadata := make(map[int64]rex.DeviceInfo)
-	d := ConnectedDevice{Name: "iPhone"}
+	d := ConnectedDevice{ID: deviceConnectionID(conn), Name: "iPhone"}
 	hello, control, terminalStream := false, false, false
 	reads := jsonLines{line: func(line []byte) {
 		var req rex.Request
@@ -122,15 +193,22 @@ func (b *Bridge) observe(conn net.Conn) *observedConn {
 			b.onDevice(info)
 		}
 		now := time.Now()
+		first := d.Connected.IsZero()
 		if d.Connected.IsZero() {
 			d.Connected = now
 		}
 		d.lastSeen = now
 		conn.SetReadDeadline(now.Add(controlIdleTimeout))
 		b.mu.Lock()
-		defer b.mu.Unlock()
-		if !b.closed {
+		if !b.closed && !b.disconnected[d.ID] {
 			b.devices[conn] = d
+			first = first && b.onPeer != nil
+		} else {
+			first = false
+		}
+		b.mu.Unlock()
+		if first {
+			b.onPeer(d)
 		}
 	}}
 	return &observedConn{Conn: conn, reads: reads, writes: writes}

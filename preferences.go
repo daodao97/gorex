@@ -11,7 +11,6 @@ var settingsSections = []struct{ title, label, glyph string }{
 	{"外观", "Appearance", "sun"},
 	{"终端", "Terminal settings", "square-terminal"},
 	{"Agent", "Agent integrations", "bot"},
-	{"连接", "Connections", "monitor"},
 	{"关于", "About Retty", "circle-dot"},
 }
 
@@ -24,6 +23,7 @@ type preferenceItem struct {
 }
 
 func (a *App) openSettings() {
+	a.finishDesktopDialog()
 	a.refreshAgentHooks()
 	a.settingsOpen = true
 	a.settingsQuery = ""
@@ -147,18 +147,6 @@ func (a *App) settingsPage(c *ui.Context, k *colors) {
 
 func (a *App) preferenceItems() []preferenceItem {
 	items := []preferenceItem{
-		{id: "desktop-connection", title: "连接其他桌面", label: "Connect desktop", detail: "粘贴 Retty 连接码，打开已有会话或在其他电脑上新建终端。", group: "远端电脑", section: 3,
-			control: func(c *ui.Context) {
-				if ui.Button(c, "管理连接").Label("Manage desktop connections").Clicked() {
-					a.showDesktopConnections(nil)
-				}
-			}},
-		{id: "phone-connection", title: "允许其他设备连接", label: "Connect phone", detail: "手机扫码，或在另一台电脑粘贴连接码，继续此电脑上的会话。", group: "连接此电脑", section: 3,
-			control: func(c *ui.Context) {
-				if ui.Button(c, "显示二维码").Label("Show phone connection QR code").Clicked() {
-					a.openPhonePair()
-				}
-			}},
 		{id: "appearance", title: "主题", label: "Color theme", detail: "选择浅色、深色，或跟随系统的外观设置。", group: "颜色", section: 0,
 			modified: prefs.Appearance != "", reset: func() { a.setAppearance("") },
 			control: func(c *ui.Context) {
@@ -340,10 +328,6 @@ func settingsSwitch(c *ui.Context, value *bool, label string) ui.Element {
 func (a *App) settingsContent(c *ui.Context, theme *ui.Theme) {
 	query := strings.ToLower(strings.TrimSpace(a.settingsQuery))
 	if a.settingsSection == 3 && query == "" && !a.settingsModifiedOnly {
-		a.desktopConnectionsSettings(c, colorsOf(c))
-		return
-	}
-	if a.settingsSection == 4 && query == "" && !a.settingsModifiedOnly {
 		ui.Text(c, "Retty").FontSize(17).FontWeight(600).TextColor(theme.Text).Margin(12, 0)
 		ui.Text(c, "Reconnect TTY · Relay TTY").FontSize(13).TextColor(theme.TextMuted)
 		ui.Text(c, "换个屏幕，接着工作。电脑、手机与服务器上的持久终端会话。").FontSize(12).TextColor(theme.TextMuted).Margin(16, 0)

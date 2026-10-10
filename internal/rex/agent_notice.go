@@ -16,7 +16,15 @@ func AgentNoticeID(desktop string, s SessionInfo) string {
 	if a.State == agents.Completed || a.State == agents.Failed {
 		revision = a.CompletionRevision
 	}
-	key := desktop + "\x00" + s.ID + "\x00" + a.ID + "\x00" + a.SessionID + "\x00" + a.State + "\x00" + strconv.FormatUint(revision, 10)
+	identity := a.ID
+	// App inheritance is presentation, not a new event.
+	if a.Source == ProgramStatusSource {
+		identity = ""
+	}
+	key := desktop + "\x00" + s.ID + "\x00" + identity + "\x00" + a.SessionID + "\x00" + a.State + "\x00" + strconv.FormatUint(revision, 10)
+	if a.Source != "" {
+		key += "\x00" + a.Source
+	}
 	if a.State != agents.Waiting && revision == 0 {
 		key += "\x00" + strconv.FormatInt(a.Updated.UnixNano(), 10)
 	}
@@ -29,7 +37,7 @@ func AgentNoticeID(desktop string, s SessionInfo) string {
 // when a viewer first subscribes.
 func AgentNoticeTransition(previous, current SessionInfo) bool {
 	p, a := previous.Agent, current.Agent
-	same := p.ID == a.ID && p.SessionID == a.SessionID
+	same := (p.ID == a.ID || a.Source == ProgramStatusSource) && p.SessionID == a.SessionID && p.Source == a.Source
 	switch a.State {
 	case agents.Waiting:
 		return !same || a.WaitRevision > p.WaitRevision || p.State != agents.Waiting

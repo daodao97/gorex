@@ -128,6 +128,7 @@ type App struct {
 	agentHookError        string
 	agentNotified         map[string]uint64
 	agentFinishedNotified map[string]uint64
+	programNoticeLimiter  rex.ProgramNoticeLimiter
 	agentNotices          map[string]func()
 	agentNoticeKinds      map[string]string
 	agentNotify           func(mygo.NotificationOptions, func()) func()
@@ -1044,7 +1045,7 @@ func (a *App) applyHost(host *desktopHost, byID map[string]rex.SessionInfo) {
 					}
 				}
 				integratedFinished := completion > 0 && a.agentFinishedNotified[p.noticeKey()] >= completion
-				if !seen && !integratedFinished && time.Since(was.LastInput) > 8*time.Second {
+				if !seen && !integratedFinished && was.Agent.Source != rex.ProgramStatusSource && in.Agent.Source != rex.ProgramStatusSource && time.Since(was.LastInput) > 8*time.Second {
 					prog := programOf(was.Program)
 					a.showPaneNotice(p, "program", mygo.NotificationOptions{
 						Title: prog.Name + " finished",

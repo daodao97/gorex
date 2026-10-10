@@ -3,6 +3,7 @@ package main
 import (
 	"retty/internal/agents"
 	"retty/internal/rex"
+	"time"
 )
 
 type mobileAgentNotice struct{ ID, Desktop, Session, Title, Body string }
@@ -44,7 +45,7 @@ func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
 		if initial || !seen || m.pushDisabled {
 			continue
 		}
-		same := state.ID == previous.Agent.ID && state.SessionID == previous.Agent.SessionID
+		same := (state.ID == previous.Agent.ID || state.Source == rex.ProgramStatusSource) && state.SessionID == previous.Agent.SessionID && state.Source == previous.Agent.Source
 		waiting := state.State == agents.Waiting && (!same || state.WaitRevision > previous.Agent.WaitRevision || previous.Agent.State != agents.Waiting)
 		finished := (state.State == agents.Completed || state.State == agents.Failed) && (!same || state.CompletionRevision > previous.Agent.CompletionRevision)
 		if !waiting && !finished {
@@ -58,7 +59,13 @@ func (m *mobileApp) updateSessions(sessions []rex.SessionInfo, initial bool) {
 		if !m.rememberNotice(id) {
 			continue
 		}
+		if !m.programNoticeLimiter.Allow(key, state, time.Now()) {
+			continue
+		}
 		notice := mobileAgentNotice{ID: id, Desktop: m.desktopKey(), Session: session.ID, Title: programOf(state.ID).Name + " · " + agentStateLabel(state), Body: m.sessionTitle(session)}
+		if state.Source == rex.ProgramStatusSource {
+			notice.Body = rex.AgentNoticeBody("", session)
+		}
 		if m.agentNotify != nil {
 			m.agentNotify(notice)
 		}
@@ -85,7 +92,6 @@ func (m *mobileApp) openNotifiedSession(desktop, sid string) {
 				if m.selected.ID != sid || m.term == nil {
 					m.openSession(s)
 				}
-				m.creating = false
 				m.invalidate()
 				return
 			}

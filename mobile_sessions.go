@@ -59,7 +59,7 @@ func (m *mobileApp) sessionStatus(s rex.SessionInfo) string {
 			return ""
 		case agents.Waiting:
 			switch state.Reason {
-			case "permission", "question":
+			case "permission", "question", "auth":
 			default:
 				return ""
 			}

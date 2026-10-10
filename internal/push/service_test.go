@@ -20,6 +20,33 @@ type testSender struct {
 	resume  chan struct{}
 }
 
+func TestProgramStatusAPNsWithoutAgentHook(t *testing.T) {
+	s, provider, hello, pane, _ := newFixture(t)
+	now := time.Now()
+	percent := 0
+	pane.Agent = rex.AgentState{ID: "cargo", Source: rex.ProgramStatusSource, SessionID: "osc7501:build", State: agents.Running, Progress: &percent, Updated: now}
+	s.observe(hello, []rex.SessionInfo{pane}, now)
+	pane.Agent.State, pane.Agent.CompletionRevision, pane.Agent.Message = agents.Completed, 2, "All tests passed"
+	s.observe(hello, []rex.SessionInfo{pane}, now.Add(time.Second))
+	s.deliver(context.Background(), now.Add(5*time.Second))
+	s.observe(hello, []rex.SessionInfo{pane}, now.Add(6*time.Second))
+	s.deliver(context.Background(), now.Add(10*time.Second))
+	if len(provider.sent) != 1 || provider.sent[0].Payload.Title != "cargo · 已完成" || provider.sent[0].Payload.Body != "All tests passed" {
+		t.Fatal("generic completion push missing or duplicated", provider.sent)
+	}
+	// A worker restart retains receipts and does not replay the status.
+	reloaded, err := newService(s.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded.provider = provider
+	reloaded.observe(hello, []rex.SessionInfo{pane}, now.Add(11*time.Second))
+	reloaded.deliver(context.Background(), now.Add(15*time.Second))
+	if len(provider.sent) != 1 {
+		t.Fatal("worker restart repeated completion")
+	}
+}
+
 func TestPushUsesSpecificTaskInsteadOfHostOrProjectPath(t *testing.T) {
 	s, provider, hello, pane, _ := newFixture(t)
 	now := time.Now()

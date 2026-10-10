@@ -19,21 +19,12 @@ func TestMobileNavigationBackReleasesOnlyCurrentPage(t *testing.T) {
 	defer client.Close()
 	m := &mobileApp{client: client, sessions: []rex.SessionInfo{{ID: "fixture"}}, history: []desktopRecent{{Name: "Mac"}}}
 	tt := ui.NewTester(m.view, 390, 750)
-	m.creating = true
-	tt.Frame()
-	m.navigation.Back()
-	tt.Frame()
-	if m.creating || m.client != client || m.navigation.Path() != "/sessions" {
-		t.Fatal("returning from the form disconnected the desktop or retained the form")
-	}
-	m.creating = true
-	tt.Frame()
 	term, err := terminal.New(terminal.Options{Conn: nopConn{}, Font: terminal.Font{Family: termFont.Family, Size: 13}, Theme: lightTerm})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer term.Close()
-	m.term, m.creating, m.selected = term, false, m.sessions[0]
+	m.term, m.selected = term, m.sessions[0]
 	tt.Frame()
 	m.navigation.Back()
 	tt.Frame()
@@ -41,7 +32,7 @@ func TestMobileNavigationBackReleasesOnlyCurrentPage(t *testing.T) {
 		t.Fatal("terminal Back did not detach while preserving desktop sessions")
 	}
 	if m.navigation.Path() != "/sessions" || m.navigation.CanGoForward() {
-		t.Fatal("terminal Back returned to the form or retained a closed terminal in history")
+		t.Fatal("terminal Back did not return to the list or retained a closed terminal in history")
 	}
 	m.navigation.Back()
 	tt.Frame()
@@ -127,10 +118,8 @@ func TestMobileScreensFitPhoneAndKeyboard(t *testing.T) {
 			if size[0] == 390 {
 				saveSettingsImage(t, tt, "mobile-sessions-"+map[bool]string{false: "light", true: "dark"}[dark])
 			}
-			m.creating = true
-			tt.Frame()
-			if _, ok := tt.Find("工作目录"); !ok {
-				t.Fatal("new-session directory missing")
+			if r, ok := tt.Find("新建会话"); !ok || r.W < 44 || r.H < 44 || r.X+r.W > size[0]+1 {
+				t.Fatalf("unusable create target on %v", size)
 			}
 			term, err := terminal.New(terminal.Options{Conn: nopConn{}, Font: terminal.Font{Family: termFont.Family, Size: 13}, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true})
 			if err != nil {

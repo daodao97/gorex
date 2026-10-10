@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/skip2/go-qrcode"
 	"retty/internal/agents"
 	"retty/internal/remote"
 	"retty/internal/rex"
@@ -128,10 +129,10 @@ func TestDesktopRemoteSessionRoutingAndDetach(t *testing.T) {
 	if p.info.Dir == "WRONG-LOCAL-DIR" {
 		t.Fatal("local poll changed remote pane")
 	}
-	if err := tt.Click("选择新会话电脑"); err != nil {
+	if err := tt.Click("连接"); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.ChooseMenuItem("此电脑 · 新建会话"); err != nil {
+	if err := tt.Click("新建本地会话"); err != nil {
 		t.Fatal(err)
 	}
 	if a.tab().Host != nil || a.paneClient(a.tab().Focus) != a.client {
@@ -273,46 +274,119 @@ func TestDesktopNotificationKeysAndLocalPollIsolation(t *testing.T) {
 
 func TestDesktopConnectionViews(t *testing.T) {
 	a, tt := newStaticTestApp(t)
-	h := &desktopHost{key: "visual", client: &rex.Client{}, hello: rex.Hello{Host: rex.HostInfo{Name: "Studio Mac", Home: "/Users/developer"}}, recent: desktopRecent{Name: "Studio Mac"}, sessions: []rex.SessionInfo{
+	a.tab().Focus.term.Feed([]byte("\x1b[2J\x1b[H\x1b[32m❯\x1b[0m retty\r\n\r\nPersistent terminals, across your devices.\r\n"))
+	h := &desktopHost{key: "visual", client: &rex.Client{}, hello: rex.Hello{Host: rex.HostInfo{Name: "Studio Mac", Home: "/Users/developer"}}, recent: desktopRecent{Name: "Studio Mac", OS: "macOS"}, sessions: []rex.SessionInfo{
 		{ID: "one", Program: "codex", Shell: "zsh", Dir: "/Users/developer/work/retty"},
 		{ID: "two", Program: "claude", Shell: "zsh", Dir: "/Users/developer/work/mygo"},
 	}}
 	a.desktops.hosts = []*desktopHost{h}
-	a.showDesktopConnections(h)
+	a.desktops.recentSessions = []mobileRecentSession{{Desktop: h.key, Session: "one", Title: "修复会话同步", Program: "codex"}}
+	a.desktops.incoming = []remote.ConnectedDevice{{ID: "phone-fixture", Name: "iPhone 16", OS: "iOS", Connected: time.Date(2026, 10, 10, 9, 0, 0, 0, time.Local)}}
+	before := a.tab().Focus.bounds
+	if err := tt.Click("连接"); err != nil {
+		t.Fatal(err)
+	}
 	tt.Frame()
-	if !slices.Contains(tt.Texts(), "已有会话") {
-		t.Fatal("session browser missing", tt.Texts())
+	panel, ok := tt.Find("连接侧边栏")
+	if !ok || panel.X != 616 || panel.Y != compactTitleH || panel.W != 384 || panel.H != 620-compactTitleH {
+		t.Fatal("drawer is not attached to the right edge", panel)
+	}
+	if a.tab().Focus.bounds != before {
+		t.Fatal("opening the drawer resized the terminal")
+	}
+	for _, dark := range []bool{false, true} {
+		tt.SetDark(dark)
+		// Headless frames use wall time; let the pane's 160 ms color transition finish.
+		time.Sleep(180 * time.Millisecond)
+		tt.Frame()
+		if dark {
+			r, g, b, _ := tt.Image().At(100, 500).RGBA()
+			if max(r, g, b) > 50*257 {
+				t.Fatal("drawer theme leaked into the terminal background")
+			}
+		}
+		saveDesktopImage(t, tt, map[bool]string{false: "desktop-connect-light.png", true: "desktop-connect-dark.png"}[dark])
 	}
 	tt.SetClipboard("invalid fixture")
 	if err := tt.Click("粘贴桌面连接码"); err != nil {
 		t.Fatal(err)
 	}
-	if a.desktops.input != "invalid fixture" {
-		t.Fatal("paste did not fill connection input")
+	if a.desktops.err == "" || a.desktops.input != "invalid fixture" || len(a.desktops.hosts) != 1 {
+		t.Fatal("invalid clipboard link was accepted or not read")
 	}
-	if err := tt.Click("连接其他桌面"); err != nil {
+	if err := tt.Click("查看电脑 Studio Mac"); err != nil {
 		t.Fatal(err)
 	}
-	if a.desktops.err == "" {
-		t.Fatal("invalid connection accepted")
+	tt.Frame()
+	if _, ok := tt.Find("打开远端会话 one"); !ok || a.desktops.selected != h {
+		t.Fatal("device row did not open its sessions")
 	}
-	a.desktops.input, a.desktops.err = "", ""
-	for _, dark := range []bool{false, true} {
-		tt.SetDark(dark)
-		saveDesktopImage(t, tt, map[bool]string{false: "desktop-connect-light.png", true: "desktop-connect-dark.png"}[dark])
+	saveDesktopImage(t, tt, "desktop-remote-sessions-dark.png")
+	if err := tt.Click("返回"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.desktops.selected != nil {
+		t.Fatal("Back did not return to connection history")
+	}
+	code, err := qrcode.New("retty://connect?address=disposable-test-fixture", qrcode.Medium)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.phone = &phonePair{link: "fixture connection", qr: code.Bitmap()}
+	a.desktops.showLocal = true
+	tt.Frame()
+	if _, ok := tt.Find("手机连接二维码"); !ok {
+		t.Fatal("local QR missing from drawer")
+	}
+	saveDesktopImage(t, tt, "desktop-local-qr-dark.png")
+	if err := tt.Click("复制连接码"); err != nil {
+		t.Fatal(err)
+	}
+	if tt.Clipboard() != a.phone.link {
+		t.Fatal("local connection code was not copied")
 	}
 	tt.SetSize(560, 340)
+	tt.Frame()
+	for _, label := range []string{"返回", "关闭桌面连接"} {
+		r, ok := tt.Find(label)
+		if !ok || r.W < 28 || r.H < 28 || r.X < 0 || r.X+r.W > 560 || r.Y+r.H > 340 {
+			t.Fatal("drawer navigation clipped at minimum window size", label, r)
+		}
+	}
 	if err := tt.Click("关闭桌面连接"); err != nil {
-		t.Fatal("close lost at minimum window size", err)
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if a.desktops.open || !tt.Focused("Terminal") {
+		t.Fatal("closing the drawer did not restore terminal focus")
 	}
 	a.settingsOpen, a.settingsSection = true, 3
 	tt.SetSize(1000, 620)
 	tt.Frame()
-	saveDesktopImage(t, tt, "desktop-connections-settings.png")
-	if !slices.Contains(tt.Texts(), "连接其他桌面") {
-		t.Fatal("settings missing desktop connections")
+	if _, ok := tt.Find("Connections"); ok || slices.Contains(tt.Texts(), "最近连接") {
+		t.Fatal("connection management remains in settings")
 	}
 }
+
+func TestDesktopDrawerClearsOnlySelectedConnections(t *testing.T) {
+	a, tt := newStaticTestApp(t)
+	first, second := &desktopHost{key: "one", recent: desktopRecent{Name: "First"}}, &desktopHost{key: "two", recent: desktopRecent{Name: "Second"}}
+	a.desktops.hosts = []*desktopHost{first, second}
+	a.desktops.recentSessions = []mobileRecentSession{{Desktop: "one", Session: "a"}, {Desktop: "two", Session: "b"}}
+	a.showDesktopConnections(nil)
+	tt.Frame()
+	for _, label := range []string{"清除桌面连接记录", "选择电脑 First", "确认清除桌面连接记录"} {
+		if err := tt.Click(label); err != nil {
+			t.Fatal(err)
+		}
+		tt.Frame()
+	}
+	if len(a.desktops.hosts) != 1 || a.desktops.hosts[0] != second || len(a.desktops.recentSessions) != 1 || a.desktops.recentSessions[0].Desktop != "two" || a.desktops.historySelection != nil {
+		t.Fatal("selective removal deleted the wrong connection or session shortcut")
+	}
+}
+
 func saveDesktopImage(t *testing.T, tt *ui.Tester, name string) {
 	t.Helper()
 	dir := os.Getenv("MYGO_TEST_IMAGES")

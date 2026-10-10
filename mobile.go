@@ -39,8 +39,7 @@ type mobileApp struct {
 	home                               bool
 	pollCancel                         context.CancelFunc
 	resumeCheckID                      uint64
-	busy, scanning, creating           bool
-	directory                          string
+	busy, scanning                     bool
 	resumeLink, resumeSID              string
 	storage                            chan func()
 	store                              *mygo.SecureStore
@@ -66,6 +65,7 @@ type mobileApp struct {
 	closingSession                     string
 	closedSessions                     map[string]bool
 	agentPrevious                      map[string]rex.SessionInfo
+	programNoticeLimiter               rex.ProgramNoticeLimiter
 	notificationDenied                 bool
 	agentNotify                        func(mobileAgentNotice)
 	pendingDesktop, pendingSession     string
@@ -215,7 +215,7 @@ func (m *mobileApp) disconnect(forget bool) {
 	}
 	m.detach()
 	m.closeConnectionAfterSizeRelease()
-	m.busy, m.creating = false, false
+	m.busy = false
 	m.sessions = nil
 	m.resumeLink, m.resumeSID = "", ""
 	m.connectionIssue, m.connectionDetailsOpen = nil, false
@@ -247,7 +247,7 @@ func (m *mobileApp) connect(raw string) {
 	m.historySelection = nil
 	if m.link == link && m.connectionUsable() {
 		m.detach()
-		m.home, m.creating, m.error = false, false, ""
+		m.home, m.error = false, ""
 		m.invalidate()
 		return
 	}
@@ -481,18 +481,18 @@ func (m *mobileApp) openSession(s rex.SessionInfo) {
 		m.error = "无法打开终端：" + err.Error()
 		return
 	}
-	m.term, m.stream, m.selected, m.creating, m.error = term, stream, s, false, ""
+	m.term, m.stream, m.selected, m.error = term, stream, s, ""
 	m.resumeSID = ""
 	m.rememberSession(s)
 	m.invalidate()
 }
 
 func (m *mobileApp) create() {
-	if m.client == nil || m.busy {
+	if m.client == nil || m.busy || m.reconnecting || m.connectionIssue != nil || m.background {
 		return
 	}
 	m.busy, m.error = true, ""
-	client, generation, directory := m.client, m.generation, strings.TrimSpace(m.directory)
+	client, generation, directory := m.client, m.generation, m.hello.Host.Home
 	go func() {
 		session, err := client.Create(rex.CreateOptions{Dir: directory, Cols: 48, Rows: 24})
 		mygo.RunOnMain(func() {
@@ -529,15 +529,7 @@ func mobileSessionTitle(s rex.SessionInfo) string {
 }
 
 func (m *mobileApp) view(c *ui.Context) {
-	theme := *c.Theme()
-	theme.FontSize, theme.Radius = 16, 12
-	if theme.Dark {
-		theme.Background = ui.Hex("#111315")
-		theme.Surface = ui.Hex("#1e2126")
-	} else {
-		theme.Background = ui.Hex("#f5f6f8")
-		theme.Surface = ui.Hex("#ffffff")
-	}
+	theme := connectionTheme(c.Theme())
 	c.SetTheme(&theme)
 	c.Root().Background(theme.Background)
 	m.syncNavigation()
@@ -548,8 +540,6 @@ func (m *mobileApp) view(c *ui.Context) {
 			switch page.Path() {
 			case "/sessions/terminal":
 				m.terminalView(c)
-			case "/sessions/new":
-				m.createView(c)
 			case "/sessions":
 				m.sessionsView(c)
 			default:
@@ -571,7 +561,6 @@ func (m *mobileApp) view(c *ui.Context) {
 		case "/sessions":
 			m.resumeSID = ""
 			m.detach()
-			m.creating = false
 		}
 		m.navigationPage = page
 		// Closed terminal views cannot be revisited through forward history.
@@ -588,9 +577,6 @@ func (m *mobileApp) syncNavigation() {
 	page := "/connect"
 	if !m.home && (m.client != nil || m.reconnecting) {
 		page = "/sessions"
-		if m.creating {
-			page = "/sessions/new"
-		}
 	}
 	if m.term != nil {
 		page = "/sessions/terminal"
@@ -611,15 +597,11 @@ func (m *mobileApp) syncNavigation() {
 		m.navigation.Reset("/connect")
 		m.navigation.Push(page)
 	default:
-		if m.navigation.Path() == "/sessions/new" && page == "/sessions/terminal" {
-			m.navigation.Replace(page)
-		} else {
-			if m.navigation.Path() != "/sessions" {
-				m.navigation.Reset("/connect")
-				m.navigation.Push("/sessions")
-			}
-			m.navigation.Push(page)
+		if m.navigation.Path() != "/sessions" {
+			m.navigation.Reset("/connect")
+			m.navigation.Push("/sessions")
 		}
+		m.navigation.Push(page)
 	}
 	m.navigationPage = page
 }
@@ -687,7 +669,7 @@ func (m *mobileApp) connectView(c *ui.Context) {
 	m.refreshRecentPresence(c)
 	m.header(c, "Retty", nil, false)
 	ui.Scroll(c).Grow(1).MinHeight(0).FillWidth().HideScrollbars().Padding(16).Gap(16).Children(func() {
-		ui.Text(c, "电脑上的 Retty · 设置 → 连接").FontSize(13).TextColor(c.Theme().TextMuted).FillWidth()
+		ui.Text(c, "电脑上的 Retty · 右上角连接按钮").FontSize(13).TextColor(c.Theme().TextMuted).FillWidth()
 		if ui.PrimaryButton(c, "").Label("扫码连接桌面").Role(ui.RoleButton).Height(48).FillWidth().Disabled(m.busy || m.scanning || m.reconnecting).Children(func() {
 			ui.Icon(c, icon("scan-line")).Size(20, 20)
 			ui.Text(c, "扫码连接桌面").FontSize(16)
@@ -790,12 +772,14 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 			ui.Text(c, "会话").FontSize(17).Bold().PassThrough()
 			ui.Text(c, fmt.Sprint(len(m.sessions))).FontSize(13).TextColor(c.Theme().TextMuted).PassThrough()
 		})
-		if ui.ButtonBase(c).Label("新建会话").Disabled(m.reconnecting).Role(ui.RoleButton).Size(44, 44).Children(func() {
-			ui.Icon(c, icon("plus")).Size(23, 23).TextColor(c.Theme().Accent)
+		if ui.ButtonBase(c).Label("新建会话").Disabled(m.busy || m.reconnecting || m.connectionIssue != nil).Role(ui.RoleButton).Size(44, 44).Children(func() {
+			if m.busy && !m.reconnecting {
+				ui.Spinner(c).Size(18, 18).TextColor(c.Theme().Accent)
+			} else {
+				ui.Icon(c, icon("plus")).Size(23, 23).TextColor(c.Theme().Accent)
+			}
 		}).Clicked() {
-			m.creating = true
-			m.directory = m.hello.Host.Home
-			m.error = ""
+			m.create()
 		}
 	})
 	ui.Row(c).FillWidth().Height(44).Padding(0, 8, 0, 20).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -822,28 +806,6 @@ func (m *mobileApp) sessionsView(c *ui.Context) {
 		}
 		m.sessionList(c)
 	})
-}
-
-func (m *mobileApp) createView(c *ui.Context) {
-	m.header(c, "新建会话", func() {
-		if !m.busy {
-			m.creating = false
-			mygo.App.DismissKeyboard()
-		}
-	}, false)
-	ui.Column(c).Padding(20).Gap(16).FillWidth().Children(func() {
-		ui.Text(c, "工作目录").Bold()
-		ui.TextInput(c, &m.directory).Label("工作目录").Placeholder(m.hello.Host.Home).FillWidth().Height(50).InputOptions(ui.InputOptions{Keyboard: ui.KeyboardText, Return: ui.ReturnDone, Correction: ui.CorrectionOff, Capitalization: ui.CapitalizeNone})
-		ui.Text(c, "在桌面电脑上启动默认 Shell。").FontSize(14).TextColor(c.Theme().TextMuted)
-		if ui.PrimaryButton(c, "创建并打开").Height(50).FillWidth().Disabled(m.busy).Clicked() {
-			mygo.App.DismissKeyboard()
-			m.create()
-		}
-		if m.busy {
-			ui.Text(c, "正在创建…")
-		}
-	})
-	m.errorView(c)
 }
 
 func (m *mobileApp) terminalView(c *ui.Context) {
