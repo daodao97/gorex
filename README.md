@@ -5,7 +5,7 @@
 <h1 align="center">Retty</h1>
 
 <p align="center">
-  <b>Reconnect TTY. Relay TTY.</b><br />
+  <b>终端的无缝接力</b><br />
   换个屏幕，接着工作。
 </p>
 
@@ -14,7 +14,13 @@
 </p>
 
 <p align="center">
-  <a href="https://testflight.apple.com/join/fvYUeH4Z"><img src="https://img.shields.io/badge/TestFlight-加入内测-007AFF?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="通过 TestFlight 安装 Retty" /></a>
+  Tailcat 端到端加密连接 &nbsp;|&nbsp; 无需自建服务器 &nbsp;|&nbsp; 无需 VPN 或开放入站端口
+</p>
+
+<p align="center">
+  <a href="https://github.com/daodao97/retty/releases/download/v0.1.1/Retty-0.1.1-macos-universal.dmg"><img src="https://img.shields.io/badge/macOS-下载_Universal_DMG-111315?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="下载 Retty macOS 版（Apple Silicon 与 Intel）" /></a>
+  &nbsp;
+  <a href="https://testflight.apple.com/join/fvYUeH4Z"><img src="https://img.shields.io/badge/iOS-加入_TestFlight-007AFF?style=flat-square&amp;logo=apple&amp;logoColor=white" alt="通过 TestFlight 安装 Retty iOS 版" /></a>
 </p>
 
 ![同一个 Retty 会话同时显示在 Mac 桌面和 iPhone 上](docs/images/hero-dark.jpg)
@@ -23,12 +29,14 @@
 
 Retty 把 shell 交给一个常驻的会话服务：关掉窗口、锁上手机、断开 SSH，里面的程序都照常运行；任何一台设备重新连上，都能精确恢复到当前屏幕。
 
+电脑、手机与远程主机之间通过 [Tailcat](https://github.com/tailscale/tailcat) 建立**端到端加密连接**，扫码或粘贴连接码即可接续终端，**无需自建服务器**，也无需 Tailscale 账号、VPN 或开放入站端口。
+
 ## 为什么是 Retty
 
 - **🔁 会话永不中断**　终端由后台服务持有，界面只是入口。退出 App、网络断开、切换设备都不会结束任务，全屏程序重连后原样恢复。
 - **📱 一部手机，所有电脑**　扫码连上 Mac 和 Linux 服务器，首页汇总各主机的最近会话，一点直达。看到的是同一个 PTY，不是截图或简化视图；全屏程序按手机屏幕重新绘制。
 - **🤖 懂 Agent 的终端**　识别 37 种终端 Agent 的名称和图标；Claude Code、Codex、Gemini CLI、Qwen Code 等待授权、完成或失败时，在桌面或手机上提醒你。
-- **🌐 连接任何主机**　Mac 之间互连，或在无桌面的 Linux 服务器上 `retty serve`。基于 Tailcat 加密隧道，无需 Tailscale 账号、VPN 或开放入站端口。
+- **🌐 加密互连，无需自建服务器**　Mac、iPhone 与 Linux 主机通过 Tailcat 端到端加密隧道互连。扫码或粘贴连接码即可连接，无需 Tailscale 账号、VPN 或开放入站端口；无桌面的主机运行 `retty serve` 即可接入。
 - **⚡ 原生且轻量**　Go 编写，基于 [MyGo](https://github.com/daodao97/mygo) 原生 UI 与 Ghostty 的 libghostty-vt 渲染终端；桌面不用 WebView，iOS 使用 UIKit 宿主。
 
 ## 三步上手
@@ -106,9 +114,9 @@ Retty 只负责观察与提醒，不替 Agent 做授权决定，也不安装 Age
 
 | 平台 | 获取方式 |
 | --- | --- |
-| macOS 13+ | [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 的 Universal DMG（Apple Silicon + Intel）。当前尚未配置 Developer ID，下载后可能被 Gatekeeper 拦截，见[安装说明](docs/development.md#下载后提示已损坏)。 |
+| macOS 13+ | [GitHub Releases](https://github.com/daodao97/retty/releases/latest) 的 Universal DMG（Apple Silicon + Intel）。当前尚未配置 Developer ID，下载后可能被 Gatekeeper 拦截，见[安装说明](docs/development.md#下载后提示已损坏)。 |
 | iOS 15+ | [通过 TestFlight 安装](https://testflight.apple.com/join/fvYUeH4Z)，也可从源码构建并用自己的证书签名安装（Bundle ID `com.daodao.retty`）。 |
-| Linux / macOS 服务器 | [GitHub Releases](https://github.com/daodao97/gorex/releases/latest) 的 `retty-{系统}-{架构}.tar.gz`，包含 `retty` 与 Ghostty 动态库。 |
+| Linux / macOS 服务器 | [GitHub Releases](https://github.com/daodao97/retty/releases/latest) 的 `retty-{系统}-{架构}.tar.gz`，包含 `retty` 与 Ghostty 动态库。 |
 
 推送 `main` 时生成日常构建，Actions Artifacts 保留 14 天。推送与 `mygo.json.version` 对应的 `v*` 标签，或手动运行 **Release**，会构建四个平台的 CLI 和 Universal DMG，校验后发布到 GitHub Release，每个包附有 SHA-256 文件。正式签名与公证的配置见[开发说明](docs/development.md#github-release)。
 

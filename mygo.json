@@ -1,7 +1,7 @@
 {
   "name": "Retty",
   "identifier": "com.daodao.retty",
-  "version": "0.1.1",
+  "version": "0.1.0",
   "copyright": "Retty — Reconnect TTY / Relay TTY. Inspired by Rex, built with MyGo.",
   "out": "build",
   "icon": "resources/icon.png",
