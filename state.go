@@ -80,9 +80,12 @@ type Pane struct {
 	streamEnded bool
 	// restored tells that the session was made anew for a pane of a
 	// saved layout whose session was gone.
-	restored bool
-	startDir string
-	find     paneFind
+	restored      bool
+	recoverySID   string
+	recoveryError string
+	recoveryBusy  bool
+	startDir      string
+	find          paneFind
 	// locked tells that a phone holds the session's size, which the pane
 	// shows at that size until unlocked; unlocking, that it is asked to.
 	locked, unlocking bool
@@ -112,7 +115,6 @@ type App struct {
 	// The command palette, settings and the tab being renamed.
 	paletteOpen           bool
 	paletteQuery          string
-	paletteSel            int
 	settingsOpen          bool
 	settingsSection       int
 	settingsQuery         string
@@ -242,7 +244,18 @@ func (a *App) attach(p *Pane, cols, rows int) {
 	if p.SID == "" {
 		term, err := terminal.New(terminal.Options{Conn: nopConn{}, Transparent: true, Font: termFont, Theme: lightTerm, DarkTheme: darkTerm, AdaptiveColors: true, OnSplit: onSplit, CopyRawText: prefs.CopyRawText})
 		if err == nil {
-			term.Feed([]byte("\x1b[31mCould not start a session: " + a.err + "\x1b[0m\r\n"))
+			message := "Could not start a session: " + a.err
+			if p.recoveryError != "" {
+				message = "无法恢复 Agent 会话：" + p.recoveryError
+			}
+			if cols <= 0 {
+				cols = 80
+			}
+			if rows <= 0 {
+				rows = 24
+			}
+			term.Resize(cols, rows)
+			term.Feed([]byte("\x1b[31m" + message + "\x1b[0m\r\n"))
 			p.term = term
 		}
 		return
@@ -305,7 +318,11 @@ func (a *App) attach(p *Pane, cols, rows int) {
 					return
 				}
 				if p.host == nil {
-					a.closePane(p)
+					if p.info.Resumed {
+						a.checkAgentRestoreExit(p, stream)
+					} else {
+						a.closePane(p)
+					}
 				} else {
 					p.streamEnded = true
 				}
@@ -438,7 +455,11 @@ func (a *App) closePane(p *Pane) {
 	if p.term != nil {
 		a.closePaneTerminal(p)
 	}
-	if sid := p.SID; sid != "" {
+	sid := p.SID
+	if sid == "" {
+		sid = p.recoverySID
+	}
+	if sid != "" {
 		c := a.paneClient(p)
 		if p.host == nil {
 			go c.Kill(sid)
@@ -783,6 +804,9 @@ func (a *App) snapshotHost(host *desktopHost) savedLayout {
 	save = func(n *Node) *savedNode {
 		if p := n.Pane; p != nil {
 			s := &savedNode{SID: p.SID, Dir: p.info.Dir}
+			if s.SID == "" {
+				s.SID = p.recoverySID
+			}
 			if s.Dir == "" {
 				s.Dir = p.startDir
 			}
@@ -861,12 +885,18 @@ func (a *App) restore() bool {
 				p = &Pane{ID: a.id(), SID: s.SID, info: in, startDir: s.Dir}
 				a.attach(p, in.Cols, in.Rows)
 			} else {
-				dir := s.Dir
-				if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-					dir, _ = os.UserHomeDir()
+				if a.hello.AgentRecovery && s.SID != "" && !used[s.SID] {
+					used[s.SID] = true
+					p = a.restoreAgentPane(s)
 				}
-				p = a.newPane(dir, s.Cols, s.Rows)
-				p.restored = true
+				if p == nil {
+					dir := s.Dir
+					if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+						dir, _ = os.UserHomeDir()
+					}
+					p = a.newPane(dir, s.Cols, s.Rows)
+					p.restored = true
+				}
 			}
 			p.Tab, p.Node = t, n
 			n.Pane = p

@@ -48,7 +48,7 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 		}
 	}
 	open := a.desktops.qualityHost == h
-	ui.PopoverBase(c.Key("connection-quality-popover"), button, &open, func(panel ui.Element) {
+	popover := ui.PopoverBase(c.Key("connection-quality-popover"), button, &open, func(panel ui.Element) {
 		panel.Width(252).Padding(12).Gap(9).Radius(9).Background(c.Theme().Surface).
 			Border(1, c.Theme().Border).Shadow(0, 4, 16, 0, ui.RGBA(0, 0, 0, .14)).Label("连接指标弹层 " + h.name())
 		a.probeDesktopQuality(h, c.Now())
@@ -100,7 +100,7 @@ func (a *App) desktopQualityTip(c *ui.Context, h *desktopHost) {
 		}
 		ui.Text(c, footnote).FontSize(10).TextColor(c.Theme().TextMuted).Margin(2, 0, 0, 0)
 	})
-	if !open && a.desktops.qualityHost == h {
+	if popover.Dismissed() && a.desktops.qualityHost == h {
 		a.desktops.qualityHost = nil
 	}
 }

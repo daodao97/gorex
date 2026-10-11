@@ -28,22 +28,25 @@ import (
 
 // Server owns the sessions.
 type Server struct {
-	mu         sync.Mutex
-	agentMu    sync.Mutex // serialize shared-daemon session binding and reports
-	agentToken string
-	sessions   map[string]*session
-	order      []string
-	layout     json.RawMessage
-	started    time.Time
-	host       HostInfo
-	hostDone   chan struct{}
-	ln         net.Listener
-	exe        string
-	exeTime    time.Time
-	controls   int
-	idleFrom   time.Time
-	quit       chan struct{}
-	quitOnce   sync.Once
+	mu           sync.Mutex
+	agentMu      sync.Mutex // serialize shared-daemon session binding and reports
+	agentToken   string
+	recoveryPath string
+	recovery     map[string]agentResume
+	ending       bool // explicit End All prevents late hooks from recreating records
+	sessions     map[string]*session
+	order        []string
+	layout       json.RawMessage
+	started      time.Time
+	host         HostInfo
+	hostDone     chan struct{}
+	ln           net.Listener
+	exe          string
+	exeTime      time.Time
+	controls     int
+	idleFrom     time.Time
+	quit         chan struct{}
+	quitOnce     sync.Once
 }
 
 // idleTimeout is how long a server with no sessions and no app waits
@@ -85,6 +88,11 @@ func Serve() error {
 		sessions:   map[string]*session{}, started: time.Now(), ln: ln,
 		hostDone: make(chan struct{}), idleFrom: time.Now(), quit: make(chan struct{}),
 	}
+	if err := s.loadRecovery(dir); err != nil {
+		// Preserve the damaged/unknown file and keep ordinary sessions usable.
+		log.Printf("rex: load Agent recovery: %v", err)
+		s.recoveryPath = ""
+	}
 	if b, err := os.ReadFile(filepath.Join(dir, "layout.json")); err == nil && json.Valid(b) {
 		s.layout = b
 	}
@@ -97,6 +105,7 @@ func Serve() error {
 		close(s.hostDone)
 	}()
 	go s.watchIdle()
+	go s.watchRecovery()
 	go func() {
 		<-s.quit
 		ln.Close()
@@ -254,7 +263,7 @@ func (s *Server) do(req Request) (any, error) {
 		case <-s.hostDone:
 		case <-time.After(3 * time.Second):
 		}
-		return Hello{Version: ProtocolVersion, PID: os.Getpid(), Started: s.started, Host: s.host, Exe: s.exe, ExeTime: s.exeTime}, nil
+		return Hello{Version: ProtocolVersion, PID: os.Getpid(), Started: s.started, Host: s.host, Exe: s.exe, ExeTime: s.exeTime, AgentRecovery: s.recoveryPath != ""}, nil
 	case "list":
 		s.mu.Lock()
 		all := make([]*session, 0, len(s.order))
@@ -268,6 +277,11 @@ func (s *Server) do(req Request) (any, error) {
 		}
 		return infos, nil
 	case "create":
+		s.agentMu.Lock()
+		defer s.agentMu.Unlock()
+		if s.ending {
+			return nil, errors.New("session server is ending")
+		}
 		o := CreateOptions{}
 		if req.Create != nil {
 			o = *req.Create
@@ -283,6 +297,11 @@ func (s *Server) do(req Request) (any, error) {
 		s.mu.Unlock()
 		return ss.info(), nil
 	case "kill":
+		s.agentMu.Lock()
+		defer s.agentMu.Unlock()
+		if err := s.forgetRecovery(req.SID); err != nil {
+			return nil, err
+		}
 		ss, err := s.session(req.SID)
 		if err != nil {
 			return nil, nil // already gone
@@ -296,6 +315,8 @@ func (s *Server) do(req Request) (any, error) {
 		}
 		s.mu.Unlock()
 		return nil, nil
+	case "restoreAgent":
+		return s.restoreAgent(req)
 	case "resize":
 		ss, err := s.session(req.SID)
 		if err != nil {
@@ -367,6 +388,14 @@ func (s *Server) do(req Request) (any, error) {
 		}
 		return nil, nil
 	case "shutdown":
+		s.agentMu.Lock()
+		s.ending = true
+		clear(s.recovery)
+		err := s.saveRecovery()
+		s.agentMu.Unlock()
+		if err != nil {
+			return nil, err
+		}
 		go func() {
 			time.Sleep(50 * time.Millisecond)
 			s.shutdown()

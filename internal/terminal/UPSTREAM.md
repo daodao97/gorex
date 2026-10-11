@@ -100,3 +100,9 @@ routing, connection-quality policies and tab/pane trees remain in Retty.
 Future terminal fixes should land in MyGo first, then be carried into the local
 vendor where applicable. Keep MyGo's native manifest/build generator and Retty's
 iOS/CLI packaging independent when synchronizing.
+
+Fork commit `f83962e` on `feat/ios-platform` incorporates upstream through
+`296ea85` (v0.4.1), first merged into fork `main` as `45e1d2a`. The terminal
+plugin and its native manifest are unchanged from `e482207`; Retty retains
+its local terminal additions and Ghostty library pin. The merge preserves
+startup first-frame readiness, iOS input handling and foreground wake leases.

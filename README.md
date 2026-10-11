@@ -100,6 +100,8 @@ Codex、Claude Code、Gemini CLI、OpenCode、Cursor Agent、Copilot、Aider、A
 
 Retty 也支持 **OSC 7501（Program Status Protocol）**：任何发送该协议的终端程序，都能直接报告运行、进度、等待操作、完成和失败，供桌面、手机与服务器共享，无需专用 Hook。用法和更新要求见 [终端程序状态协议](docs/program-status.md)。
 
+**重启电脑后恢复对话**：启用生命周期集成的 Codex / Claude Code 会保存真实会话 ID。重新打开桌面 Retty 时，存活进程直接重连；进程已消失则在原目录 resume 对应对话，保留标签页和分屏，等待新的输入。主动结束的会话不会自动恢复；恢复失败时保留窗格，可手动重试。详见 [Agent 会话恢复](docs/agent-recovery.md)。
+
 Retty 只负责观察与提醒，不替 Agent 做授权决定，也不安装 Agent 本体。完整支持列表见 [Agent 支持](docs/agent-support.md)。
 
 ## 服务器：`retty serve`

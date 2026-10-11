@@ -20,11 +20,6 @@
     "infoPlist": {
       "NSCameraUsageDescription": "扫描 Retty 桌面端的二维码以连接终端会话。"
     },
-    "launchScreen": {
-      "title": "Retty",
-      "backgroundColor": "#111315",
-      "foregroundColor": "#ffffff"
-    },
     "buildNumber": "1",
     "developmentTeam": "XNDA84PBM3",
     "entitlements": {

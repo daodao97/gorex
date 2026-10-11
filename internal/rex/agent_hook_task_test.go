@@ -15,6 +15,7 @@ func TestAgentHookCapturesTaskOnlyAfterSuccessfulReport(t *testing.T) {
 		t.Run(map[bool]string{true: "accepted", false: "rejected"}[authorized], func(t *testing.T) {
 			dir := t.TempDir()
 			t.Setenv("RETTY_DIR", dir)
+			t.Setenv("CODEX_HOME", dir)
 			t.Setenv("RETTY_SESSION", "pane")
 			t.Setenv("RETTY_AGENT_TOKEN", "fixture-token")
 			t.Setenv("RETTY_AGENT_SERVER_TOKEN", "")
@@ -43,11 +44,14 @@ func TestAgentHookCapturesTaskOnlyAfterSuccessfulReport(t *testing.T) {
 				}
 				json.NewEncoder(conn).Encode(response)
 			}()
-			RunAgentHook("codex", strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"thread","prompt":"让通知显示具体任务，删除项目路径"}`))
+			RunAgentHook("codex", strings.NewReader(`{"hook_event_name":"UserPromptSubmit","session_id":"thread","config_dir":"/incorrect-input-value","prompt":"让通知显示具体任务，删除项目路径"}`))
 			select {
 			case req := <-reported:
 				if req.AgentEvent == nil || req.AgentEvent.Input.SessionID != "thread" {
 					t.Fatal("hook did not report lifecycle metadata")
+				}
+				if config := req.AgentEvent.Input.ConfigDir; config == nil || *config != dir {
+					t.Fatal("hook did not capture its actual configuration directory")
 				}
 				encoded, _ := json.Marshal(req.AgentEvent.Input)
 				if strings.Contains(string(encoded), "prompt") {

@@ -51,6 +51,8 @@ type Request struct {
 	Device     *DeviceInfo     `json:"device,omitempty"`
 	// Owner identifies the device of a size lock request.
 	Owner string `json:"owner,omitempty"`
+	// Retry explicitly retries a previously failed Agent restore.
+	Retry bool `json:"retry,omitempty"`
 }
 
 // Response answers the Request with the same ID.
@@ -62,6 +64,7 @@ type Response struct {
 
 // CreateOptions start a session.
 type CreateOptions struct {
+	resumed bool // server-owned; cannot be requested through JSON
 	// Command runs instead of the user's login shell.
 	Command []string `json:"command,omitempty"`
 	Dir     string   `json:"dir,omitempty"`
@@ -103,6 +106,15 @@ type SessionInfo struct {
 	// ProgramStatuses preserves all OSC 7501 records across viewer reconnects.
 	// Agent contains their effective status for existing UI and push clients.
 	ProgramStatuses []ProgramStatus `json:"programStatuses,omitempty"`
+	Resumed         bool            `json:"resumed,omitempty"`
+}
+
+// RestoreResult is empty for a pane without a recoverable Agent. Errors retain
+// the original pane ID and conversation on disk until an explicit retry/close.
+type RestoreResult struct {
+	Session *SessionInfo `json:"session,omitempty"`
+	Agent   string       `json:"agent,omitempty"`
+	Error   string       `json:"error,omitempty"`
 }
 
 // Hello is the server's answer to "hello".
@@ -114,8 +126,9 @@ type Hello struct {
 	// Exe is the server's executable, and ExeTime when it was modified
 	// last as the server started: a development build compares them with
 	// its own, to replace a server of an older build.
-	Exe     string    `json:"exe,omitempty"`
-	ExeTime time.Time `json:"exeTime,omitzero"`
+	Exe           string    `json:"exe,omitempty"`
+	ExeTime       time.Time `json:"exeTime,omitzero"`
+	AgentRecovery bool      `json:"agentRecovery,omitempty"`
 }
 
 // HostInfo describes the machine the server runs on.

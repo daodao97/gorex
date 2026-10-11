@@ -253,7 +253,10 @@ func (m *mobileApp) editSession(s rex.SessionInfo) {
 	m.editingSession, m.editingName, m.editingPinned, m.editingOpen = s.ID, p.Name, p.Pinned, true
 }
 func (m *mobileApp) sessionEditor(c *ui.Context) {
-	ui.DialogBase(c, &m.editingOpen, func(back, panel ui.Element) {
+	if !m.editingOpen {
+		return
+	}
+	dialog := ui.DialogBase(c, &m.editingOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
 		panel.Label("会话编辑面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(10)
 		ui.Row(c).FillWidth().Height(44).AlignItems(ui.Center).Children(func() {
@@ -264,7 +267,6 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 				ui.Icon(c, icon("x")).Size(17, 17).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
 				m.editingOpen = false
-				c.Blur()
 			}
 		})
 		originalName := "会话名称"
@@ -300,7 +302,6 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 				for _, s := range m.sessions {
 					if s.ID == m.editingSession {
 						m.endingSession, m.endingOpen, m.editingOpen = s, true, false
-						c.Blur()
 						break
 					}
 				}
@@ -311,14 +312,19 @@ func (m *mobileApp) sessionEditor(c *ui.Context) {
 			}).Clicked() {
 				m.setSessionPreference(m.editingSession, m.editingName, m.editingPinned)
 				m.editingOpen = false
-				c.Blur()
 			}
 		})
 	})
+	if dialog.Dismissed() || !m.editingOpen {
+		c.Blur()
+	}
 }
 
 func (m *mobileApp) sessionEndDialog(c *ui.Context) {
-	ui.DialogBase(c, &m.endingOpen, func(back, panel ui.Element) {
+	if !m.endingOpen {
+		return
+	}
+	dialog := ui.DialogBase(c, &m.endingOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, 0.3))
 		panel.Width(330).MaxWidth(330).Padding(20).Radius(18).Background(c.Theme().Surface).Column().Gap(14)
 		ui.Text(c, "结束这个会话？").FontSize(18).Bold()
@@ -329,17 +335,18 @@ func (m *mobileApp) sessionEndDialog(c *ui.Context) {
 				ui.Icon(c, icon("x")).Size(22, 22).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
 				m.endingOpen = false
-				c.Blur()
 			}
 			if ui.ButtonBase(c).Label("确认结束会话").Role(ui.RoleButton).Height(44).Grow(1).Disabled(!m.connectionUsable()).Children(func() {
 				ui.Icon(c, icon("trash-2")).Size(22, 22).TextColor(c.Theme().Danger)
 			}).Clicked() {
 				m.endingOpen = false
 				m.endSession(m.endingSession.ID)
-				c.Blur()
 			}
 		})
 	})
+	if dialog.Dismissed() || !m.endingOpen {
+		c.Blur()
+	}
 }
 
 func (m *mobileApp) endSession(sid string) {

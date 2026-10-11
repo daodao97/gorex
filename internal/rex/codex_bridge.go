@@ -230,6 +230,7 @@ type codexTurnRequest struct {
 
 func newCodexObserver(ctx context.Context) *codexObserver {
 	events := make(chan AgentEvent, 256)
+	configDir := agentConfigDir("codex")
 	sid, token, socket := os.Getenv("RETTY_SESSION"), os.Getenv("RETTY_AGENT_TOKEN"), os.Getenv("RETTY_AGENT_SOCKET")
 	go func() {
 		for {
@@ -242,6 +243,7 @@ func newCodexObserver(ctx context.Context) *codexObserver {
 		}
 	}()
 	return &codexObserver{pending: map[string]string{}, emit: func(h agents.HookInput) {
+		h.ConfigDir = configDir
 		select {
 		case events <- AgentEvent{Agent: "codex", Input: h, At: time.Now()}:
 		default: // Notification reporting cannot hold up terminal operations.

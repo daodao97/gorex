@@ -8,15 +8,18 @@ import (
 // HookInput retains only lifecycle metadata shared by supported agents.
 // Prompt text, transcripts and tool arguments are deliberately not retained.
 type HookInput struct {
-	Event        string `json:"hook_event_name"`
-	SessionID    string `json:"session_id"`
-	CWD          string `json:"cwd,omitempty"`
-	TurnID       string `json:"turn_id"`
-	Tool         string `json:"tool_name"`
-	ToolID       string `json:"tool_use_id"`
-	Notification string `json:"notification_type"`
-	Source       string `json:"source"`
-	AgentID      string `json:"agent_id"`
+	Event     string `json:"hook_event_name"`
+	SessionID string `json:"session_id"`
+	CWD       string `json:"cwd,omitempty"`
+	// ConfigDir is supplied by Retty's hook/bridge launcher, not Agent prompt
+	// data. An explicit empty value preserves the Agent's default directory.
+	ConfigDir    *string `json:"config_dir,omitempty"`
+	TurnID       string  `json:"turn_id"`
+	Tool         string  `json:"tool_name"`
+	ToolID       string  `json:"tool_use_id"`
+	Notification string  `json:"notification_type"`
+	Source       string  `json:"source"`
+	AgentID      string  `json:"agent_id"`
 }
 
 // Integrated lists agents with verified lifecycle hook support.
@@ -119,6 +122,9 @@ func ParseHook(agent string, data []byte) (HookInput, bool) {
 		return h, false
 	}
 	if len(h.CWD) > 4096 || strings.ContainsAny(h.CWD, "\x00\r\n") {
+		return h, false
+	}
+	if h.ConfigDir != nil && (len(*h.ConfigDir) > 4096 || strings.ContainsAny(*h.ConfigDir, "\x00\r\n")) {
 		return h, false
 	}
 	for _, value := range []string{h.Event, h.SessionID, h.TurnID, h.Tool, h.ToolID, h.Notification, h.Source, h.AgentID} {

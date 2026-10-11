@@ -107,3 +107,27 @@ func TestMobileDeviceRenameSettingsFlow(t *testing.T) {
 		}
 	}
 }
+
+func TestMobileDeviceNameDismissalReturnsToSettings(t *testing.T) {
+	for _, action := range []string{"escape", "outside"} {
+		t.Run(action, func(t *testing.T) {
+			registerFonts()
+			m := &mobileApp{client: &rex.Client{}, sessions: []rex.SessionInfo{{ID: "test", Title: "shell"}}}
+			m.hello.Host.ID, m.hello.Host.Name = "one", "Mac"
+			tt := ui.NewTester(m.view, 390, 750)
+			tt.Click("会话列表设置")
+			tt.Click("重命名连接设备")
+			tt.Click("连接设备名称")
+			tt.Type("discard this draft")
+			if action == "escape" {
+				tt.Key(0, ui.KeyEscape)
+			} else {
+				tt.ClickAt(10, 10)
+			}
+			tt.Frame()
+			if m.deviceNameOpen || !m.sessionSettingsOpen || m.connectedDevice().Alias != "" || tt.Focused("连接设备名称") {
+				t.Fatal("dismissal saved the draft or failed to return to settings")
+			}
+		})
+	}
+}

@@ -221,6 +221,13 @@ func (c *Client) Create(o CreateOptions) (s SessionInfo, err error) {
 
 func (c *Client) Kill(sid string) error { return c.call(Request{Op: "kill", SID: sid}, nil) }
 
+// RestoreAgent reattaches a live session or resumes its exact saved conversation.
+// Call only when Hello.AgentRecovery is advertised. It never replays input.
+func (c *Client) RestoreAgent(sid string, cols, rows int, retry bool) (r RestoreResult, err error) {
+	err = c.call(Request{Op: "restoreAgent", SID: sid, Cols: cols, Rows: rows, Retry: retry}, &r)
+	return
+}
+
 func (c *Client) Resize(sid string, cols, rows int) error {
 	return c.call(Request{Op: "resize", SID: sid, Cols: cols, Rows: rows}, nil)
 }

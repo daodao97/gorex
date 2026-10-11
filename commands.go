@@ -290,7 +290,7 @@ func (a *App) quitAndEnd() {
 
 func (a *App) openPalette() {
 	a.settingsOpen = false
-	a.paletteOpen, a.paletteQuery, a.paletteSel = true, "", 0
+	a.paletteOpen, a.paletteQuery = true, ""
 	a.focusReq = nil // the palette takes the focus
 }
 
@@ -332,9 +332,9 @@ func (a *App) shortcuts(c *ui.Context) {
 // paletteItem is a row of the command palette: a command, or a pane to
 // go to.
 type paletteItem struct {
-	title, detail, keys string
-	glyph               string
-	run                 func()
+	id, title, detail, keys string
+	glyph                   string
+	run                     func()
 }
 
 func (a *App) paletteItems() []paletteItem {
@@ -349,7 +349,7 @@ func (a *App) paletteItems() []paletteItem {
 			}
 			ti, t, p := ti, t, p
 			items = append(items, paletteItem{
-				title: name, detail: detail, glyph: paneProgram(p).Glyph,
+				id: fmt.Sprintf("pane:%d:%d", t.ID, p.ID), title: name, detail: detail, glyph: paneProgram(p).Glyph,
 				keys: fmt.Sprintf("Tab %d", ti+1),
 				run: func() {
 					a.selectTab(ti)
@@ -364,7 +364,7 @@ func (a *App) paletteItems() []paletteItem {
 			continue
 		}
 		cmd := cmd
-		items = append(items, paletteItem{title: cmd.Title, keys: cmd.Keys, glyph: "command", run: func() { cmd.Run(a) }})
+		items = append(items, paletteItem{id: "command:" + cmd.Title, title: cmd.Title, keys: cmd.Keys, glyph: "command", run: func() { cmd.Run(a) }})
 	}
 	return items
 }
@@ -388,62 +388,59 @@ func (a *App) palette(c *ui.Context, k *colors) {
 	if !a.paletteOpen {
 		return
 	}
-	items := a.paletteItems()
-	a.paletteSel = min(max(a.paletteSel, 0), max(len(items)-1, 0))
 	was := a.paletteOpen
-	ui.DialogBase(c, &a.paletteOpen, func(backdrop, panel ui.Element) {
+	dialog := ui.DialogBase(c, &a.paletteOpen, func(backdrop, panel ui.Element) {
 		backdrop.Background(k.backdrop).Justify(ui.Start).Padding(78, 0, 0, 0)
 		panel.Width(560).MaxHeight(440).Radius(16).Background(k.panel).Border(1, k.panelBorder).
 			Shadow(0, 24, 60, -8, ui.RGBA(0, 0, 0, 0.28)).Shadow(0, 2, 6, 0, ui.RGBA(0, 0, 0, 0.06)).Clip()
+		var choices ui.ComboboxParts
 		ui.Row(c).Padding(12, 16).Gap(10).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(k.panelBorder).Children(func() {
 			ui.Icon(c, icon("search")).Size(17, 17).TextColor(k.textFaint)
-			in := ui.TextInputBase(c, &a.paletteQuery).Grow(1).FontSize(15).Placeholder("Type a command, or the name of a pane…").AutoFocus()
-			if in.Changed() {
-				a.paletteSel = 0
-			}
-			if in.Shortcut(0, ui.KeyDown) {
-				a.paletteSel = min(a.paletteSel+1, len(items)-1)
-			}
-			if in.Shortcut(0, ui.KeyUp) {
-				a.paletteSel = max(a.paletteSel-1, 0)
-			}
-			if in.Submitted() && len(items) > 0 {
-				a.paletteOpen = false
-				items[a.paletteSel].run()
-			}
+			choices = ui.ComboboxBase(c.Key("palette-input"), &a.paletteQuery)
+			choices.Input.Label("Search commands").Grow(1).FontSize(15).Placeholder("Type a command, or the name of a pane…").AutoFocus()
 		})
-		listH := float32(min(max(len(items), 1)*34+12, 384))
-		ui.Scroll(c).Height(listH).Padding(6).Children(func() {
-			if len(items) == 0 {
-				ui.Text(c, "No matches").FontSize(13).TextColor(k.textFaint).Padding(14)
-			}
-			for i, it := range items {
-				row := ui.Row(c.Key(i)).Height(34).Padding(0, 10).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-				if i == a.paletteSel {
-					row.Background(k.panelSel)
-					row.ScrollIntoView()
-				} else if row.Hovered() {
-					row.Background(k.hover)
+		var items []paletteItem
+		choices.Inline(func(list ui.Element) {
+			choices.Input.Changed() // apply pending input before filtering
+			items = a.paletteItems()
+			list.FillWidth()
+			listH := float32(min(max(len(items), 1)*34+12, 384))
+			ui.Scroll(c.Key("palette-options")).Height(listH).Padding(6).Children(func() {
+				if len(items) == 0 {
+					ui.Text(c, "No matches").FontSize(13).TextColor(k.textFaint).Padding(14)
 				}
-				if row.Clicked() {
+				for _, it := range items {
+					row := choices.Item(it.id).Key(it.id).Label(it.title).Height(34).Padding(0, 10).Gap(10).Radius(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+					if row.Highlighted() {
+						row.Background(k.panelSel)
+					} else if row.Hovered() {
+						row.Background(k.hover)
+					}
+					row.Children(func() {
+						programIcon(c, it.glyph).Size(15, 15).TextColor(k.textMuted)
+						ui.Text(c, it.title).FontSize(13.5).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(0.3).MinWidth(0)
+						if it.detail != "" {
+							ui.Text(c, it.detail).FontSize(13).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
+						}
+						ui.Spacer(c)
+						if it.keys != "" {
+							ui.Text(c, it.keys).FontSize(12).TextColor(k.textFaint).Padding(2, 7).Radius(6).Background(k.hover).Shrink(0)
+						}
+					})
+				}
+			})
+		})
+		if id, ok := choices.Chosen(); ok {
+			for _, it := range items {
+				if it.id == id {
 					a.paletteOpen = false
 					it.run()
+					break
 				}
-				row.Children(func() {
-					programIcon(c, it.glyph).Size(15, 15).TextColor(k.textMuted)
-					ui.Text(c, it.title).FontSize(13.5).FontWeight(500).TextColor(k.text).SingleLine().Ellipsis("…").Shrink(0.3).MinWidth(0)
-					if it.detail != "" {
-						ui.Text(c, it.detail).FontSize(13).TextColor(k.textFaint).SingleLine().Ellipsis("…").Shrink(1).MinWidth(0)
-					}
-					ui.Spacer(c)
-					if it.keys != "" {
-						ui.Text(c, it.keys).FontSize(12).TextColor(k.textFaint).Padding(2, 7).Radius(6).Background(k.hover).Shrink(0)
-					}
-				})
 			}
-		})
+		}
 	})
-	if was && !a.paletteOpen && !a.settingsOpen {
+	if was && (dialog.Dismissed() || !a.paletteOpen) && !a.settingsOpen {
 		if t := a.tab(); t != nil && a.focusReq == nil {
 			if t.Focus == nil || !t.Focus.find.focus {
 				a.focusReq = t.Focus

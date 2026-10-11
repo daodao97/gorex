@@ -249,10 +249,25 @@ func RunAgentHook(agent string, stdin io.Reader) {
 	if !valid {
 		return
 	}
+	h.ConfigDir = agentConfigDir(agent)
 	event := AgentEvent{Agent: agent, Input: h, At: time.Now()}
 	if ReportAgent(socket, sid, token, event) == nil {
 		_ = agents.SaveHookTask(Dir(), agent, h, data, event.At)
 	}
+}
+
+func agentConfigDir(agent string) *string {
+	key := ""
+	switch agent {
+	case "codex":
+		key = "CODEX_HOME"
+	case "claude":
+		key = "CLAUDE_CONFIG_DIR"
+	default:
+		return nil
+	}
+	value := os.Getenv(key)
+	return &value
 }
 
 func ReportAgent(socket, sid, token string, event AgentEvent) error {

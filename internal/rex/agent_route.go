@@ -101,13 +101,19 @@ func codexTarget(candidates []codexCandidate, h agents.HookInput) string {
 func (s *Server) reportAgent(req Request) error {
 	s.agentMu.Lock()
 	defer s.agentMu.Unlock()
+	if s.ending {
+		return errors.New("session server is ending")
+	}
 	if req.AgentEvent == nil || req.AgentEvent.Agent != "codex" || s.agentToken == "" ||
 		subtle.ConstantTimeCompare([]byte(req.Token), []byte(s.agentToken)) != 1 {
 		ss, err := s.session(req.SID)
 		if err != nil {
 			return err
 		}
-		return ss.reportAgent(req.Token, req.AgentEvent)
+		if err := ss.reportAgent(req.Token, req.AgentEvent); err != nil {
+			return err
+		}
+		return s.recordAgent(ss, req.AgentEvent)
 	}
 	if err := validateAgentEvent(req.AgentEvent); err != nil {
 		return err
@@ -139,5 +145,8 @@ func (s *Server) reportAgent(req Request) error {
 	if err != nil {
 		return err
 	}
-	return ss.reportAgent(ss.agentToken, req.AgentEvent)
+	if err := ss.reportAgent(ss.agentToken, req.AgentEvent); err != nil {
+		return err
+	}
+	return s.recordAgent(ss, req.AgentEvent)
 }

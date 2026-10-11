@@ -22,6 +22,10 @@ import (
 
 type mobileApp struct {
 	win                                *mygo.Window
+	startup                            *ui.Startup
+	screenActive                       bool
+	keepScreenAwake                    func(string, bool) func()
+	releaseScreenAwake                 func()
 	client                             *rex.Client
 	closeTunnel                        func()
 	cancel                             context.CancelFunc
@@ -103,13 +107,15 @@ func mobileMain() {
 		os.Setenv("RETTY_DIR", dir)
 	}
 	registerFonts()
-	m := &mobileApp{storage: connectionStorage(), sizeLock: true}
+	m := &mobileApp{storage: connectionStorage(), sizeLock: true, startup: &ui.Startup{SkipTransition: true}}
+	m.keepScreenAwake = mygo.Power.KeepAwake
 	storeName := "desktop-connection"
 	if os.Getenv("RETTY_UI_TEST") == "1" {
 		storeName += "-ui-tests"
 	}
 	m.store, _ = mygo.NewSecureStore(storeName, mygo.SecureStoreOptions{})
 	mygo.App.OnLifecycleChanged(func(state mygo.LifecycleState) {
+		m.screenActive = state == mygo.LifecycleActive
 		if os.Getenv("RETTY_DEBUG_TUNNEL") == "1" {
 			log.Printf("Retty lifecycle: %v", state)
 		}
@@ -161,6 +167,7 @@ func mobileMain() {
 					}
 					m.invalidate()
 				}
+				m.startupLoaded()
 			})
 		}
 	})
@@ -172,6 +179,7 @@ func mobileMain() {
 }
 
 func (m *mobileApp) invalidate() {
+	m.syncScreenAwake()
 	if m.win != nil {
 		m.win.Invalidate()
 	}
@@ -189,6 +197,7 @@ func (m *mobileApp) detach() {
 	m.stream = nil
 	m.selected = rex.SessionInfo{}
 	m.lockOwner, m.lockSuspended, m.lockSeen = "", false, false
+	m.syncScreenAwake()
 	mygo.App.DismissKeyboard()
 }
 
@@ -529,14 +538,23 @@ func mobileSessionTitle(s rex.SessionInfo) string {
 }
 
 func (m *mobileApp) view(c *ui.Context) {
+	m.syncScreenAwake()
 	theme := connectionTheme(c.Theme())
 	c.SetTheme(&theme)
 	c.Root().Background(theme.Background)
+	if m.startup != nil {
+		m.startup.View(c, func() { mobileLaunchView(c) }, func() { m.contentView(c) })
+	} else {
+		m.contentView(c)
+	}
+}
+
+func (m *mobileApp) contentView(c *ui.Context) {
 	m.syncNavigation()
 	m.navigation.InteractiveBack = (!m.busy || m.reconnecting) && !m.scanning
 	ui.Column(c).Fill().Children(func() {
 		m.navigation.View(c, func(page *ui.Route) {
-			page.Page().Background(theme.Background)
+			page.Page().Background(c.Theme().Background)
 			switch page.Path() {
 			case "/sessions/terminal":
 				m.terminalView(c)

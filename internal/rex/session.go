@@ -24,6 +24,7 @@ const scrollback = 8 << 20
 
 // session is a pseudo-terminal of the server and its shell.
 type session struct {
+	resumed       bool
 	id            string
 	shell         string
 	created       time.Time
@@ -36,19 +37,21 @@ type session struct {
 	// vt is the session's screen, kept by the terminal emulator of the
 	// app's terminals without a view: a window attaching gets a snapshot
 	// of it at its size, as the session shows it now.
-	vt         sessionScreen
-	vtIn       io.Closer
-	output     uint64
-	bells      atomic.Int64
-	clients    map[*attached]struct{}
-	lastOutput time.Time
-	lastInput  time.Time
-	resync     *time.Timer
-	resizeAt   time.Time
-	prompt     promptTracker
-	exited     bool
-	code       int
-	cols, rows int
+	vt          sessionScreen
+	vtIn        io.Closer
+	finalScreen []byte // failed resumed CLI output, retained until retry/close
+	finalTitle  string
+	output      uint64
+	bells       atomic.Int64
+	clients     map[*attached]struct{}
+	lastOutput  time.Time
+	lastInput   time.Time
+	resync      *time.Timer
+	resizeAt    time.Time
+	prompt      promptTracker
+	exited      bool
+	code        int
+	cols, rows  int
 	// sizeLock is the device that took the size with lockSize; while it
 	// is set, only that lock's own resizes reach the PTY.
 	sizeLock, sizeLockDevice string
@@ -146,7 +149,8 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 		return nil, err
 	}
 	s := &session{
-		id: id, shell: name, created: time.Now(), p: p, agentToken: token,
+		resumed: o.resumed,
+		id:      id, shell: name, created: time.Now(), p: p, agentToken: token,
 		clients: map[*attached]struct{}{},
 		cols:    cols, rows: rows, done: make(chan struct{}),
 	}
@@ -181,6 +185,9 @@ func newSessionForServer(id string, o CreateOptions, serverToken string) (*sessi
 		}
 		s.mu.Lock()
 		s.exited, s.code = true, code
+		if s.resumed && code != 0 {
+			s.finalScreen, s.finalTitle = s.vt.Snapshot(), s.vt.Title()
+		}
 		s.programStatus.processExit(time.Now())
 		s.clearSizeLockLocked()
 		for a := range s.clients {
@@ -274,11 +281,18 @@ func (s *session) attachScreen(conn net.Conn, cols, rows int, frames bool) {
 		// Resize both the screen and PTY before queuing the snapshot.
 		s.resizeLocked(cols, rows)
 	}
-	snap := s.vt.Snapshot()
+	snap := s.finalScreen
+	if snap == nil {
+		snap = s.vt.Snapshot()
+	}
 	if s.shell == "zsh" {
 		snap = append([]byte(promptRedraw), snap...)
 	}
-	if title := s.vt.Title(); title != "" {
+	title := s.finalTitle
+	if title == "" {
+		title = s.vt.Title()
+	}
+	if title != "" {
 		snap = append([]byte("\x1b]2;"+title+"\x07"), snap...)
 	}
 	a.sendScreen(snap, s.cols, s.rows)
@@ -434,6 +448,9 @@ func (s *session) clearSizeLockLocked() {
 }
 
 func (s *session) resizeLocked(cols, rows int) bool {
+	if s.exited && s.finalScreen != nil {
+		return false
+	}
 	cols, rows = clamp(cols), clamp(rows)
 	oldCols := s.cols
 	changed := cols != s.cols || rows != s.rows
@@ -560,6 +577,10 @@ func (s *session) info() SessionInfo {
 		Attached: len(s.clients), Cols: s.cols, Rows: s.rows,
 		SizeLock: s.sizeLock, SizeLockDevice: s.sizeLockDevice, Agent: s.agent.state,
 		ProgramStatuses: s.programStatus.snapshot(),
+		Resumed:         s.resumed,
+	}
+	if s.finalTitle != "" {
+		in.Title = s.finalTitle
 	}
 	if len(in.ProgramStatuses) > 0 {
 		in.Agent = s.programStatus.agentState("")
@@ -578,13 +599,14 @@ func (s *session) info() SessionInfo {
 	if fg <= 0 {
 		fg = in.PID
 	}
-	in.Idle = fg == in.PID
+	p := inspect(fg)
+	_, isAgent := agents.Detect(p.programName(), p.args)
+	in.Idle = fg == in.PID && !isAgent
 	// A crashed/killed agent cannot emit SessionEnd. Do not leave its
 	// last waiting state on a shell prompt. Allow startup hooks to settle.
 	if in.Idle && in.Agent.Source != ProgramStatusSource && time.Since(in.Agent.Updated) > 2*time.Second {
 		in.Agent = AgentState{}
 	}
-	p := inspect(fg)
 	in.Program, in.Args, in.Dir = p.programName(), p.args, p.dir
 	if in.Program == "" {
 		in.Program = s.shell

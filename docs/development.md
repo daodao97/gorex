@@ -4,20 +4,20 @@
 
 ## MyGo 依赖
 
-Retty 依赖 MyGo fork `github.com/daodao97/mygo` 的 `main` 分支（已合入 iOS 支持）：`go.mod` 用 `replace` 固定到该分支上某个已推送提交的伪版本（`v0.0.0-<时间>-<提交>`），不会在构建时自动跟随分支更新。
+Retty 依赖 MyGo fork `github.com/daodao97/mygo` 的 `feat/ios-platform` 分支（包含 iOS 支持及已同步的通用终端能力）：`go.mod` 用 `replace` 固定到该分支上某个已推送提交的伪版本（`v0.0.0-<时间>-<提交>`），不会在构建时自动跟随分支更新。
 
-- MyGo 的功能、修复和上游同步都先合并到 fork 的 `main` 并推送，再更新 Retty。不要让 `go.mod` 指向未推送的提交或本地路径（`replace ... => ../mygo`）。
+- 上游更新先合并到 fork 的 `main` 并推送，再将 `main` 合并到 `feat/ios-platform` 并推送，最后更新 Retty。iOS 及其相关通用能力继续在 `feat/ios-platform` 开发。不要让 `go.mod` 指向未推送的提交或本地路径（`replace ... => ../mygo`）。
 - 更新依赖：
 
   ```sh
-  GOWORK=off go mod edit -replace github.com/egoist/mygo=github.com/daodao97/mygo@main
+  GOWORK=off go mod edit -replace github.com/egoist/mygo=github.com/daodao97/mygo@feat/ios-platform
   GOWORK=off go mod tidy
   ./scripts/check-mygo.sh
   ```
 
-- `go.work` 指向 `../mygo`，只用于同时修改 MyGo 和 Retty。该目录必须停在 `main`，且与 `go.mod` 固定的提交一致；否则不加 `GOWORK=off` 的命令会悄悄使用另一份 MyGo 代码。`../mygo` 里的未提交或未推送改动不会进入 `GOWORK=off` 构建、GitHub Actions 和正式打包。
-- 改完 MyGo 后的顺序：在 `../mygo` 提交并推送 `main` → 更新 Retty 伪版本 → `GOWORK=off` 跑完整检查。
-- `./scripts/check-mygo.sh` 只读检查以上约定（固定提交在 fork `main` 上、`go.work` 检出在该分支且与固定提交一致），提交 `go.mod` 改动前、发布前运行。
+- `go.work` 指向 `../mygo`，只用于同时修改 MyGo 和 Retty。该目录必须停在 `feat/ios-platform`，且与 `go.mod` 固定的提交一致；否则不加 `GOWORK=off` 的命令会悄悄使用另一份 MyGo 代码。`../mygo` 里的未提交或未推送改动不会进入 `GOWORK=off` 构建、GitHub Actions 和正式打包。
+- 改完 MyGo 后的顺序：在 `../mygo` 提交并推送 `feat/ios-platform` → 更新 Retty 伪版本 → `GOWORK=off` 跑完整检查。
+- `./scripts/check-mygo.sh` 只读检查以上约定（固定提交在 fork `feat/ios-platform` 上、`go.work` 检出在该分支且与固定提交一致），提交 `go.mod` 改动前、发布前运行。
 - 升级 MyGo 后对照 `internal/terminal/UPSTREAM.md`，把 vendored terminal 的本地改动带到新 API 上。上游的 UI API 可能有破坏性变化（例如 #143 的 `ui.Element` 值句柄、`Context` 只在构建期间有效），先运行 `go tool mygo migrate-ui .` 预览并跑全部测试，不能只看编译通过。
 - terminal 及其 iOS 构建链（`scripts/build-ios.sh`、libghostty-vt）留在 Retty；其他通用 iOS 原生桥接（扫码、设备信息、收起键盘、网络预热等）放在 MyGo，不要在 Retty 里重新加 cgo/Objective-C。
 
@@ -67,7 +67,7 @@ env -u MYGO_ENV -u MYGO_READY_SOCKET \
   RETTY_DIR="$PWD/.mygo/dev-data" GOWORK=off go tool mygo dev
 ```
 
-开发热更新会重新启动开发窗口；服务替换只能用于这种隔离环境。需要本地 MyGo 改动时可去掉 `GOWORK=off`，先运行 `./scripts/check-mygo.sh` 确认 `../mygo` 在 `main` 上（见“MyGo 依赖”）。不要用开发命令更新 `/Applications/Retty.app`。
+开发热更新会重新启动开发窗口；服务替换只能用于这种隔离环境。需要本地 MyGo 改动时可去掉 `GOWORK=off`，先运行 `./scripts/check-mygo.sh` 确认 `../mygo` 在 `feat/ios-platform` 上（见“MyGo 依赖”）。不要用开发命令更新 `/Applications/Retty.app`。
 
 单独调试服务时另用一个数据目录，也不要与上面的开发窗口并行共用：
 
@@ -229,6 +229,10 @@ echo "会话检查通过；备份目录：$MAINT_DIR"
 
 ## iOS 构建、签名与安装
 
+移动端在前台查看会话详情时通过 MyGo `Power.KeepAwake` 保持屏幕常亮；返回列表、离开应用或进入后台时立即释放，回到详情页后重新申请。重复渲染不会累积请求，也不改变系统的手动锁屏行为。
+
+应用启动画面由 `mobile_launch.go` 用 MyGo 的 `ui.Image`、`ui.Text` 和布局组件绘制，居中显示 Retty Logo 和应用名，颜色随系统主题切换。MyGo 的 `ui.Startup` 管理首帧确认；Retty 通过 `Ready` 告知初始本地数据已加载，并使用 `SkipTransition` 直接进入首页，不设置固定展示时长或额外渐变等待。Go 启动前的系统占位交给 MyGo 默认机制，应用不通过 `ios.launchScreen` 配置自己的布局。
+
 Retty 的 Bundle ID 为 `com.daodao.retty`，启动页和应用名称均为 Retty。首次安装该身份时，签名 profile 和 APNs App ID 必须覆盖这个 Bundle ID；使用既有 Team。这个新身份使用自己的容器、Keychain 命名空间和 `Retty` 数据目录，不迁移先前应用的数据。已有任务与旧应用保持运行，设备测试仍只使用独立 fixture。
 
 构建会准备对应的 Ghostty 静态库，再调用固定版本的 MyGo CLI。设备和模拟器的静态库不同，不要并行运行两种构建：
@@ -349,6 +353,12 @@ xcrun devicectl device process launch --device "$IOS_DEVICE" --terminate-existin
 ```
 
 日志和 xcresult 在 `.mygo/ios-test/`；临时 `tests/ios/Fixture.swift` 含连接能力，应由脚本清理且不提交。只清理自己创建的测试服务、runner 和临时目录。不要批量结束所有 Retty、Go 或 Python 进程。
+
+## 弹层和命令面板
+
+命令面板通过 MyGo `ComboboxBase.Inline` 在原布局内显示选项；MyGo 负责高亮、上下键、点击/回车选择、无障碍和高亮变化时的滚动。Retty 保留模糊筛选、稳定的命令/窗格 ID 和执行动作。Esc 或点外部关闭后恢复终端焦点，命令主动打开搜索框时保留该搜索框的焦点。
+
+手机设备重命名、会话编辑及结束确认使用 MyGo `DialogBase.Dismissed()`，统一处理 Esc、点外部和按钮关闭后的键盘收尾。取消不保存草稿；设备重命名取消后返回会话列表设置。连接指标使用 `PopoverBase.Dismissed()` 清理当前弹层标记。
 
 ## 推送配置与状态
 

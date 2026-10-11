@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 FORK=github.com/daodao97/mygo
-BRANCH=main
+BRANCH=feat/ios-platform
 fail=0
 
 pinned=$(GOWORK=off go list -m -f '{{with .Replace}}{{.Path}} {{.Version}}{{end}}' github.com/egoist/mygo)

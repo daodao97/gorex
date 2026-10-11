@@ -50,7 +50,10 @@ func (m *mobileApp) setDeviceName(name string) {
 }
 
 func (m *mobileApp) deviceNameDialog(c *ui.Context) {
-	ui.DialogBase(c.Key("mobile-device-name"), &m.deviceNameOpen, func(back, panel ui.Element) {
+	if !m.deviceNameOpen {
+		return
+	}
+	dialog := ui.DialogBase(c.Key("mobile-device-name"), &m.deviceNameOpen, func(back, panel ui.Element) {
 		back.Background(ui.RGBA(0, 0, 0, .4)).Column().Justify(ui.End).AlignItems(ui.Center).Padding(12)
 		panel.Label("设备名称面板").FillWidth().MaxWidth(480).Padding(16).Radius(20).Background(c.Theme().Surface).Column().Gap(12)
 		ui.Row(c).FillWidth().Height(44).AlignItems(ui.Center).Children(func() {
@@ -58,8 +61,7 @@ func (m *mobileApp) deviceNameDialog(c *ui.Context) {
 			if ui.ButtonBase(c).Label("取消设备重命名").Role(ui.RoleButton).Size(44, 44).Radius(22).Background(c.Theme().Background).Children(func() {
 				ui.Icon(c, icon("x")).Size(16, 16).TextColor(c.Theme().TextMuted)
 			}).Clicked() {
-				m.deviceNameOpen, m.sessionSettingsOpen = false, true
-				c.Blur()
+				m.deviceNameOpen = false
 			}
 		})
 		ui.Column(c).FillWidth().Padding(10, 12).Radius(12).Background(c.Theme().Background).Children(func() {
@@ -73,9 +75,12 @@ func (m *mobileApp) deviceNameDialog(c *ui.Context) {
 				ui.Icon(c, icon("check")).Size(19, 19).TextColor(c.Theme().AccentText)
 			}).Clicked() {
 				m.setDeviceName(m.deviceNameDraft)
-				m.deviceNameOpen, m.sessionSettingsOpen = false, true
-				c.Blur()
+				m.deviceNameOpen = false
 			}
 		})
 	})
+	if dialog.Dismissed() || !m.deviceNameOpen {
+		m.sessionSettingsOpen = true
+		c.Blur()
+	}
 }

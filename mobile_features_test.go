@@ -312,3 +312,27 @@ func TestMobileNotificationClickOpensTargetAndLegacyCompletionNotifiesOnce(t *te
 		t.Fatal("missing session discarded current terminal")
 	}
 }
+
+func TestMobileSessionEditorDismissalDiscardsDraft(t *testing.T) {
+	for _, action := range []string{"escape", "outside"} {
+		t.Run(action, func(t *testing.T) {
+			registerFonts()
+			m := &mobileApp{client: &rex.Client{}, sessions: []rex.SessionInfo{{ID: "test", Title: "shell"}}}
+			m.hello.Host.ID = "desktop"
+			m.editSession(m.sessions[0])
+			tt := ui.NewTester(m.view, 390, 750)
+			tt.Click("会话名称")
+			tt.Type("discard this draft")
+			tt.Click("置顶会话")
+			if action == "escape" {
+				tt.Key(0, ui.KeyEscape)
+			} else {
+				tt.ClickAt(10, 10)
+			}
+			tt.Frame()
+			if m.editingOpen || m.preference("test").Name != "" || m.preference("test").Pinned || tt.Focused("会话名称") {
+				t.Fatal("dismissal saved preferences or left the editor focused")
+			}
+		})
+	}
+}
